@@ -178,8 +178,13 @@ pub fn startup_signal(_folders: &[PathBuf], _changed: Sender<()>) -> std::io::Re
 
 /// Freeze, release and end with signals; refuse addresses with one blackhole host route each.
 #[derive(Default)]
-pub struct RealHands {
-    routes: HashSet<String>,
+pub struct RealHands;
+
+/// The routes this agent has added, whichever of its hands added them: one memory for the whole process, so any
+/// of them can take a route away again.
+fn routes() -> &'static std::sync::Mutex<HashSet<String>> {
+    static CELL: std::sync::OnceLock<std::sync::Mutex<HashSet<String>>> = std::sync::OnceLock::new();
+    CELL.get_or_init(Default::default)
 }
 
 impl Hands for RealHands {
@@ -197,7 +202,8 @@ impl Hands for RealHands {
     fn block(&mut self, addresses: &[String]) -> Option<bool> {
         let wanted: HashSet<String> = addresses.iter().cloned().collect();
         let mut done = true;
-        let mut gone: Vec<String> = self.routes.difference(&wanted).cloned().collect();
+        let Ok(mut held) = routes().lock() else { return Some(false) };
+        let mut gone: Vec<String> = held.difference(&wanted).cloned().collect();
         gone.sort();
         for address in gone {
             let mut arguments = vec!["route", "-n", "delete"];
@@ -206,9 +212,9 @@ impl Hands for RealHands {
             }
             arguments.extend(["-host", address.as_str()]);
             run(&arguments, None, Duration::from_secs(15));
-            self.routes.remove(&address);
+            held.remove(&address);
         }
-        let mut new: Vec<String> = wanted.difference(&self.routes).cloned().collect();
+        let mut new: Vec<String> = wanted.difference(&held).cloned().collect();
         new.sort();
         for address in new {
             let mut arguments = vec!["route", "-n", "add"];
@@ -217,7 +223,7 @@ impl Hands for RealHands {
             }
             arguments.extend(["-host", address.as_str(), if address.contains(':') { "::1" } else { "127.0.0.1" }, "-blackhole"]);
             if run(&arguments, None, Duration::from_secs(15)).is_some() {
-                self.routes.insert(address);
+                held.insert(address);
             } else {
                 done = false;
             }
