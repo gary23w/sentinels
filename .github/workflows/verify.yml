@@ -450,7 +450,7 @@ jobs:
           probe www.google-analytics.com
           probe example.com
           $G shield off
-          sleep 10
+          for i in $(seq 1 20); do probe bidder.criteo.com && break; sleep 3; done
           probe bidder.criteo.com
 
 
@@ -506,7 +506,7 @@ jobs:
           probe www.google-analytics.com
           probe example.com
           $G shield off
-          sleep 10
+          for i in $(seq 1 20); do probe bidder.criteo.com && break; sleep 3; done
           probe bidder.criteo.com
           sudo pkill -f 'garrett --state-dir /tmp/gp' || true
 
@@ -618,7 +618,7 @@ jobs:
           if (-not (& $probe 'www.google-analytics.com')) { throw 'the shield broke Google' }
           if (-not (& $probe 'example.com')) { throw 'the shield broke an ordinary site' }
           & $garrett --state-dir $state shield off
-          Start-Sleep -Seconds 10
+          foreach ($i in 1..20) { if (& $probe 'bidder.criteo.com') { break }; Start-Sleep -Seconds 3 }
           if (-not (& $probe 'bidder.criteo.com')) { throw 'switching the shield off did not let the tracker through again' }
           # The agent reads the Security log with a PowerShell command of its own, a minute after it starts and
           # every minute after: that command names the attacks it searches for, and must not be taken for one.

@@ -52,6 +52,12 @@ pub fn view_from(value: &Value) -> View {
 
 fn main() {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
+    // A command whose reader has stopped reading (`garrett cases | head`) ends quietly, as other commands do.
+    // The running agent is left as it is: a closed log must never end it.
+    #[cfg(unix)]
+    if !arguments.iter().any(|argument| argument == "run") {
+        unsafe { libc::signal(libc::SIGPIPE, libc::SIG_DFL) };
+    }
     match arguments.first().map(String::as_str) {
         Some("version") => println!("garrett {}", garrett::VERSION),
         Some("score") => {
