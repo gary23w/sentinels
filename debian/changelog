@@ -1,3 +1,17 @@
+garrett (1.2.0) stable; urgency=medium
+
+  * A fresh install settles in for a day (LEARN_HOURS). What is plainly an
+    attack is stopped from the first second; a program that only its score
+    speaks against is reported and left running until its owner judges it.
+  * On a machine with no service, garrett learns from its owner's verdicts:
+    signals they keep calling theirs count for less, ones they keep
+    confirming count for more, and two signals that confirmed attacks share
+    become a sign of attack there. No model is involved.
+  * New commands: "garrett confirm <case>" (that was an attack) and
+    "garrett learned" (what this machine has learned; --reset forgets it).
+
+ -- sentinels <noreply@sentinels.invalid>  Sun, 15 Nov 2026 23:30:00 +0000
+
 garrett (1.1.0) stable; urgency=medium
 
   * First release from the sentinels repository.
