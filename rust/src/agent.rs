@@ -482,6 +482,22 @@ pub fn local_decision(state: &State, key: &str, action: &str) -> Result<(), Stri
     std::fs::write(&path, Value::Array(wanted).to_string()).map_err(|error| error.to_string())
 }
 
+/// The owner says a case was an attack. The agent stops leaving that program alone; nothing else changes.
+pub fn confirm(state: &State, key: &str) -> Result<(), String> {
+    if !is_hex(key, 32) {
+        return Err("Give the case id shown by `cases` (32 characters).".into());
+    }
+    state.make().map_err(|error| error.to_string())?;
+    let path = state.directory.join("confirmed.json");
+    let mut keys: Vec<String> = std::fs::read(&path).ok().and_then(|raw| serde_json::from_slice::<Vec<String>>(&raw).ok()).unwrap_or_default();
+    keys.push(key.to_string());
+    keys.sort();
+    keys.dedup();
+    let extra = keys.len().saturating_sub(2000);
+    keys.drain(..extra);
+    std::fs::write(&path, json!(keys).to_string()).map_err(|error| error.to_string())
+}
+
 /// One line of cases.jsonl for a case, and the line a person reads.
 pub fn local_line(case: &Value) -> (Value, String) {
     let list = |key: &str| case[key].as_array().cloned().unwrap_or_default();
@@ -489,7 +505,8 @@ pub fn local_line(case: &Value) -> (Value, String) {
     let signals: Vec<String> = list("signals").iter().filter(|signal| signal["points"].as_i64().unwrap_or(0) > 0).filter_map(|signal| signal["id"].as_str().map(str::to_string)).collect();
     let line = json!({"at": now().trunc() as i64, "key": case["key"], "level": case["level"], "score": case["score"], "name": case["name"], "path": case["path"].as_str().unwrap_or(""),
         "parent": case["parent"].as_str().unwrap_or(""), "signals": signals, "actions": acted,
-        "remotes": list("remotes").iter().filter_map(|remote| remote["address"].as_str().map(str::to_string)).collect::<Vec<_>>(), "cleanup": list("cleanup")});
+        "remotes": list("remotes").iter().filter_map(|remote| remote["address"].as_str().map(str::to_string)).collect::<Vec<_>>(), "cleanup": list("cleanup"),
+        "held": case["held"].as_str().unwrap_or("")});
     let joined = acted.concat();
     let what = if joined.contains("stopped") { "STOPPED" } else if joined.contains("paused") { "PAUSED" } else { "flagged" };
     let said = format!("garrett: {what} {} ({}) case {}: {}", case["name"].as_str().unwrap_or(""), case["level"].as_str().unwrap_or(""), case["key"].as_str().unwrap_or(""), signals.join(", "));

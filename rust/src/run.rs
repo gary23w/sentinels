@@ -21,6 +21,27 @@ static STOP: AtomicBool = AtomicBool::new(false);
 /// Set when the agent replaced its own program file: it stops as it always does, then starts the new one.
 static AGAIN: AtomicBool = AtomicBool::new(false);
 
+/// How long a fresh install settles in, in hours, as text bits of a float. 24 unless `run --learn` says otherwise.
+static LEARN_HOURS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0x4038_0000_0000_0000);
+
+pub fn set_learn_hours(hours: f64) {
+    LEARN_HOURS.store(hours.max(0.0).to_bits(), Ordering::SeqCst);
+}
+
+/// What the owner said on this machine since the last look: cases confirmed as attacks, and (with no service)
+/// what was learned from all their verdicts.
+fn take_local(running: &Running, state: &State, alone: bool) {
+    let confirmed = std::fs::read(state.directory.join("confirmed.json")).ok().and_then(|raw| serde_json::from_slice::<Value>(&raw).ok()).unwrap_or_else(|| Value::Array(Vec::new()));
+    let learned = if alone { crate::learn::learned(&state.directory) } else { Value::Null };
+    if let Ok(mut watcher) = running.watcher.lock() {
+        watcher.set_confirmed(&confirmed);
+        if alone {
+            watcher.set_policy(&learned["policy"]);
+            watcher.set_shapes(&learned["shapes"]);
+        }
+    }
+}
+
 /// True when the agent stopped only to start its new version.
 pub fn starting_again() -> bool {
     AGAIN.load(Ordering::SeqCst)
@@ -117,7 +138,10 @@ fn build(state: &State, salt: &str, mode: &str, clean: bool, fallback_kill: bool
         watcher.own.insert(parent);
         pid = parent;
     }
+    // An install that has been watching before this does not settle in again.
+    let fresh = !["sentinel-baseline.json", "sentinel-habits.json", "cases.jsonl"].iter().any(|name| state.directory.join(name).exists());
     watcher.keep_in(&state.directory, clean);
+    watcher.settle_in(f64::from_bits(LEARN_HOURS.load(Ordering::SeqCst)), fresh, now());
     watcher.decide_with(fallback_kill, decide_after);
     watcher.never_block(never_block);
     watcher.set_web(crate::web::WebWatch::discover(now()));
@@ -241,11 +265,23 @@ fn say_case(case: &Value) {
             println!("garrett:   {}", action["reason"].as_str().unwrap_or(""));
         }
     }
+    match case["held"].as_str() {
+        Some("learning") => println!("garrett:   left running: garrett is still learning this machine. Yours? garrett trust {0}   An attack? garrett confirm {0}", case["key"].as_str().unwrap_or("")),
+        Some(_) => println!("garrett:   left running: it was here before garrett knew this machine. Yours? garrett trust {0}   An attack? garrett confirm {0}", case["key"].as_str().unwrap_or("")),
+        None => {}
+    }
     for step in case["cleanup"].as_array().into_iter().flatten() {
         println!("garrett:   {} {}: {}", step["action"].as_str().unwrap_or(""), step["kind"].as_str().unwrap_or(""), step["where"].as_str().unwrap_or(""));
     }
     if case["cleanup"].as_array().is_some_and(|list| !list.is_empty()) {
         println!("garrett:   undo all of it with: garrett restore {}", case["key"].as_str().unwrap_or(""));
+    }
+}
+
+fn say_settling(running: &Running) {
+    let left = running.watcher.lock().map(|watcher| watcher.settling(now()).0).unwrap_or(0.0);
+    if left > 0.0 {
+        println!("garrett: learning this machine for the next {:.0} hour(s): attacks are stopped as always; a program that only looks suspicious is reported and left for you to judge (garrett trust|confirm <case>)", (left / 3600.0).ceil());
     }
 }
 
@@ -261,7 +297,9 @@ pub fn run_alone(state: &State, mode: &str, clean: bool) -> i32 {
     let (log, trusted_file, decisions) = (state.directory.join("cases.jsonl"), state.directory.join("trusted.json"), state.directory.join("decisions.json"));
     let mut said: std::collections::HashMap<String, (String, String)> = std::collections::HashMap::new();
     println!("garrett: watching this machine by itself (mode: {mode}). Join a fleet any time: garrett enroll --server <address> --key <key>");
+    say_settling(&running);
     while !STOP.load(Ordering::SeqCst) {
+        take_local(&running, state, true);
         if let Ok(mut watcher) = running.watcher.lock() {
             let trusted = std::fs::read(&trusted_file).ok().and_then(|raw| serde_json::from_slice::<Value>(&raw).ok()).unwrap_or_else(|| Value::Array(Vec::new()));
             watcher.set_trusted(&trusted);

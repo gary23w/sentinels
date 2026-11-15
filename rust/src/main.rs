@@ -2,6 +2,7 @@
 //!
 //!   garrett [--state-dir <folder>] run [--mode report|pause|decide|kill] [--clean on|off] [--update on|off]
 //!   garrett update [--check]
+//!   garrett confirm <case> | learned [--reset]
 //!   garrett [--state-dir <folder>] enroll --server <address> --key <key> [--label <name>] [--mode ...] [--patient]
 //!   garrett [--state-dir <folder>] cases | trust <case> | stop <case> | release <case> | restore <case>
 //!   garrett [--state-dir <folder>] status | forget
@@ -116,9 +117,11 @@ fn main() {
 
 const USAGE: &str = "usage: garrett [--state-dir <folder>] <command>
 
-  run [--mode report|pause|decide|kill] [--clean on|off] [--update on|off]
+  run [--mode report|pause|decide|kill] [--clean on|off] [--update on|off] [--learn <hours>]
                         watch this machine: report to the service if enrolled, otherwise protect it by itself.
-                        While it runs it installs newer versions of itself, unless --update off
+                        While it runs it installs newer versions of itself, unless --update off.
+                        A fresh install learns the machine for a day (--learn) before it acts on a program
+                        that only looks suspicious; what is plainly an attack is stopped from the first second
   update [--check]      install the newest version now; --check only says whether there is one
   enroll --server <address> --key <key> [--label <name>] [--mode ...] [--patient]
                         join a Sentinel service
@@ -127,6 +130,8 @@ const USAGE: &str = "usage: garrett [--state-dir <folder>] <command>
   stop <case>           without a service: end a program the agent paused
   release <case>        without a service: let a program the agent paused continue
   restore <case>        put back everything cleaned up under a case
+  confirm <case>        this was an attack: never leave that program running again
+  learned [--reset]     what this machine has learned from your verdicts; --reset forgets it
   status                show whether this machine is enrolled
   forget                remove this machine's credential
   version";
@@ -188,13 +193,56 @@ fn command(arguments: &[String]) -> Result<i32, String> {
             for line in agent::local_cases(&state, 30) {
                 let words = |key: &str, between: &str| line[key].as_array().map(|list| list.iter().filter_map(Value::as_str).collect::<Vec<_>>().join(between)).unwrap_or_default();
                 let acted = words("actions", ",");
-                println!("{}  {}  {:<8} {}  [{}]  {}", agent::stamp(line["at"].as_i64().unwrap_or(0)), text(&line["key"]), text(&line["level"]), text(&line["name"]), if acted.is_empty() { "flagged" } else { &acted }, words("signals", ", "));
+                let held = match line["held"].as_str() { Some("learning") => "flagged, left running while learning", Some(why) if !why.is_empty() => "flagged, left running for you to judge", _ => "flagged" };
+                println!("{}  {}  {:<8} {}  [{}]  {}", agent::stamp(line["at"].as_i64().unwrap_or(0)), text(&line["key"]), text(&line["level"]), text(&line["name"]), if acted.is_empty() { held } else { &acted }, words("signals", ", "));
             }
             Ok(0)
         }
         "trust" | "stop" | "release" => {
-            agent::local_decision(&state, &case()?, &name)?;
+            let key = case()?;
+            agent::local_decision(&state, &key, &name)?;
             println!("Noted. The agent applies it within a few seconds.");
+            judged(&state, &key, name != "stop", &name);
+            Ok(0)
+        }
+        "confirm" => {
+            let key = case()?;
+            agent::confirm(&state, &key)?;
+            println!("Noted: that was an attack. If the program runs again, the agent will not leave it alone.");
+            judged(&state, &key, false, "confirm");
+            Ok(0)
+        }
+        "learned" => {
+            if rest.iter().any(|argument| argument == "--reset") {
+                garrett::learn::forget(&state.directory);
+                println!("Everything learned from your verdicts was forgotten.");
+                return Ok(0);
+            }
+            let learned = garrett::learn::learned(&state.directory);
+            let settled = std::fs::read(state.directory.join("settled.json")).ok().and_then(|raw| serde_json::from_slice::<Value>(&raw).ok()).unwrap_or(Value::Null);
+            let left = settled["until"].as_f64().unwrap_or(0.0) - agent::now();
+            let held = settled["held"].as_array().map(Vec::len).unwrap_or(0);
+            if left > 0.0 {
+                println!("Still learning this machine for about {:.0} more hour(s). Attacks are stopped as always.", (left / 3600.0).ceil());
+            } else {
+                println!("Settled in: acting on everything it judges hostile.");
+            }
+            if held > 0 {
+                println!("{held} program(s) met while settling in are reported but left running until you judge them: garrett cases");
+            }
+            println!("Your verdicts: {} mine, {} attack.", learned["verdicts"]["mine"].as_i64().unwrap_or(0), learned["verdicts"]["attack"].as_i64().unwrap_or(0));
+            for (id, delta) in learned["policy"].as_object().into_iter().flatten() {
+                println!("  {id} counts {} here", match delta.as_i64().unwrap_or(0) { 2 => "two points more", 1 => "one point more", -1 => "one point less", _ => "two points less" });
+            }
+            for pair in learned["shapes"].as_array().into_iter().flatten() {
+                println!("  {} together with {} is a sign of attack here", text(&pair[0]), text(&pair[1]));
+            }
+            for line in learned["refused"].as_array().into_iter().flatten() {
+                println!("  not learned: {}", text(line));
+            }
+            if state.load()?.is_some() {
+                println!("This machine is enrolled: weights and attack signs come from its service.");
+            }
             Ok(0)
         }
         "version" => {
@@ -217,6 +265,8 @@ fn command(arguments: &[String]) -> Result<i32, String> {
             if update != "on" && update != "off" {
                 return Err("--update is on or off.".into());
             }
+            let learn = option(rest, "--learn")?.or_else(|| std::env::var("GARRETT_LEARN_HOURS").ok().filter(|value| !value.is_empty())).unwrap_or_else(|| "24".into());
+            garrett::run::set_learn_hours(learn.parse::<f64>().ok().filter(|hours| hours.is_finite() && *hours >= 0.0).ok_or("--learn is a number of hours, 0 for none.")?);
             let wanted = mode(rest)?;
             // Where this program file is now: after an update the same place holds the new one.
             let exe = std::env::current_exe().ok();
@@ -270,6 +320,17 @@ fn command(arguments: &[String]) -> Result<i32, String> {
     }
 }
 
+/// The owner judged a case on a machine that keeps its own cases: remember it and say what was learned.
+fn judged(state: &garrett::agent::State, key: &str, mine: bool, how: &str) {
+    use garrett::agent;
+    let Some(case) = agent::local_cases(state, 5000).into_iter().rev().find(|line| line["key"] == key) else { return };
+    if let Ok(said) = garrett::learn::remember(&state.directory, &case, mine, how, agent::now()) {
+        for line in said {
+            println!("Learned: {line}.");
+        }
+    }
+}
+
 fn restore(state: &garrett::agent::State, key: &str) -> Result<i32, String> {
     use garrett::agent;
     #[cfg(unix)]
@@ -279,6 +340,7 @@ fn restore(state: &garrett::agent::State, key: &str) -> Result<i32, String> {
     let enrolled = state.load()?.is_some();
     if !enrolled && back > 0 {
         agent::local_decision(state, key, "trust")?; // put back on purpose: the agent leaves this program alone from now on
+        judged(state, key, true, "restore");
     }
     println!("{back} thing(s) put back.{}{}{}",
         if left > 0 { format!(" {left} could not be put back; run this again as root or an administrator.") } else { String::new() },

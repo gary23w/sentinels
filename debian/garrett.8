@@ -21,6 +21,12 @@ garrett \- host intrusion sentinel that stops what it catches
 .B garrett trust\fR|\fBstop\fR|\fBrelease\fR|\fBrestore
 .I case
 .br
+.B garrett confirm
+.I case
+.br
+.B garrett learned
+.RB [ \-\-reset ]
+.br
 .B garrett update
 .RB [ \-\-check ]
 .br
@@ -63,6 +69,17 @@ Decide a program the agent paused: end it, or let it continue.
 Put back everything that was cleaned up after a stop: quarantined files and
 switched-off startup entries.
 .TP
+.BI confirm " case"
+That was an attack. If the program runs again the agent will not leave it
+alone, and the verdict is something it learns from.
+.TP
+.B learned
+What this machine has learned from your verdicts, and whether it is still
+settling in.
+.B \-\-reset
+forgets it. See
+.BR LEARNING .
+.TP
 .B update
 Install the newest version now.
 .B \-\-check
@@ -96,14 +113,39 @@ Optional, mode 0600. Lines
 and optionally
 .BR MODE= ,
 .BR LABEL= ,
-.B CLEAN=off
+.BR CLEAN=off ,
+.B UPDATE=off
 and
-.BR UPDATE=off .
+.BR LEARN_HOURS= .
 When this file exists and the machine is not enrolled, the service enrols
 itself on first start.
 .TP
 .I /var/lib/garrett/
 This machine's credential and what the agent remembers about it.
+.SH LEARNING
+A fresh install settles in for a day
+.RB ( LEARN_HOURS ).
+What is plainly an attack, such as a web server starting a shell that
+downloads and runs a script, is stopped from the first second. A program that
+only its score speaks against is reported and left running, during that day
+and after it, until you say what it is with
+.B trust
+or
+.BR confirm :
+it was on the machine before garrett knew the machine, and may be yours.
+.PP
+On a machine with no service, every verdict you give
+.RB ( trust ,
+.BR restore ,
+.BR release ,
+.BR stop ,
+.BR confirm )
+is kept as the case's signals and nothing else. A signal you keep calling
+yours comes to count for less here, one you keep confirming for more, by at
+most two points, and never so far that a confirmed attack or a known attack
+pattern would go unreported. Two signals that your confirmed attacks share
+become a sign of attack on this machine. No model is involved. An enrolled
+machine learns from its service instead.
 .SH UPDATES
 The running agent asks the project's site a few times a day whether a newer
 version is out, and installs it. It installs nothing unless the site's list of

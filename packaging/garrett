@@ -6,6 +6,8 @@
 #   sudo garrett trust <case>         this program is mine: leave it alone
 #   sudo garrett stop|release <case>  decide a program the agent paused
 #   sudo garrett restore <case>       put back what was cleaned up after a stop: quarantined files, startup entries
+#   sudo garrett confirm <case>       that was an attack: never leave that program running again
+#   garrett learned                   what this machine has learned from your verdicts
 #   sudo garrett update               install the newest version now (it also does this by itself, a few times a day)
 #
 # To make it part of a fleet, enrol it with your Sentinel service:
@@ -19,6 +21,8 @@
 #   LABEL=name                      the name this machine enrols under (default: its host name)
 #   CLEAN=off                       stop hostile programs but leave their files and startup entries alone
 #   UPDATE=off                      never install a newer version by itself
+#   LEARN_HOURS=24                  how long a fresh install learns the machine before it acts on a program that
+#                                   only looks suspicious (0: act on everything at once)
 set -eu
 LIB=${GARRETT_LIB:-/usr/lib/garrett}
 STATE=${GARRETT_STATE_DIR:-/var/lib/garrett}
@@ -53,8 +57,8 @@ case "${1:-}" in
     SENTINEL_ENROLL_KEY=$ENROLL_KEY exec "$AGENT" --state-dir "$STATE" enroll --patient --server "$SERVER" --mode "${MODE:-kill}" ${LABEL:+--label "$LABEL"}
     ;;
   run)
-    MODE=$(setting MODE); CLEAN=$(setting CLEAN); UPDATE=$(setting UPDATE)
-    exec "$AGENT" --state-dir "$STATE" run --mode "${MODE:-kill}" --clean "${CLEAN:-on}" --update "${UPDATE:-on}"
+    MODE=$(setting MODE); CLEAN=$(setting CLEAN); UPDATE=$(setting UPDATE); LEARN_HOURS=$(setting LEARN_HOURS)
+    exec "$AGENT" --state-dir "$STATE" run --mode "${MODE:-kill}" --clean "${CLEAN:-on}" --update "${UPDATE:-on}" --learn "${LEARN_HOURS:-24}"
     ;;
   update)
     # The agent says 10 when it replaced its own program file: the service is restarted to run the new one.

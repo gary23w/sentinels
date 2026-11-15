@@ -61,6 +61,14 @@ pub(crate) struct More {
     pub web_attacks: HashMap<String, (Value, f64)>,
     /// Addresses an attacked service called back: (until when, the case, whether this agent refuses it).
     pub callouts: HashMap<String, (f64, String, bool)>,
+    /// Until when this agent is still learning the machine it was just installed on.
+    pub settle_until: f64,
+    /// Cases met while settling in that only their score spoke against: left running until the owner judges them.
+    pub held: HashSet<String>,
+    /// Cases the owner confirmed as attacks: never left running.
+    pub confirmed: HashSet<String>,
+    /// Why a case was left running at this look, to be said with it.
+    pub left: HashMap<String, &'static str>,
 }
 
 fn is_key(key: &str) -> bool {
@@ -105,6 +113,63 @@ impl<S: Sensor, H: Hands> Watcher<S, H> {
         {
             self.more.startup = Some(crate::startup_win::StartupWatch::new(directory));
         }
+    }
+
+    /// Start, or carry on, the settling-in period of a fresh install. For that long the agent acts only on what
+    /// is unmistakably an attack (the chains in `score::containment_reason`). A program that only its score
+    /// speaks against is reported and left running, then and afterwards, until the owner says what it is: such a
+    /// program was on the machine before the agent knew it, and may be the owner's own.
+    /// `fresh` is false for an install that has run before this version: it does not settle in again.
+    pub fn settle_in(&mut self, hours: f64, fresh: bool, now: f64) {
+        let Some(path) = self.file("settled.json") else { return };
+        match std::fs::read(&path).ok().and_then(|raw| serde_json::from_slice::<Value>(&raw).ok()) {
+            Some(kept) => {
+                self.more.settle_until = kept["until"].as_f64().unwrap_or(0.0);
+                self.more.held = kept["held"].as_array().into_iter().flatten().filter_map(Value::as_str).filter(|key| is_key(key)).map(str::to_string).collect();
+            }
+            None => {
+                self.more.settle_until = if fresh && hours > 0.0 { now + hours.min(24.0 * 30.0) * 3600.0 } else { 0.0 };
+                self.save_settled();
+            }
+        }
+    }
+
+    fn save_settled(&self) {
+        if let Some(path) = self.file("settled.json") {
+            let mut held: Vec<&String> = self.more.held.iter().collect();
+            held.sort();
+            write_private(&path, &json!({"until": self.more.settle_until, "held": held}).to_string());
+        }
+    }
+
+    /// The cases the owner confirmed as attacks.
+    pub fn set_confirmed(&mut self, keys: &Value) {
+        self.more.confirmed = keys.as_array().into_iter().flatten().filter_map(Value::as_str).filter(|key| is_key(key)).map(str::to_string).collect();
+    }
+
+    /// (seconds of settling in left, how many programs are left running for the owner to judge).
+    pub fn settling(&self, now: f64) -> (f64, usize) {
+        ((self.more.settle_until - now).max(0.0), self.more.held.iter().filter(|key| !self.more.confirmed.contains(*key) && !self.trusted.contains(*key)).count())
+    }
+
+    /// True when this program is to be left running although it would be stopped: nothing but its score speaks
+    /// against it, and it was met while the agent was settling in.
+    pub(crate) fn held_back(&mut self, key: &str, reason: &str, now: f64) -> bool {
+        if !reason.starts_with("it reached the hostile level") || self.more.confirmed.contains(key) {
+            return false;
+        }
+        if now < self.more.settle_until {
+            if self.more.held.len() < 2000 && self.more.held.insert(key.to_string()) {
+                self.save_settled();
+            }
+            self.more.left.insert(key.to_string(), "learning");
+            return true;
+        }
+        if self.more.held.contains(key) {
+            self.more.left.insert(key.to_string(), "here first");
+            return true;
+        }
+        false
     }
 
     pub fn decide_with(&mut self, fallback_kill: bool, decide_after: f64) {

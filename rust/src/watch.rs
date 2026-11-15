@@ -311,6 +311,10 @@ impl<S: Sensor, H: Hands> Watcher<S, H> {
             return false;
         }
         let identity = (proc.pid, proc.started);
+        let key = self.case_key(proc, parent);
+        if self.hands.is_some() && self.held_back(&key, &reason, now) {
+            return false;
+        }
         self.sieges.insert(proc.ppid, now + SIEGE_SECONDS);
         if self.hands.is_none() || protected(proc, &self.own) || self.trusted.contains(&self.case_key(proc, parent)) || self.released.contains(&identity) || self.paused.contains(&identity) {
             return false;
@@ -473,6 +477,9 @@ impl<S: Sensor, H: Hands> Watcher<S, H> {
         // Only a process that is running right now under that same identity. One that has already exited is
         // never signalled: its process id may belong to something else by now.
         if !procs.iter().any(|proc| proc.pid == subject.pid && proc.started == subject.started) {
+            return None;
+        }
+        if self.hands.is_some() && self.held_back(key, &reason, now) {
             return None;
         }
         let (mut members, mut queue): (Vec<Proc>, std::collections::VecDeque<Proc>) = (Vec::new(), std::collections::VecDeque::from([subject]));
@@ -882,6 +889,8 @@ impl<S: Sensor, H: Hands> Watcher<S, H> {
                     }
                     if let Some(action) = action {
                         case["actions"] = json!([action]);
+                    } else if let Some(why) = self.more.left.remove(&key) {
+                        case["held"] = json!(why);
                     }
                     if let Some(steps) = self.more.cleanups.remove(&key) {
                         case["cleanup"] = json!(steps);
