@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Sentinels: automated host intrusion response</title>
 <meta name="description" content="Sentinels detects and stops hostile processes on Linux, macOS and Windows. Deploy a single agent, self-host a fleet, or use managed hosting. Optional AI-assisted analysis.">
+<meta property="og:title" content="Sentinels: stop the attack before its next command">
+<meta property="og:description" content="Automated host intrusion response for Linux, macOS and Windows, with optional AI analysis.">
+<meta property="og:url" content="https://gary23w.github.io/sentinels/">
+<meta name="twitter:card" content="summary">
 <style>
 :root { color-scheme: dark; }
 body { font: 17px/1.6 system-ui, sans-serif; max-width: 48rem; margin: 3rem auto; padding: 0 1.1rem; background: #0b1220; color: #e8edf6; }
@@ -13,6 +17,10 @@ h1 { font-size: clamp(2.3rem, 6vw, 3.5rem); line-height: 1.1; margin-bottom: 0.3
 h2 { margin-top: 2.2rem; }
 .lead { font-size: 1.25rem; margin-top: 0; color: #b8c6dc; }
 .eyebrow { color: #8be0c4; font-size: 0.8rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
+.actions { display: flex; flex-wrap: wrap; gap: 0.7rem; margin: 1.4rem 0 1.8rem; }
+.actions a { padding: 0.6rem 0.9rem; border: 1px solid #4b786f; border-radius: 8px; font-weight: 600; text-decoration: none; }
+.actions a:first-child { background: #8be0c4; border-color: #8be0c4; color: #0b1220; }
+.actions a:hover, .actions a:focus-visible { text-decoration: underline; }
 .stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem; margin-top: 1.5rem; }
 .stat { padding: 1rem 1.2rem; border: 1px solid #34445c; border-radius: 10px; background: #142036; }
 .stat strong { display: block; font-size: 1.8rem; line-height: 1.2; color: #8be0c4; }
@@ -27,6 +35,7 @@ code { font: 14px/1.5 ui-monospace, Consolas, monospace; }
 <p class="eyebrow">Automated host intrusion response</p>
 <h1>Stop the attack before its next command.</h1>
 <p class="lead">Sentinels watches your machines for hostile behavior and can stop a suspicious process while the intrusion is still starting.</p>
+<nav class="actions" aria-label="Get started"><a href="#install">Install the agent</a><a href="https://github.com/gary23w/sentinels">View source</a></nav>
 <p><code>garrett</code> runs on Linux, macOS and Windows. When a web server starts a shell that downloads a script, garrett can end that shell before the script runs, clean up what it left, and explain why it acted. The agent is one program file. Current release: @VERSION@.</p>
 <p>AI-assisted attack frameworks such as <a href="https://www.cert.europa.eu/blog/from-penetration-testing-to-cyber-threat-beware-of-artex">ARTEX can work through long attack chains</a>. Sentinels responds to suspicious behavior on the host without waiting for someone to read an alert.</p>
 
@@ -43,7 +52,7 @@ code { font: 14px/1.5 ui-monospace, Consolas, monospace; }
 <h2>AI when you choose it</h2>
 <p>The fleet service can use a configured AI provider for a second opinion and a plain-language case summary. In <code>decide</code> mode, it freezes the suspicious program before asking the model what to do. The default local response path works without an AI provider.</p>
 
-<h2>Install on Linux or macOS</h2>
+<h2 id="install">Install on Linux or macOS</h2>
 <pre><code>curl -fsSL https://gary23w.github.io/sentinels/install.sh | sudo sh</code></pre>
 
 <h2>Install on Windows</h2>
