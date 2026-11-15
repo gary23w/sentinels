@@ -3,23 +3,45 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>sentinels: a guard that ends a break-in while it is still starting</title>
-<meta name="description" content="garrett sits on your Linux, macOS or Windows machine, ends a hostile program milliseconds after it starts, cleans up after it and tells you why. One line to install.">
+<title>Sentinels: automated host intrusion response</title>
+<meta name="description" content="Sentinels detects and stops hostile processes on Linux, macOS and Windows. Deploy a single agent, self-host a fleet, or use managed hosting. Optional AI-assisted analysis.">
 <style>
-:root { color-scheme: light dark; }
-body { font: 17px/1.6 system-ui, sans-serif; max-width: 44rem; margin: 3rem auto; padding: 0 1.1rem; }
-h1 { font-size: 2.1rem; margin-bottom: 0.2rem; }
+:root { color-scheme: dark; }
+body { font: 17px/1.6 system-ui, sans-serif; max-width: 48rem; margin: 3rem auto; padding: 0 1.1rem; background: #0b1220; color: #e8edf6; }
+a { color: #8be0c4; }
+h1 { font-size: clamp(2.3rem, 6vw, 3.5rem); line-height: 1.1; margin-bottom: 0.35rem; }
 h2 { margin-top: 2.2rem; }
-.lead { font-size: 1.2rem; margin-top: 0; }
-pre { background: rgba(127, 127, 127, 0.16); padding: 0.85rem 1rem; overflow-x: auto; border-radius: 8px; }
+.lead { font-size: 1.25rem; margin-top: 0; color: #b8c6dc; }
+.eyebrow { color: #8be0c4; font-size: 0.8rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem; margin-top: 1.5rem; }
+.stat { padding: 1rem 1.2rem; border: 1px solid #34445c; border-radius: 10px; background: #142036; }
+.stat strong { display: block; font-size: 1.8rem; line-height: 1.2; color: #8be0c4; }
+.stat span { font-size: 0.9rem; color: #b8c6dc; }
+pre { background: #162238; padding: 0.85rem 1rem; overflow-x: auto; border-radius: 8px; }
 code { font: 14px/1.5 ui-monospace, Consolas, monospace; }
-.small { font-size: 0.9rem; opacity: 0.85; }
+.small { font-size: 0.9rem; color: #b8c6dc; }
+@media (max-width: 35rem) { .stats { grid-template-columns: 1fr; } }
 </style>
 </head>
 <body>
-<h1>sentinels</h1>
-<p class="lead">A guard for your servers and workstations that ends a break-in while it is still starting.</p>
-<p><code>garrett</code> sits on the machine and watches what runs. When your web server starts a shell that downloads a script, garrett ends that shell before the script runs, cleans up what it left, and tells you why. It is one program file for Linux, macOS and Windows. This is version 1.1.0.</p>
+<p class="eyebrow">Automated host intrusion response</p>
+<h1>Stop the attack before its next command.</h1>
+<p class="lead">Sentinels watches your machines for hostile behavior and can stop a suspicious process while the intrusion is still starting.</p>
+<p><code>garrett</code> runs on Linux, macOS and Windows. When a web server starts a shell that downloads a script, garrett can end that shell before the script runs, clean up what it left, and explain why it acted. The agent is one program file. Current release: 1.1.0.</p>
+<p>AI-assisted attack frameworks such as <a href="https://www.cert.europa.eu/blog/from-penetration-testing-to-cyber-threat-beware-of-artex">ARTEX can work through long attack chains</a>. Sentinels responds to suspicious behavior on the host without waiting for someone to read an alert.</p>
+
+<h2>Measured in milliseconds</h2>
+<div class="stats" aria-label="Internal benchmark results">
+  <div class="stat"><strong>~20 ms</strong><span>Reported stopping time in rapid process-chain scenarios</span></div>
+  <div class="stat"><strong>&lt;5 ms</strong><span>Reported stopping time in selected tool-driven scenarios</span></div>
+</div>
+<p class="small">Early internal benchmarks for specific test scenarios, not a guarantee across attacks or machines. The test setup, timing boundaries, sample size and raw results will be added to the <a href="https://github.com/gary23w/sentinels#what-you-get">README</a>.</p>
+
+<h2>Act, explain, recover</h2>
+<p>Choose whether garrett ends a hostile process tree, pauses it for a decision, or only reports it. It can quarantine dropped files and disable persistence. Each case shows the reasons for its decision; <code>garrett restore &lt;case&gt;</code> can reverse a mistake.</p>
+
+<h2>AI when you choose it</h2>
+<p>The fleet service can use a configured AI provider for a second opinion and a plain-language case summary. In <code>decide</code> mode, it freezes the suspicious program before asking the model what to do. The default local response path works without an AI provider.</p>
 
 <h2>Install on Linux or macOS</h2>
 <pre><code>curl -fsSL https://gary23w.github.io/sentinels/install.sh | sudo sh</code></pre>
@@ -35,7 +57,7 @@ code { font: 14px/1.5 ui-monospace, Consolas, monospace; }
 <p>An installed garrett looks here a few times a day and installs each new version by itself. It installs nothing unless the <a href="update.txt">update list</a> carries the project's signature, and the key that makes that signature is kept off this site and off GitHub. To update by hand instead, put <code>UPDATE=off</code> in its configuration file and run <code>garrett update</code> when you like.</p>
 
 <h2>Protect a whole fleet</h2>
-<p>Turn one of your machines into your own service. It makes its keys and certificate, starts, and prints the command that joins the others. It runs on your hardware and your cases stay there.</p>
+<p>Turn one of your machines into your own service. It makes its keys and certificate, starts, and prints the command that joins the others. It runs on your hardware and your cases stay there. A managed hosted deployment is also available.</p>
 <pre><code>curl -fsSL https://gary23w.github.io/sentinels/service.sh | sudo sh</code></pre>
 <p>On Windows, from an elevated PowerShell:</p>
 <pre><code>irm https://gary23w.github.io/sentinels/service.ps1 | iex</code></pre>
