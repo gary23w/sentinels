@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>garrett: the manual</title>
+<style>
+:root { color-scheme: light dark; }
+body { font: 16px/1.55 system-ui, sans-serif; max-width: 46rem; margin: 3rem auto; padding: 0 1.1rem; }
+h1 { font-size: 1.6rem; }
+h2 { font-size: 1.15rem; margin-top: 2rem; }
+pre, code { font: 14px/1.5 ui-monospace, Consolas, monospace; }
+hr { display: none; }
+</style>
+</head>
+<body>
+<p><a href="./">sentinels</a> · the manual page that comes with the package (<code>man garrett</code>)</p>
+<table class="head">
+  <tr>
+    <td class="head-ltitle">GARRETT(8)</td>
+    <td class="head-vol">System Administration</td>
+    <td class="head-rtitle">GARRETT(8)</td>
+  </tr>
+</table>
+<div class="manual-text">
+<section class="Sh">
+<h1 class="Sh" id="NAME"><a class="permalink" href="#NAME">NAME</a></h1>
+<p class="Pp">garrett - host intrusion sentinel that stops what it catches</p>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="SYNOPSIS"><a class="permalink" href="#SYNOPSIS">SYNOPSIS</a></h1>
+<p class="Pp"><b>garrett enroll</b> <b>--server</b> <i>address</i> [<b>--key</b>
+    <i>key</i>] [<b>--mode</b>
+    <i>kill</i>|<i>decide</i>|<i>pause</i>|<i>report</i>] [<b>--label</b>
+    <i>name</i>]
+  <br/>
+  <b>garrett status</b>
+  <br/>
+  <b>garrett forget</b>
+  <br/>
+  <b>garrett cases</b>
+  <br/>
+  <b>garrett trust|<b>stop</b>|<b>release</b>|<b>restore</b></b> <i>case</i>
+  <br/>
+  <b>garrett update</b> [<b>--check</b>]
+  <br/>
+  <b>garrett run</b></p>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="DESCRIPTION"><a class="permalink" href="#DESCRIPTION">DESCRIPTION</a></h1>
+<p class="Pp"><b>garrett</b> watches this machine's running programs and their
+    connections, scores them on the machine, and pauses or ends a program it
+    judges hostile. Installed with nothing else, it protects the machine it is
+    on and keeps its cases there. Enrolled, it reports cases to a Sentinel
+    service that you run, and applies what that service has learned from the
+    rest of your machines.</p>
+<p class="Pp">It normally runs as the <b>garrett</b> systemd service. Enrolling
+    starts the service.</p>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="COMMANDS"><a class="permalink" href="#COMMANDS">COMMANDS</a></h1>
+<dl class="Bl-tag">
+  <dt id="enroll"><a class="permalink" href="#enroll"><b>enroll</b></a></dt>
+  <dd>Enrol this machine with a Sentinel service and start the service. The
+      enrolment key may be given in the environment variable
+      <b>SENTINEL_ENROLL_KEY</b> instead of on the command line.</dd>
+  <dt id="status"><a class="permalink" href="#status"><b>status</b></a></dt>
+  <dd>Show which service this machine reports to, and its response mode.</dd>
+  <dt id="forget"><a class="permalink" href="#forget"><b>forget</b></a></dt>
+  <dd>Stop the service and remove this machine's credential.</dd>
+  <dt id="cases"><a class="permalink" href="#cases"><b>cases</b></a></dt>
+  <dd>List the latest cases on this machine.</dd>
+  <dt id="trust"><a class="permalink" href="#trust"><b>trust</b><i>
+    case</i></a></dt>
+  <dd>This program is mine: leave it alone from now on.</dd>
+  <dt id="stop"><a class="permalink" href="#stop"><b>stop</b><i> case</i><b>,
+    </b><i>release</i><b> case</b></a></dt>
+  <dd>Decide a program the agent paused: end it, or let it continue.</dd>
+  <dt id="restore"><a class="permalink" href="#restore"><b>restore</b><i>
+    case</i></a></dt>
+  <dd>Put back everything that was cleaned up after a stop: quarantined files
+      and switched-off startup entries.</dd>
+  <dt id="update"><a class="permalink" href="#update"><b>update</b></a></dt>
+  <dd>Install the newest version now. <b>--check</b> only says whether there is
+      one. The running agent does this by itself a few times a day; see
+      <b>UPDATES</b>.</dd>
+  <dt id="run"><a class="permalink" href="#run"><b>run</b></a></dt>
+  <dd>Watch and report in the foreground. The service runs this.</dd>
+</dl>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="RESPONSE_MODES"><a class="permalink" href="#RESPONSE_MODES">RESPONSE
+  MODES</a></h1>
+<dl class="Bl-tag">
+  <dt id="kill"><a class="permalink" href="#kill"><b>kill</b></a></dt>
+  <dd>End a hostile program and everything it started, at once. The
+    default.</dd>
+  <dt id="decide"><a class="permalink" href="#decide"><b>decide</b></a></dt>
+  <dd>Freeze it, then let the service's decision model say stop, release or
+      hold.</dd>
+  <dt id="pause"><a class="permalink" href="#pause"><b>pause</b></a></dt>
+  <dd>Freeze it and wait for an operator.</dd>
+  <dt id="report"><a class="permalink" href="#report"><b>report</b></a></dt>
+  <dd>Only report.</dd>
+</dl>
+<p class="Pp">The service may hold a machine to a lower mode than it asked
+  for.</p>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="FILES"><a class="permalink" href="#FILES">FILES</a></h1>
+<dl class="Bl-tag">
+  <dt><i>/etc/garrett/garrett.conf</i></dt>
+  <dd>Optional, mode 0600. Lines <b>SERVER=</b>, <b>ENROLL_KEY=</b>, and
+      optionally <b>MODE=</b>, <b>LABEL=</b>, <b>CLEAN=off</b> and
+      <b>UPDATE=off</b>. When this file exists and the machine is not enrolled,
+      the service enrols itself on first start.</dd>
+  <dt><i>/var/lib/garrett/</i></dt>
+  <dd>This machine's credential and what the agent remembers about it.</dd>
+</dl>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="UPDATES"><a class="permalink" href="#UPDATES">UPDATES</a></h1>
+<p class="Pp">The running agent asks the project's site a few times a day
+    whether a newer version is out, and installs it. It installs nothing unless
+    the site's list of program files carries the project's signature, names a
+    version newer than the one installed, and matches the file it downloaded.
+    Where this package is installed, apt does the installing from the project's
+    signed repository. <b>UPDATE=off</b> in the configuration file turns this
+    off.</p>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="FIREWALL"><a class="permalink" href="#FIREWALL">FIREWALL</a></h1>
+<p class="Pp">When the service has fleet blocking on, garrett keeps one nftables
+    table named <b>garrett</b>. It is removed when the service stops and when
+    the package is removed.</p>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="SEE_ALSO"><a class="permalink" href="#SEE_ALSO">SEE
+  ALSO</a></h1>
+<p class="Pp"><b>systemctl</b>(1), <b>nft</b>(8)</p>
+</section>
+</div>
+<table class="foot">
+  <tr>
+    <td class="foot-date">November 2026</td>
+    <td class="foot-os">garrett 1.1.0</td>
+  </tr>
+</table>
+</body>
+</html>

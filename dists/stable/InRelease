@@ -1,0 +1,45 @@
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA512
+
+Architectures: all amd64 arm64
+Codename: stable
+Components: main
+Date: Sun, 15 Nov 2026 20:31:48 +0000
+Label: garrett
+Origin: garrett
+Suite: stable
+MD5Sum:
+ d41d8cd98f00b204e9800998ecf8427e                0 main/binary-all/Packages
+ fab753495dd2eb1f645a5fb6235286bb               29 main/binary-all/Packages.gz
+ 54815f73895a7731f9a1f756fcb914a6              999 main/binary-amd64/Packages
+ 83ec14730468b22c6358a6a5a6be8acb              656 main/binary-amd64/Packages.gz
+ 822ec61506d26d17ba4c8e6730ad8e0b              999 main/binary-arm64/Packages
+ 0eb84af15a0e13fb24522267d2745f7e              659 main/binary-arm64/Packages.gz
+SHA1:
+ da39a3ee5e6b4b0d3255bfef95601890afd80709                0 main/binary-all/Packages
+ 3f96d00905d0cf1cfdba78061ab7717e788ceb0e               29 main/binary-all/Packages.gz
+ 6a158a46f50f44c8653cb2d2097a68ade6a06721              999 main/binary-amd64/Packages
+ c02d8a7041a425076293d559b5ee848ac9d696ef              656 main/binary-amd64/Packages.gz
+ d25ac215f420fa93b902a8a5068b32a72fc2c52e              999 main/binary-arm64/Packages
+ ee6e73d8179b703b251664ae9c6012d13326ec75              659 main/binary-arm64/Packages.gz
+SHA256:
+ e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855                0 main/binary-all/Packages
+ d5eed30efa5a331d550d1d79d0fad9b9a9c6a9a19ec059278318745ca119e37e               29 main/binary-all/Packages.gz
+ 97c61feba8c8bbc34d344c72bc0c58584fc4e6d18db3dc6afd4d3d0eb4c8ebfa              999 main/binary-amd64/Packages
+ ad8b22e25857ed642a2ac71605fd5f33681bb6f4d25b9600ee2ac99fd94ed148              656 main/binary-amd64/Packages.gz
+ 0d0e2d6a0fd5949193bb65d4b281d3488cc1e82309b1763c02524a544a7e15d5              999 main/binary-arm64/Packages
+ 707e748522acd2541e3f3f36a8e058cf7cf7d236c9213d7e1c4cde304e8ff599              659 main/binary-arm64/Packages.gz
+SHA512:
+ cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e                0 main/binary-all/Packages
+ 2617afabf4d1d74069f43fc50222e1426177584de92ce7dbf5b4a35c8089c9d32d08f69f91f5391edf12502b5e063f5aafde7107891650cb0e9a2c4a522d95c9               29 main/binary-all/Packages.gz
+ 00f7ba9915f0e1ffc89cf455d68753aa8e67dd85e7860a0db8406cd2d056cbadce6f69e47cfb5773cd29fb42659703cf02a35007f0d129861968a5e7173091d3              999 main/binary-amd64/Packages
+ 37bc8d4567a594f2be1b775d157946b6bd2f2d9d237dcade1fc635ba596b4c1d005db8f6df0c0afd9124cecfbe3c624b76419ffeb475fbd8d3f3639c807dda76              656 main/binary-amd64/Packages.gz
+ e9135f4f05962eb084aa25e57a832a181b447420c1138811391a6646474763730b2fdc6e7267485fdf5934ed70b3f76bd94658122069690a31fb32fbcc1031db              999 main/binary-arm64/Packages
+ 20dea61f54a5964572ceb1dd3eaae58cb2bedd37ff74d688ce9c2242f054c99254805325085b05d779994058366629a018b8abc3fa174fd4a5f445ff5088cca1              659 main/binary-arm64/Packages.gz
+-----BEGIN PGP SIGNATURE-----
+
+iHUEARYKAB0WIQRoV+vLvvUQQMPyAQc2Joi/wjirRQUCavoW7gAKCRA2Joi/wjir
+Rb7NAP9TxOKpdXID4j++c2SnFF2w8RYj+Tvmaw26fJnM0DmeVAEAjDIZG13Nnw5x
+gL8leeH4oV3pFPgFo5++loLvqR2DogM=
+=MNHi
+-----END PGP SIGNATURE-----
