@@ -437,6 +437,22 @@ jobs:
           echo "log files: $(ls /var/log/auth.log /var/log/secure 2>/dev/null | tr '\n' ' ')| lines in a file: $(sudo grep -c 'Invalid user nobody-' /var/log/auth.log 2>/dev/null) | lines in the journal: $(sudo journalctl -q --no-pager -o cat --since -5min _COMM=sshd _COMM=sshd-session | grep -c 'Invalid user nobody-')"
           sudo rust/target/release/garrett --state-dir /tmp/gs-state cases | tail -3
           sudo rust/target/release/garrett --state-dir /tmp/gs-state cases | grep -q "SSH sign-ins from"
+      # The privacy shield, with no measuring day (--learn 0). The probe is a copy of curl named like a browser: an
+      # ordinary program asking would itself count as software that depends on the tracker.
+      - name: The privacy shield refuses trackers that answer from their own networks, and nothing else
+        run: |
+          G="sudo rust/target/release/garrett --state-dir /tmp/gs-state"
+          cp "$(command -v curl)" /tmp/firefox
+          probe() { code=0; /tmp/firefox -4 -s -m 8 -o /dev/null "https://$1/" || code=$?; [ "$code" != 28 ] && [ "$code" != 7 ]; }
+          for i in $(seq 1 30); do $G shield | grep -q "Refused at the firewall now: .*criteo" && break; sleep 3; done
+          $G shield
+          if probe bidder.criteo.com; then echo "a refused tracker was reached"; exit 1; fi
+          probe www.google-analytics.com
+          probe example.com
+          $G shield off
+          sleep 10
+          probe bidder.criteo.com
+
 
   rust-agent-macos:
     runs-on: macos-latest
@@ -476,6 +492,23 @@ jobs:
           grep -q '^# garrett-disabled .*updater 5' "$HOME/.zshrc"
           sudo env GARRETT_LIVE_STATE=/private/tmp/gl-state "$live" --ignored --nocapture live_restore
           sudo shasum -a 256 -c before.txt
+      # The privacy shield, with no measuring day (--learn 0). The probe is a copy of curl named like a browser: an
+      # ordinary program asking would itself count as software that depends on the tracker.
+      - name: The privacy shield refuses trackers that answer from their own networks, and nothing else
+        run: |
+          sudo sh -c "nohup $GITHUB_WORKSPACE/rust/target/release/garrett --state-dir /tmp/gp run --mode kill --learn 0 --update off > /tmp/shield.log 2>&1 &"
+          G="sudo rust/target/release/garrett --state-dir /tmp/gp"
+          cp "$(command -v curl)" /tmp/firefox
+          probe() { code=0; /tmp/firefox -4 -s -m 8 -o /dev/null "https://$1/" || code=$?; [ "$code" != 28 ] && [ "$code" != 7 ]; }
+          for i in $(seq 1 30); do $G shield | grep -q "Refused at the firewall now: .*criteo" && break; sleep 3; done
+          $G shield
+          if probe bidder.criteo.com; then echo "a refused tracker was reached"; exit 1; fi
+          probe www.google-analytics.com
+          probe example.com
+          $G shield off
+          sleep 10
+          probe bidder.criteo.com
+          sudo pkill -f 'garrett --state-dir /tmp/gp' || true
 
   rust-agent-windows:
     runs-on: windows-latest
@@ -575,6 +608,18 @@ jobs:
           Start-Sleep -Seconds 20
           if ((& $names) -notcontains 'GwNew') { throw 'the startup value put back on purpose was removed again' }
           if ((Get-ScheduledTask -TaskName 'GwTask').State -eq 'Disabled') { throw 'the task put back on purpose was disabled again' }
+          # The privacy shield, with no measuring day: trackers that answer from their own networks are refused at
+          # the firewall and nothing else is. The probe is a copy of curl named like a browser.
+          $fox = Join-Path $work 'firefox.exe'; Copy-Item (Join-Path $env:SystemRoot 'System32\curl.exe') $fox
+          $probe = { param($name) & $fox -4 -s -m 8 -o NUL "https://$name/"; ($LASTEXITCODE -ne 28 -and $LASTEXITCODE -ne 7) }
+          foreach ($i in 1..30) { if ((& $garrett --state-dir $state shield) -match 'Refused at the firewall now: .*criteo') { break }; Start-Sleep -Seconds 3 }
+          & $garrett --state-dir $state shield
+          if (& $probe 'bidder.criteo.com') { throw 'a refused tracker was reached' }
+          if (-not (& $probe 'www.google-analytics.com')) { throw 'the shield broke Google' }
+          if (-not (& $probe 'example.com')) { throw 'the shield broke an ordinary site' }
+          & $garrett --state-dir $state shield off
+          Start-Sleep -Seconds 10
+          if (-not (& $probe 'bidder.criteo.com')) { throw 'switching the shield off did not let the tracker through again' }
           # The agent reads the Security log with a PowerShell command of its own, a minute after it starts and
           # every minute after: that command names the attacks it searches for, and must not be taken for one.
           $left = 150 - ((Get-Date) - $began).TotalSeconds; if ($left -gt 0) { Start-Sleep -Seconds $left }

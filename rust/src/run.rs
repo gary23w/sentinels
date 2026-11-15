@@ -28,6 +28,34 @@ pub fn set_learn_hours(hours: f64) {
     LEARN_HOURS.store(hours.max(0.0).to_bits(), Ordering::SeqCst);
 }
 
+/// Whether the privacy shield runs unless the owner said otherwise on this machine. On, unless `run --shield off`.
+static SHIELD: AtomicBool = AtomicBool::new(true);
+
+pub fn set_shield(on: bool) {
+    SHIELD.store(on, Ordering::SeqCst);
+}
+
+/// The privacy shield's memory, and a thread that looks the tracker names up again every half hour.
+fn start_shield(state: &State) -> Arc<Mutex<crate::shield::Shield>> {
+    let shield = Arc::new(Mutex::new(crate::shield::Shield::load(&state.directory, f64::from_bits(LEARN_HOURS.load(Ordering::SeqCst)), now())));
+    let (kept, directory) = (shield.clone(), state.directory.clone());
+    let _ = std::thread::Builder::new().name("garrett-shield".into()).spawn(move || {
+        std::thread::sleep(Duration::from_secs(10));
+        loop {
+            // The names are only looked up while the shield is on: a machine with it off asks DNS nothing.
+            if crate::shield::enabled(&directory, SHIELD.load(Ordering::SeqCst)) {
+                let found = crate::shield::look_up();
+                match kept.lock() {
+                    Ok(mut shield) => shield.learn_addresses(&found, now()),
+                    Err(_) => return,
+                }
+            }
+            std::thread::sleep(Duration::from_secs_f64(1800.0 * jitter(0.8, 1.2)));
+        }
+    });
+    shield
+}
+
 /// What the owner said on this machine since the last look: cases confirmed as attacks, and (with no service)
 /// what was learned from all their verdicts.
 fn take_local(running: &Running, state: &State, alone: bool) {
@@ -115,6 +143,9 @@ struct Running {
     woken: bool,
     /// What would start each reported program again, asked once for each program file.
     persistence: std::collections::HashMap<String, Vec<Value>>,
+    shield: Arc<Mutex<crate::shield::Shield>>,
+    shield_said: usize,
+    directory: std::path::PathBuf,
 }
 
 fn build(state: &State, salt: &str, mode: &str, clean: bool, fallback_kill: bool, decide_after: f64, never_block: &[String]) -> Running {
@@ -189,10 +220,42 @@ fn build(state: &State, salt: &str, mode: &str, clean: bool, fallback_kill: bool
             }
         });
     }
-    Running { watcher, looked, started, wake, feeds, refreshed: None, woken: false, persistence: std::collections::HashMap::new() }
+    Running { watcher, looked, started, wake, feeds, refreshed: None, woken: false, persistence: std::collections::HashMap::new(), shield: start_shield(state), shield_said: usize::MAX, directory: state.directory.clone() }
 }
 
 impl Running {
+    /// The privacy shield's part of a look: note which programs talk to trackers, and refuse what may be refused.
+    fn shield_look(&mut self) {
+        let on = crate::shield::enabled(&self.directory, SHIELD.load(Ordering::SeqCst));
+        let wanted = if on {
+            let (procs, conns) = self.looked.lock().map(|looked| (looked.procs.clone(), looked.conns.clone())).unwrap_or_default();
+            match self.shield.lock() {
+                Ok(mut shield) => {
+                    shield.note(&procs, &conns, now());
+                    shield.cut(now())
+                }
+                Err(_) => Vec::new(),
+            }
+        } else {
+            Vec::new()
+        };
+        if let Ok(mut watcher) = self.watcher.lock() {
+            watcher.set_shield(&wanted);
+        }
+        if wanted.len() != self.shield_said {
+            // What is refused changed: the record the commands read is written now, not at the next minute.
+            if let Ok(mut shield) = self.shield.lock() {
+                shield.save(now());
+            }
+            if !wanted.is_empty() {
+                println!("garrett: privacy shield: {} tracker address(es) refused at the firewall (see: garrett shield)", wanted.len());
+            } else if self.shield_said != usize::MAX && self.shield_said > 0 {
+                println!("garrett: privacy shield: nothing is refused now");
+            }
+            self.shield_said = wanted.len();
+        }
+    }
+
     /// Move what the feeds reported to the responders.
     fn pump(&mut self) {
         if self.feeds.pump() {
@@ -216,6 +279,7 @@ impl Running {
         self.woken = false;
         let started: Vec<Snap> = self.started.lock().map(|mut list| std::mem::take(&mut *list)).unwrap_or_default();
         let mut cases = self.watcher.lock().map(|mut watcher| watcher.tick_with(now(), &started)).unwrap_or_default();
+        self.shield_look();
         // A reported program: where it is set to start again. Asked after the look, so nothing waits behind it.
         for case in cases.iter_mut().filter(|case| case.get("chain").is_some() && case.get("persistence").is_none()) {
             let path = case["path"].as_str().unwrap_or("").to_string();

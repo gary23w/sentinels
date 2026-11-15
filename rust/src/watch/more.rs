@@ -61,6 +61,8 @@ pub(crate) struct More {
     pub web_attacks: HashMap<String, (Value, f64)>,
     /// Addresses an attacked service called back: (until when, the case, whether this agent refuses it).
     pub callouts: HashMap<String, (f64, String, bool)>,
+    /// Tracker addresses the privacy shield refuses.
+    pub shield_block: Vec<String>,
     /// Until when this agent is still learning the machine it was just installed on.
     pub settle_until: f64,
     /// Cases met while settling in that only their score spoke against: left running until the owner judges them.
@@ -917,10 +919,17 @@ impl<S: Sensor, H: Hands> Watcher<S, H> {
     /// Refuse exactly the fleet's list and the addresses attacked services called back. True when the firewall
     /// now holds that list.
     fn apply_block(&mut self) -> bool {
-        if self.hands.is_none() || !(self.mode == Mode::Kill || self.mode == Mode::Decide) {
+        if self.hands.is_none() {
             return false;
         }
-        let mut target: Vec<String> = self.more.callouts.iter().filter(|(_, entry)| entry.2).map(|(address, _)| address.clone()).chain(self.more.fleet_block.iter().cloned()).collect();
+        // Attack addresses are refused only by an agent allowed to end programs. The privacy shield's are
+        // refused by any agent that may act at all.
+        let acting = self.mode == Mode::Kill || self.mode == Mode::Decide;
+        if !acting && self.more.shield_block.is_empty() && self.more.blocked.as_ref().is_none_or(|list| list.is_empty()) {
+            return false;
+        }
+        let mut target: Vec<String> = if acting { self.more.callouts.iter().filter(|(_, entry)| entry.2).map(|(address, _)| address.clone()).chain(self.more.fleet_block.iter().cloned()).collect() } else { Vec::new() };
+        target.extend(self.more.shield_block.iter().cloned());
         target.truncate(200);
         target.sort();
         target.dedup();
@@ -934,6 +943,18 @@ impl<S: Sensor, H: Hands> Watcher<S, H> {
             self.more.blocked = Some(target);
         }
         done
+    }
+
+    /// The tracker addresses the privacy shield wants refused now, replacing the ones before. Never this
+    /// machine's own addresses, its service's, or anything that is not on the open internet.
+    pub fn set_shield(&mut self, addresses: &[String]) {
+        let mut wanted: Vec<String> = addresses.iter().filter(|address| net::is_internet(address) && !self.more.never_block.contains(*address) && !self.more.addresses.contains_key(*address)).cloned().collect();
+        wanted.sort();
+        wanted.dedup();
+        if wanted != self.more.shield_block {
+            self.more.shield_block = wanted;
+            self.apply_block();
+        }
     }
 
     /// Remove every address this agent refused. Called when the agent is told to stop.

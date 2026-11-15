@@ -41,6 +41,7 @@ pub mod respond;
 #[cfg(any(target_os = "linux", target_os = "macos", windows))]
 pub mod run;
 pub mod score;
+pub mod shield;
 pub mod signin;
 #[cfg(windows)]
 pub mod startup_win;

@@ -27,6 +27,13 @@ garrett \- host intrusion sentinel that stops what it catches
 .B garrett learned
 .RB [ \-\-reset ]
 .br
+.B garrett shield
+.RB [ on | off | allow
+.IR name | \fBcut\fR
+.IR name ]
+.br
+.B garrett traffic
+.br
 .B garrett update
 .RB [ \-\-check ]
 .br
@@ -80,6 +87,22 @@ settling in.
 forgets it. See
 .BR LEARNING .
 .TP
+.B shield
+The privacy shield: which trackers are refused at the firewall, which are left
+open and why.
+.B on
+and
+.B off
+switch it on this machine.
+.BI allow " name"
+never refuses a tracker;
+.BI cut " name"
+refuses it although a program here uses it. See
+.BR PRIVACY .
+.TP
+.B traffic
+Which programs on this machine were seen talking to which trackers.
+.TP
 .B update
 Install the newest version now.
 .B \-\-check
@@ -114,7 +137,8 @@ and optionally
 .BR MODE= ,
 .BR LABEL= ,
 .BR CLEAN=off ,
-.B UPDATE=off
+.BR UPDATE=off ,
+.B SHIELD=off
 and
 .BR LEARN_HOURS= .
 When this file exists and the machine is not enrolled, the service enrols
@@ -146,6 +170,19 @@ most two points, and never so far that a confirmed attack or a known attack
 pattern would go unreported. Two signals that your confirmed attacks share
 become a sign of attack on this machine. No model is involved. An enrolled
 machine learns from its service instead.
+.SH PRIVACY
+The privacy shield is on unless you switch it off. It changes no setting of
+the operating system. It looks up the names advertising and tracking networks
+are reached by and notes which program on this machine talks to them; that
+record stays on the machine.
+.PP
+After the settling-in day it refuses a tracker at the firewall when the
+tracker answers from a network of its own company, so that nothing else is
+behind the address, and no program other than a browser was seen using it
+here. A tracker that your own software uses is left open and named. A tracker
+that shares its addresses with sites people visit is measured and never
+refused, because refusing the address would break those sites. A browser can
+still reach a refused tracker through a proxy or a VPN.
 .SH UPDATES
 The running agent asks the project's site a few times a day whether a newer
 version is out, and installs it. It installs nothing unless the site's list of

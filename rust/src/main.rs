@@ -3,6 +3,7 @@
 //!   garrett [--state-dir <folder>] run [--mode report|pause|decide|kill] [--clean on|off] [--update on|off]
 //!   garrett update [--check]
 //!   garrett confirm <case> | learned [--reset]
+//!   garrett shield [on|off|allow <name>|cut <name>] | traffic
 //!   garrett [--state-dir <folder>] enroll --server <address> --key <key> [--label <name>] [--mode ...] [--patient]
 //!   garrett [--state-dir <folder>] cases | trust <case> | stop <case> | release <case> | restore <case>
 //!   garrett [--state-dir <folder>] status | forget
@@ -117,7 +118,7 @@ fn main() {
 
 const USAGE: &str = "usage: garrett [--state-dir <folder>] <command>
 
-  run [--mode report|pause|decide|kill] [--clean on|off] [--update on|off] [--learn <hours>]
+  run [--mode report|pause|decide|kill] [--clean on|off] [--update on|off] [--learn <hours>] [--shield on|off]
                         watch this machine: report to the service if enrolled, otherwise protect it by itself.
                         While it runs it installs newer versions of itself, unless --update off.
                         A fresh install learns the machine for a day (--learn) before it acts on a program
@@ -132,6 +133,10 @@ const USAGE: &str = "usage: garrett [--state-dir <folder>] <command>
   restore <case>        put back everything cleaned up under a case
   confirm <case>        this was an attack: never leave that program running again
   learned [--reset]     what this machine has learned from your verdicts; --reset forgets it
+  shield                the privacy shield: what it refuses, what it leaves open and why
+  shield on|off         switch it on or off on this machine (it is on unless you say otherwise)
+  shield allow <name>   never refuse this tracker;  shield cut <name>: refuse it although a program here uses it
+  traffic               which programs on this machine talk to which trackers
   status                show whether this machine is enrolled
   forget                remove this machine's credential
   version";
@@ -212,6 +217,78 @@ fn command(arguments: &[String]) -> Result<i32, String> {
             judged(&state, &key, false, "confirm");
             Ok(0)
         }
+        "traffic" => {
+            let kept = garrett::shield::recorded(&state.directory);
+            let rows = kept["traffic"].as_array().cloned().unwrap_or_default();
+            if rows.is_empty() {
+                println!("No program on this machine has been seen talking to a tracker yet.");
+                return Ok(0);
+            }
+            println!("{:<28} {:<34} {:>6}  last seen", "program", "tracker", "looks");
+            for row in &rows {
+                let name = text(&row["tracker"]);
+                println!("{:<28} {:<34} {:>6}  {}{}", text(&row["program"]).chars().take(28).collect::<String>(), name, row["looks"].as_u64().unwrap_or(0), agent::stamp(row["last"].as_i64().unwrap_or(0)),
+                    if garrett::shield::has_own_network(&name) { "" } else { "  (shared address: may be other traffic to the same company)" });
+            }
+            Ok(0)
+        }
+        "shield" => {
+            use garrett::shield;
+            match rest.first().map(String::as_str) {
+                Some("on") | Some("off") => {
+                    let on = rest[0] == "on";
+                    shield::set_enabled(&state.directory, on).map_err(|error| error.to_string())?;
+                    println!("{}", if on { "The privacy shield is on. The agent applies it within a few seconds." } else { "The privacy shield is off. The agent lets everything through again within a few seconds." });
+                    return Ok(0);
+                }
+                Some("allow") | Some("cut") => {
+                    let allow = rest[0] == "allow";
+                    let name = shield::choose(&state.directory, rest.get(1).ok_or("Give the tracker's name: garrett shield allow <name>")?, allow)?;
+                    println!("{}", if allow { format!("{name} will never be refused on this machine.") } else { format!("{name} will be refused on this machine, whatever uses it.") });
+                    if !allow && !shield::has_own_network(&name) {
+                        println!("Its addresses are shared with other sites, so the firewall cannot refuse it without breaking them: it stays measured only.");
+                    }
+                    return Ok(0);
+                }
+                Some(_) => return Err("garrett shield, or: garrett shield on|off|allow <name>|cut <name>".into()),
+                None => {}
+            }
+            let kept = shield::recorded(&state.directory);
+            if !shield::enabled(&state.directory, true) {
+                println!("The privacy shield is off on this machine. Switch it on with: garrett shield on");
+                return Ok(0);
+            }
+            let left = kept["measure_until"].as_f64().unwrap_or(0.0) - agent::now();
+            let cut: Vec<String> = kept["cut"].as_array().into_iter().flatten().map(text).collect();
+            let (allowed, forced) = shield::choices(&state.directory);
+            // A company's names are judged together.
+            let mut used: std::collections::BTreeMap<&str, std::collections::BTreeSet<String>> = std::collections::BTreeMap::new();
+            for row in kept["traffic"].as_array().into_iter().flatten().filter(|row| row["browser"] != true) {
+                if let Some(who) = shield::company(&text(&row["tracker"])) {
+                    used.entry(who).or_default().insert(text(&row["program"]));
+                }
+            }
+            let of = |names: &[String]| -> Vec<&str> { names.iter().filter_map(|name| shield::company(name)).collect() };
+            let (allowed, forced) = (of(&allowed), of(&forced));
+            println!("The privacy shield is on.");
+            if kept.get("measure_until").is_none() {
+                println!("It has not run yet: the agent starts it.");
+            } else if left > 0.0 {
+                println!("Measuring for about {:.0} more hour(s) before it refuses anything: garrett traffic", (left / 3600.0).ceil());
+            }
+            println!("Refused at the firewall now: {}", if cut.is_empty() { "nothing".to_string() } else { cut.join(", ") });
+            for name in shield::TRACKERS.iter().filter(|name| shield::has_own_network(name) && !cut.contains(&name.to_string())) {
+                let Some(who) = shield::company(name) else { continue };
+                if allowed.contains(&who) {
+                    println!("  left open, you allowed it: {name}");
+                } else if let Some(programs) = used.get(who).filter(|_| !forced.contains(&who)) {
+                    println!("  left open, your software uses it ({}): {name}", programs.iter().cloned().collect::<Vec<_>>().join(", "));
+                }
+            }
+            let shared = shield::TRACKERS.iter().filter(|name| !shield::has_own_network(name)).count();
+            println!("Measured but never refused: {shared} tracker names whose addresses are shared with sites people visit. Refusing those addresses would break the sites.");
+            Ok(0)
+        }
         "learned" => {
             if rest.iter().any(|argument| argument == "--reset") {
                 garrett::learn::forget(&state.directory);
@@ -265,6 +342,11 @@ fn command(arguments: &[String]) -> Result<i32, String> {
             if update != "on" && update != "off" {
                 return Err("--update is on or off.".into());
             }
+            let shield = option(rest, "--shield")?.or_else(|| std::env::var("GARRETT_SHIELD").ok().filter(|value| !value.is_empty())).unwrap_or_else(|| "on".into());
+            if shield != "on" && shield != "off" {
+                return Err("--shield is on or off.".into());
+            }
+            garrett::run::set_shield(shield == "on");
             let learn = option(rest, "--learn")?.or_else(|| std::env::var("GARRETT_LEARN_HOURS").ok().filter(|value| !value.is_empty())).unwrap_or_else(|| "24".into());
             garrett::run::set_learn_hours(learn.parse::<f64>().ok().filter(|hours| hours.is_finite() && *hours >= 0.0).ok_or("--learn is a number of hours, 0 for none.")?);
             let wanted = mode(rest)?;
