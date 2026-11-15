@@ -1,3 +1,18 @@
+garrett (1.3.0) stable; urgency=medium
+
+  * The privacy shield, on unless switched off (SHIELD=off). It notes which
+    program on the machine talks to which advertising and tracking network,
+    and keeps that record on the machine ("garrett traffic").
+  * After the settling-in day a tracker is refused at the firewall when it
+    answers from a network of its own company and no program other than a
+    browser uses it here. A tracker that shares its addresses with sites
+    people visit is measured and never refused. No setting of the operating
+    system is changed.
+  * New commands: "garrett shield" (what is refused, what is left open and
+    why; on, off, allow <name>, cut <name>) and "garrett traffic".
+
+ -- sentinels <noreply@sentinels.invalid>  Mon, 16 Nov 2026 00:30:00 +0000
+
 garrett (1.2.0) stable; urgency=medium
 
   * A fresh install settles in for a day (LEARN_HOURS). What is plainly an
