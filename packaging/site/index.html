@@ -10,7 +10,11 @@
 <meta property="og:url" content="https://gary23w.github.io/sentinels/">
 <meta name="twitter:card" content="summary">
 <style>
-:root { color-scheme: dark; }
+:root { color-scheme: dark; scrollbar-color: #5f9b8b #0b1220; }
+::-webkit-scrollbar { width: 12px; height: 12px; }
+::-webkit-scrollbar-track { background: #0b1220; }
+::-webkit-scrollbar-thumb { background: #5f9b8b; border: 2px solid #0b1220; border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: #8be0c4; }
 body { font: 17px/1.6 system-ui, sans-serif; max-width: 48rem; margin: 3rem auto; padding: 0 1.1rem; background: #0b1220; color: #e8edf6; }
 a { color: #8be0c4; }
 h1 { font-size: clamp(2.3rem, 6vw, 3.5rem); line-height: 1.1; margin-bottom: 0.35rem; }
@@ -25,13 +29,13 @@ h2 { margin-top: 2.2rem; }
 .stat { padding: 1rem 1.2rem; border: 1px solid #34445c; border-radius: 10px; background: #142036; }
 .stat strong { display: block; font-size: 1.8rem; line-height: 1.2; color: #8be0c4; }
 .stat span { font-size: 0.9rem; color: #b8c6dc; }
-pre { background: #162238; padding: 0.85rem 1rem; overflow-x: auto; border-radius: 8px; }
+pre { background: #162238; padding: 0.85rem 1rem; white-space: pre-wrap; overflow-wrap: anywhere; border-radius: 8px; }
 code { font: 14px/1.5 ui-monospace, Consolas, monospace; }
 .small { font-size: 0.9rem; color: #b8c6dc; }
 @media (max-width: 35rem) { .stats { grid-template-columns: 1fr; } }
 </style>
 </head>
-<body>
+<body id="top">
 <p class="eyebrow">Automated host intrusion response</p>
 <h1>Stop the attack before its next command.</h1>
 <p class="lead">Sentinels watches your machines for hostile behavior and can stop a suspicious process while the intrusion is still starting.</p>
@@ -66,7 +70,7 @@ code { font: 14px/1.5 ui-monospace, Consolas, monospace; }
 <p>An installed garrett looks here a few times a day and installs each new version by itself. It installs nothing unless the <a href="update.txt">update list</a> carries the project's signature, and the key that makes that signature is kept off this site and off GitHub. To update by hand instead, put <code>UPDATE=off</code> in its configuration file and run <code>garrett update</code> when you like.</p>
 
 <h2>Protect a whole fleet</h2>
-<p>Turn one of your machines into your own service. It makes its keys and certificate, starts, and prints the command that joins the others. It runs on your hardware and your cases stay there. A managed hosted deployment is also available.</p>
+<p>Turn one of your machines into your own service. It makes its keys and certificate, starts, and prints the command that joins the others. It runs on your hardware and your cases stay there. For managed hosting, email <a href="mailto:info@garrettstimpson.ca?subject=Sentinels%20managed%20hosting">info@garrettstimpson.ca</a>.</p>
 <pre><code>curl -fsSL https://gary23w.github.io/sentinels/service.sh | sudo sh</code></pre>
 <p>On Windows, from an elevated PowerShell:</p>
 <pre><code>irm https://gary23w.github.io/sentinels/service.ps1 | iex</code></pre>
@@ -84,5 +88,6 @@ code { font: 14px/1.5 ui-monospace, Consolas, monospace; }
 echo "deb [signed-by=/usr/share/keyrings/garrett.gpg] https://gary23w.github.io/sentinels stable main" | sudo tee /etc/apt/sources.list.d/garrett.list
 sudo apt update &amp;&amp; sudo apt install garrett</code></pre>
 <p class="small">Package signing key: <code>6857 EBCB BEF5 1040 C3F2 0107 3626 88BF C238 AB45</code> (<a href="garrett.asc">garrett.asc</a>). Checksums of every download: <a href="SHA256SUMS">SHA256SUMS</a>, signed with that key: <a href="SHA256SUMS.asc">SHA256SUMS.asc</a>. The default mode ends a program judged hostile at once, so read the documentation first.</p>
+<p><a href="#top">Back to top</a></p>
 </body>
 </html>

@@ -54,7 +54,7 @@ One machine on its own is fine. If you have several, turn one of them into your 
 curl -fsSL https://gary23w.github.io/sentinels/service.sh | sudo sh
 ```
 
-It prints the command that joins your other machines. From then on, what one machine learns from an attack protects the rest, and every case shows up in one place. This self-hosted option runs on your hardware and keeps your cases there. A managed hosted option is also available.
+It prints the command that joins your other machines. From then on, what one machine learns from an attack protects the rest, and every case shows up in one place. This self-hosted option runs on your hardware and keeps your cases there. For managed hosting, email [info@garrettstimpson.ca](mailto:info@garrettstimpson.ca?subject=Sentinels%20managed%20hosting).
 
 ## Optional AI analysis
 
