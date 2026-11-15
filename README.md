@@ -1,16 +1,16 @@
 # sentinels
 
-A guard for your servers and workstations that ends a break-in while it is still starting.
+Automated host intrusion detection and response for Linux, macOS and Windows. Sentinels watches for hostile behavior on a machine and can stop a suspicious process before the next stage runs.
 
 [![verify](https://github.com/gary23w/sentinels/actions/workflows/verify.yml/badge.svg)](https://github.com/gary23w/sentinels/actions/workflows/verify.yml)
 [![release](https://img.shields.io/github/v/release/gary23w/sentinels)](https://github.com/gary23w/sentinels/releases)
 [![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-Most security tools watch an attack happen and then send you an alert about it. By the time you read the alert, the attacker has settled in.
+Fast, automated attack chains leave little time for a person to read an alert and intervene. [CERT-EU has documented how AI-powered frameworks such as ARTEX can work through long attack chains](https://www.cert.europa.eu/blog/from-penetration-testing-to-cyber-threat-beware-of-artex).
 
-`garrett`, the sentinel in this repo, works the other way round. It sits on the machine, sees your web server start a shell that downloads a script, and ends that shell before the script runs. Then it tells you what it did and why.
+`garrett`, the sentinel in this repo, sits on the machine. If a web server starts a shell that downloads a script, it can end that shell before the script runs. Then it tells you what it did and why.
 
-It is one program file. You don't need an account, a cloud console or a kernel module. It runs on Linux, macOS and Windows.
+The agent is one program file. Local protection needs no account, cloud console or kernel module. For a fleet, run the service on your own hardware or use a managed hosted deployment. AI-assisted case analysis is optional; the fast local response path does not wait for a model.
 
 ## Install
 
@@ -36,7 +36,7 @@ garrett cases
 
 ## What you get
 
-It acts the moment a program starts. In our tests a hostile shell is gone roughly 5 to 10 milliseconds after it appears, which is before it has done what it was sent to do.
+It acts as a program starts. In current internal benchmarks, reported stopping time is about **20 ms** in rapid process-chain scenarios and **under 5 ms** in selected tool-driven scenarios. These are scenario-specific measurements, not a guarantee for every attack or machine. The test setup, timing boundaries, sample size and raw results will be attached to this README.
 
 It cleans up. The dropped file goes to quarantine, and the cron job, Run key or service that would bring it back gets switched off. If garrett got it wrong, `garrett restore <case>` puts everything back the way it was.
 
@@ -54,7 +54,11 @@ One machine on its own is fine. If you have several, turn one of them into your 
 curl -fsSL https://gary23w.github.io/sentinels/service.sh | sudo sh
 ```
 
-It prints the command that joins your other machines. From then on, what one machine learns from an attack protects the rest, and every case shows up in one place. The service runs on your hardware and your cases stay there.
+It prints the command that joins your other machines. From then on, what one machine learns from an attack protects the rest, and every case shows up in one place. This self-hosted option runs on your hardware and keeps your cases there. A managed hosted option is also available.
+
+## Optional AI analysis
+
+The service can ask a configured AI provider for a second opinion on a case and a plain-language summary. In `decide` mode, the agent first freezes a suspicious program, then lets the configured model recommend whether to stop, release or hold it. The default `kill` mode uses the local detection and response path; it does not require an AI provider.
 
 ## How hard it hits
 
