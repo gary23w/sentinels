@@ -1,0 +1,15 @@
+garrett (1.1.0) stable; urgency=medium
+
+  * First release from the sentinels repository.
+  * The agent keeps itself current: it installs each new version by
+    itself, after checking the project's signature on it. UPDATE=off in
+    /etc/garrett/garrett.conf turns that off. "garrett update" does it now.
+  * Linux: a burst of failed SSH sign-ins from one address is reported.
+  * Windows: startup entries that appear while the agent watches are judged,
+    and switched off when they run what an intruder would.
+  * A service that calls back the address that attacked it has that one
+    address refused for an hour.
+  * Windows: the agent no longer takes its own Security-log lookup for an
+    attack.
+
+ -- sentinels <noreply@sentinels.invalid>  Sun, 15 Nov 2026 21:00:00 +0000

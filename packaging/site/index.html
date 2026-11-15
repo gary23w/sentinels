@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>sentinels: a guard that ends a break-in while it is still starting</title>
+<meta name="description" content="garrett sits on your Linux, macOS or Windows machine, ends a hostile program milliseconds after it starts, cleans up after it and tells you why. One line to install.">
+<style>
+:root { color-scheme: light dark; }
+body { font: 17px/1.6 system-ui, sans-serif; max-width: 44rem; margin: 3rem auto; padding: 0 1.1rem; }
+h1 { font-size: 2.1rem; margin-bottom: 0.2rem; }
+h2 { margin-top: 2.2rem; }
+.lead { font-size: 1.2rem; margin-top: 0; }
+pre { background: rgba(127, 127, 127, 0.16); padding: 0.85rem 1rem; overflow-x: auto; border-radius: 8px; }
+code { font: 14px/1.5 ui-monospace, Consolas, monospace; }
+.small { font-size: 0.9rem; opacity: 0.85; }
+</style>
+</head>
+<body>
+<h1>sentinels</h1>
+<p class="lead">A guard for your servers and workstations that ends a break-in while it is still starting.</p>
+<p><code>garrett</code> sits on the machine and watches what runs. When your web server starts a shell that downloads a script, garrett ends that shell before the script runs, cleans up what it left, and tells you why. It is one program file for Linux, macOS and Windows. This is version @VERSION@.</p>
+
+<h2>Install on Linux or macOS</h2>
+<pre><code>curl -fsSL https://gary23w.github.io/sentinels/install.sh | sudo sh</code></pre>
+
+<h2>Install on Windows</h2>
+<p>From an elevated PowerShell:</p>
+<pre><code>irm https://gary23w.github.io/sentinels/install.ps1 | iex</code></pre>
+<p>Or download <a href="garrett-windows.zip">garrett-windows.zip</a>, unpack it, and double-click <code>Install garrett.cmd</code>.</p>
+
+<p>That is the whole setup. The machine is protected from that moment. See what garrett has caught with <code>garrett cases</code>.</p>
+
+<h2>It keeps itself current</h2>
+<p>An installed garrett looks here a few times a day and installs each new version by itself. It installs nothing unless the <a href="update.txt">update list</a> carries the project's signature, and the key that makes that signature is kept off this site and off GitHub. To update by hand instead, put <code>UPDATE=off</code> in its configuration file and run <code>garrett update</code> when you like.</p>
+
+<h2>Protect a whole fleet</h2>
+<p>Turn one of your machines into your own service. It makes its keys and certificate, starts, and prints the command that joins the others. It runs on your hardware and your cases stay there.</p>
+<pre><code>curl -fsSL https://gary23w.github.io/sentinels/service.sh | sudo sh</code></pre>
+<p>On Windows, from an elevated PowerShell:</p>
+<pre><code>irm https://gary23w.github.io/sentinels/service.ps1 | iex</code></pre>
+<p>To join a machine to it while installing:</p>
+<pre><code>curl -fsSL https://gary23w.github.io/sentinels/install.sh | sudo sh -s -- --server https://your-service --key &lt;enrolment key&gt;</code></pre>
+
+<h2>Try it without letting it end anything</h2>
+<pre><code>curl -fsSL https://gary23w.github.io/sentinels/install.sh | sudo sh -s -- --mode report</code></pre>
+
+<h2>More</h2>
+<p><a href="manual.html">The manual</a> · <a href="https://github.com/gary23w/sentinels">Source and documentation</a> · <a href="https://github.com/gary23w/sentinels/releases">Releases</a></p>
+
+<h2>apt, by hand</h2>
+<pre><code>curl -fsSL https://gary23w.github.io/sentinels/garrett.gpg | sudo tee /usr/share/keyrings/garrett.gpg &gt;/dev/null
+echo "deb [signed-by=/usr/share/keyrings/garrett.gpg] https://gary23w.github.io/sentinels stable main" | sudo tee /etc/apt/sources.list.d/garrett.list
+sudo apt update &amp;&amp; sudo apt install garrett</code></pre>
+<p class="small">Package signing key: <code>6857 EBCB BEF5 1040 C3F2 0107 3626 88BF C238 AB45</code> (<a href="garrett.asc">garrett.asc</a>). Checksums of every download: <a href="SHA256SUMS">SHA256SUMS</a>, signed with that key: <a href="SHA256SUMS.asc">SHA256SUMS.asc</a>. The default mode ends a program judged hostile at once, so read the documentation first.</p>
+</body>
+</html>

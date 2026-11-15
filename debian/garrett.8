@@ -1,0 +1,121 @@
+.TH GARRETT 8 "November 2026" "garrett 1.1.0" "System Administration"
+.SH NAME
+garrett \- host intrusion sentinel that stops what it catches
+.SH SYNOPSIS
+.B garrett enroll
+.B \-\-server
+.I address
+.RB [ \-\-key
+.IR key ]
+.RB [ \-\-mode
+.IR kill | decide | pause | report ]
+.RB [ \-\-label
+.IR name ]
+.br
+.B garrett status
+.br
+.B garrett forget
+.br
+.B garrett cases
+.br
+.B garrett trust\fR|\fBstop\fR|\fBrelease\fR|\fBrestore
+.I case
+.br
+.B garrett update
+.RB [ \-\-check ]
+.br
+.B garrett run
+.SH DESCRIPTION
+.B garrett
+watches this machine's running programs and their connections, scores them on
+the machine, and pauses or ends a program it judges hostile. Installed
+with nothing else, it protects the machine it is on and keeps its cases there.
+Enrolled, it reports cases to a Sentinel service that you run, and applies what
+that service has learned from the rest of your machines.
+.PP
+It normally runs as the
+.B garrett
+systemd service. Enrolling starts the service.
+.SH COMMANDS
+.TP
+.B enroll
+Enrol this machine with a Sentinel service and start the service. The
+enrolment key may be given in the environment variable
+.B SENTINEL_ENROLL_KEY
+instead of on the command line.
+.TP
+.B status
+Show which service this machine reports to, and its response mode.
+.TP
+.B forget
+Stop the service and remove this machine's credential.
+.TP
+.B cases
+List the latest cases on this machine.
+.TP
+.BI trust " case"
+This program is mine: leave it alone from now on.
+.TP
+.BI stop " case" "\fR, \fP" release " case"
+Decide a program the agent paused: end it, or let it continue.
+.TP
+.BI restore " case"
+Put back everything that was cleaned up after a stop: quarantined files and
+switched-off startup entries.
+.TP
+.B update
+Install the newest version now.
+.B \-\-check
+only says whether there is one. The running agent does this by itself a few
+times a day; see
+.BR UPDATES .
+.TP
+.B run
+Watch and report in the foreground. The service runs this.
+.SH RESPONSE MODES
+.TP
+.B kill
+End a hostile program and everything it started, at once. The default.
+.TP
+.B decide
+Freeze it, then let the service's decision model say stop, release or hold.
+.TP
+.B pause
+Freeze it and wait for an operator.
+.TP
+.B report
+Only report.
+.PP
+The service may hold a machine to a lower mode than it asked for.
+.SH FILES
+.TP
+.I /etc/garrett/garrett.conf
+Optional, mode 0600. Lines
+.BR SERVER= ,
+.BR ENROLL_KEY= ,
+and optionally
+.BR MODE= ,
+.BR LABEL= ,
+.B CLEAN=off
+and
+.BR UPDATE=off .
+When this file exists and the machine is not enrolled, the service enrols
+itself on first start.
+.TP
+.I /var/lib/garrett/
+This machine's credential and what the agent remembers about it.
+.SH UPDATES
+The running agent asks the project's site a few times a day whether a newer
+version is out, and installs it. It installs nothing unless the site's list of
+program files carries the project's signature, names a version newer than the
+one installed, and matches the file it downloaded. Where this package is
+installed, apt does the installing from the project's signed repository.
+.B UPDATE=off
+in the configuration file turns this off.
+.SH FIREWALL
+When the service has fleet blocking on, garrett keeps one nftables table named
+.BR garrett .
+It is removed when the service stops and when the package is removed.
+.SH SEE ALSO
+.BR systemctl (1),
+.BR nft (8)
