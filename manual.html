@@ -54,6 +54,10 @@ hr { display: none; }
   <br/>
   <b>garrett trust|<b>stop</b>|<b>release</b>|<b>restore</b></b> <i>case</i>
   <br/>
+  <b>garrett confirm</b> <i>case</i>
+  <br/>
+  <b>garrett learned</b> [<b>--reset</b>]
+  <br/>
   <b>garrett update</b> [<b>--check</b>]
   <br/>
   <b>garrett run</b></p>
@@ -92,6 +96,13 @@ hr { display: none; }
     case</i></a></dt>
   <dd>Put back everything that was cleaned up after a stop: quarantined files
       and switched-off startup entries.</dd>
+  <dt id="confirm"><a class="permalink" href="#confirm"><b>confirm</b><i>
+    case</i></a></dt>
+  <dd>That was an attack. If the program runs again the agent will not leave it
+      alone, and the verdict is something it learns from.</dd>
+  <dt id="learned"><a class="permalink" href="#learned"><b>learned</b></a></dt>
+  <dd>What this machine has learned from your verdicts, and whether it is still
+      settling in. <b>--reset</b> forgets it. See <b>LEARNING</b>.</dd>
   <dt id="update"><a class="permalink" href="#update"><b>update</b></a></dt>
   <dd>Install the newest version now. <b>--check</b> only says whether there is
       one. The running agent does this by itself a few times a day; see
@@ -123,12 +134,29 @@ hr { display: none; }
 <dl class="Bl-tag">
   <dt><i>/etc/garrett/garrett.conf</i></dt>
   <dd>Optional, mode 0600. Lines <b>SERVER=</b>, <b>ENROLL_KEY=</b>, and
-      optionally <b>MODE=</b>, <b>LABEL=</b>, <b>CLEAN=off</b> and
-      <b>UPDATE=off</b>. When this file exists and the machine is not enrolled,
-      the service enrols itself on first start.</dd>
+      optionally <b>MODE=</b>, <b>LABEL=</b>, <b>CLEAN=off</b>,
+      <b>UPDATE=off</b> and <b>LEARN_HOURS=</b>. When this file exists and the
+      machine is not enrolled, the service enrols itself on first start.</dd>
   <dt><i>/var/lib/garrett/</i></dt>
   <dd>This machine's credential and what the agent remembers about it.</dd>
 </dl>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="LEARNING"><a class="permalink" href="#LEARNING">LEARNING</a></h1>
+<p class="Pp">A fresh install settles in for a day (<b>LEARN_HOURS</b>). What is
+    plainly an attack, such as a web server starting a shell that downloads and
+    runs a script, is stopped from the first second. A program that only its
+    score speaks against is reported and left running, during that day and after
+    it, until you say what it is with <b>trust</b> or <b>confirm</b>: it was on
+    the machine before garrett knew the machine, and may be yours.</p>
+<p class="Pp">On a machine with no service, every verdict you give
+    (<b>trust</b>, <b>restore</b>, <b>release</b>, <b>stop</b>, <b>confirm</b>)
+    is kept as the case's signals and nothing else. A signal you keep calling
+    yours comes to count for less here, one you keep confirming for more, by at
+    most two points, and never so far that a confirmed attack or a known attack
+    pattern would go unreported. Two signals that your confirmed attacks share
+    become a sign of attack on this machine. No model is involved. An enrolled
+    machine learns from its service instead.</p>
 </section>
 <section class="Sh">
 <h1 class="Sh" id="UPDATES"><a class="permalink" href="#UPDATES">UPDATES</a></h1>
