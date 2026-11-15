@@ -36,7 +36,7 @@ garrett cases
 
 ## What you get
 
-It acts the moment a program starts. In our tests a hostile shell is gone roughly 5 to 10 milliseconds after it appears, which is before it has done what it was sent to do.
+It acts as a program starts. Current internal stopping-time figures are about 20 ms for rapid process-chain tests and under 5 ms for selected tool-driven tests. The test setup, timing boundaries, sample size and raw results have not yet been added here; these figures are not a guarantee for every host or attack.
 
 It cleans up. The dropped file goes to quarantine, and the cron job, Run key or service that would bring it back gets switched off. If garrett got it wrong, `garrett restore <case>` puts everything back the way it was.
 
@@ -54,7 +54,7 @@ One machine on its own is fine. If you have several, turn one of them into your 
 curl -fsSL https://gary23w.github.io/sentinels/service.sh | sudo sh
 ```
 
-It prints the command that joins your other machines. From then on, what one machine learns from an attack protects the rest, and every case shows up in one place. The service runs on your hardware and your cases stay there.
+It prints the command that joins your other machines. From then on, what one machine learns from an attack protects the rest, and every case shows up in one place. The service runs on your hardware and your cases stay there. For managed hosting, email [info@garrettstimpson.ca](mailto:info@garrettstimpson.ca?subject=Sentinels%20managed%20hosting).
 
 ## How hard it hits
 
@@ -66,6 +66,8 @@ You choose. The default is `kill`.
 | `pause` | Freezes it and waits for you to decide |
 | `decide` | Freezes it and lets your service's model decide |
 | `report` | Only tells you |
+
+The default `kill` mode does not call a model. AI case analysis and `decide` mode require a configured provider on the service.
 
 Nervous about letting it end things? Start it in report mode and read the cases for a week:
 
