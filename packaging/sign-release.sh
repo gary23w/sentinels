@@ -12,6 +12,7 @@
 # Needs gpg and OpenSSL 3.
 set -eu
 [ $# -eq 1 ] || { echo "Usage: $0 <release folder>" >&2; exit 1; }
+HERE=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 REL=$(CDPATH= cd -- "$1" && pwd)
 : "${GNUPGHOME:?Set GNUPGHOME to the keyring that holds the package signing key}"
 : "${GARRETT_UPDATE_KEY:?Set GARRETT_UPDATE_KEY to the update key file}"
@@ -37,7 +38,6 @@ openssl pkeyutl -sign -inkey "$GARRETT_UPDATE_KEY" -rawin -in update.txt -out up
 od -An -tx1 update.txt.bin | tr -d ' \n' > update.txt.sig
 rm update.txt.bin
 # It must check out against the key the agents carry, or no agent would ever update.
-HERE=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 CARRIED=$(sed -n 's/^const KEY: &str = "\([0-9a-f]*\)";/\1/p' "$HERE/rust/src/update.rs")
 MINE=$(openssl pkey -in "$GARRETT_UPDATE_KEY" -pubout -outform DER | tail -c 32 | od -An -tx1 | tr -d ' \n')
 [ -n "$CARRIED" ] && [ "$CARRIED" = "$MINE" ] || { echo "This update key is not the one compiled into the agent." >&2; rm -f update.txt.sig; exit 1; }
