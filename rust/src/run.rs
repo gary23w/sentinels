@@ -239,8 +239,18 @@ impl Running {
         } else {
             Vec::new()
         };
-        if let Ok(mut watcher) = self.watcher.lock() {
+        // The firewall is written here, with the watcher let go: writing it takes many commands on some systems,
+        // and a responder must never wait behind them.
+        let change = self.watcher.lock().ok().and_then(|mut watcher| {
             watcher.set_shield(&wanted);
+            watcher.block_wanted()
+        });
+        if let Some(target) = change {
+            use crate::watch::Hands;
+            let done = RealHands::default().block(&target);
+            if let Ok(mut watcher) = self.watcher.lock() {
+                watcher.block_done(target, done);
+            }
         }
         if wanted.len() != self.shield_said {
             // What is refused changed: the record the commands read is written now, not at the next minute.

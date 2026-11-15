@@ -263,3 +263,23 @@ fn a_fresh_install_leaves_a_merely_suspicious_program_for_its_owner_and_still_st
     let _ = std::fs::remove_dir_all(&folder);
     let _ = std::fs::remove_dir_all(&settle);
 }
+
+#[test]
+fn the_privacy_shields_addresses_are_handed_out_to_be_written_without_holding_the_watcher() {
+    let mut watcher = Watcher::new(Machine::default(), Some(Recorded::default()), &"a".repeat(64), Mode::Pause, "");
+    assert_eq!(watcher.block_wanted(), None, "nothing to refuse, nothing to write");
+    watcher.set_shield(&["74.119.117.5".to_string(), "10.0.0.9".to_string(), "74.119.117.5".to_string()]);
+    assert!(watcher.hands.as_ref().unwrap().refused.is_empty(), "the watcher did not write the firewall itself");
+    let target = watcher.block_wanted().unwrap();
+    assert_eq!(target, ["74.119.117.5"], "public addresses only, each once");
+    watcher.block_done(target, Some(true));
+    assert_eq!(watcher.block_wanted(), None);
+    watcher.set_shield(&[]);
+    assert_eq!(watcher.block_wanted(), Some(Vec::new()), "switched off: the list to write is empty");
+    watcher.block_done(Vec::new(), Some(true));
+    assert_eq!(watcher.block_wanted(), None);
+    // An agent that only reports has no hands, and is never asked to write anything.
+    let mut reporting: Watcher<Machine, Recorded> = Watcher::new(Machine::default(), None, &"a".repeat(64), Mode::Pause, "");
+    reporting.set_shield(&["74.119.117.5".to_string()]);
+    assert_eq!(reporting.block_wanted(), None);
+}
