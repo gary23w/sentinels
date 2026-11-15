@@ -58,6 +58,11 @@ hr { display: none; }
   <br/>
   <b>garrett learned</b> [<b>--reset</b>]
   <br/>
+  <b>garrett shield</b> [<b>on</b>|<b>off</b>|<b>allow</b>
+    <i>name</i>|<i><b>cut</b></i> <i>name</i>]
+  <br/>
+  <b>garrett traffic</b>
+  <br/>
   <b>garrett update</b> [<b>--check</b>]
   <br/>
   <b>garrett run</b></p>
@@ -103,6 +108,13 @@ hr { display: none; }
   <dt id="learned"><a class="permalink" href="#learned"><b>learned</b></a></dt>
   <dd>What this machine has learned from your verdicts, and whether it is still
       settling in. <b>--reset</b> forgets it. See <b>LEARNING</b>.</dd>
+  <dt id="shield"><a class="permalink" href="#shield"><b>shield</b></a></dt>
+  <dd>The privacy shield: which trackers are refused at the firewall, which are
+      left open and why. <b>on</b> and <b>off</b> switch it on this machine.
+      <b>allow</b><i> name</i> never refuses a tracker; <b>cut</b><i> name</i>
+      refuses it although a program here uses it. See <b>PRIVACY</b>.</dd>
+  <dt id="traffic"><a class="permalink" href="#traffic"><b>traffic</b></a></dt>
+  <dd>Which programs on this machine were seen talking to which trackers.</dd>
   <dt id="update"><a class="permalink" href="#update"><b>update</b></a></dt>
   <dd>Install the newest version now. <b>--check</b> only says whether there is
       one. The running agent does this by itself a few times a day; see
@@ -135,8 +147,9 @@ hr { display: none; }
   <dt><i>/etc/garrett/garrett.conf</i></dt>
   <dd>Optional, mode 0600. Lines <b>SERVER=</b>, <b>ENROLL_KEY=</b>, and
       optionally <b>MODE=</b>, <b>LABEL=</b>, <b>CLEAN=off</b>,
-      <b>UPDATE=off</b> and <b>LEARN_HOURS=</b>. When this file exists and the
-      machine is not enrolled, the service enrols itself on first start.</dd>
+      <b>UPDATE=off</b>, <b>SHIELD=off</b> and <b>LEARN_HOURS=</b>. When this
+      file exists and the machine is not enrolled, the service enrols itself on
+      first start.</dd>
   <dt><i>/var/lib/garrett/</i></dt>
   <dd>This machine's credential and what the agent remembers about it.</dd>
 </dl>
@@ -157,6 +170,20 @@ hr { display: none; }
     pattern would go unreported. Two signals that your confirmed attacks share
     become a sign of attack on this machine. No model is involved. An enrolled
     machine learns from its service instead.</p>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="PRIVACY"><a class="permalink" href="#PRIVACY">PRIVACY</a></h1>
+<p class="Pp">The privacy shield is on unless you switch it off. It changes no
+    setting of the operating system. It looks up the names advertising and
+    tracking networks are reached by and notes which program on this machine
+    talks to them; that record stays on the machine.</p>
+<p class="Pp">After the settling-in day it refuses a tracker at the firewall
+    when the tracker answers from a network of its own company, so that nothing
+    else is behind the address, and no program other than a browser was seen
+    using it here. A tracker that your own software uses is left open and named.
+    A tracker that shares its addresses with sites people visit is measured and
+    never refused, because refusing the address would break those sites. A
+    browser can still reach a refused tracker through a proxy or a VPN.</p>
 </section>
 <section class="Sh">
 <h1 class="Sh" id="UPDATES"><a class="permalink" href="#UPDATES">UPDATES</a></h1>
