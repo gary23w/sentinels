@@ -12,6 +12,8 @@
 # It runs for every tag that starts with v, or by hand:   gh workflow run release.yml --ref <tag or branch>
 #
 #   garrett-linux-x86_64, garrett-linux-aarch64   statically linked (musl): they run on any Linux of that processor
+#   garrett-linux-armv7                           the same for 32-bit ARM boards and devices, built and tested by
+#                                                 cross-compiling (the tests run under an emulated processor)
 #   garrett-macos                                 one file for Apple silicon and Intel
 #   garrett-windows.exe                           64-bit Windows, with no runtime to install
 #
@@ -50,6 +52,24 @@ jobs:
         with:
           name: ${{ matrix.name }}
           path: ${{ matrix.name }}
+  linux-armv7:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tools
+        run: cargo install cross --locked --version 0.2.5
+      - name: Test
+        run: cd rust && cross test --release --locked --target armv7-unknown-linux-musleabihf
+      - name: Build
+        run: |
+          cd rust && cross build --release --locked --target armv7-unknown-linux-musleabihf
+          cp target/armv7-unknown-linux-musleabihf/release/garrett ../garrett-linux-armv7
+          file ../garrett-linux-armv7
+          file ../garrett-linux-armv7 | grep -q "ARM, EABI5.*statically linked"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: garrett-linux-armv7
+          path: garrett-linux-armv7
   macos:
     runs-on: macos-latest
     steps:
@@ -94,7 +114,7 @@ jobs:
 
   # Pack what was built: Debian packages, the apt repository, the bundles, the update list, the site.
   assemble:
-    needs: [linux, macos, windows]
+    needs: [linux, linux-armv7, macos, windows]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4

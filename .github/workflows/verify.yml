@@ -7,6 +7,8 @@
 #   service-linux, -windows     the one-line service install, and a machine joining it
 #   rust, rust-agent-*          the agent built from this commit: its recorded decisions, then the real thing
 #                               running on each system
+#   small-devices               the agent built for 32-bit ARM with its tests run under an emulated processor, and
+#                               the bundle installed as an OpenRC service on a system with no systemd
 #   update-*                    an installed agent brings itself up to a newer version, and refuses one that is
 #                               not signed or does not match its signed list
 #   tests                       the service's own tests
@@ -752,3 +754,38 @@ jobs:
           & (Join-Path $env:GITHUB_WORKSPACE 'deploy\uninstall-windows.ps1')
           Start-Sleep -Seconds 3
           if (@(Get-Process garrett -ErrorAction SilentlyContinue).Count -ne 0) { throw 'removing garrett left the updated agent running' }
+
+  # Small boards and devices. The 32-bit ARM agent is cross-built and its tests run under an emulated processor.
+  # The no-systemd install is tried on Alpine, where services are started by OpenRC, in report mode.
+  small-devices:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: The agent's tests pass on 32-bit ARM
+        run: |
+          cargo install cross --locked --version 0.2.5
+          cd rust && cross test --locked --target armv7-unknown-linux-musleabihf
+      - name: On a machine with OpenRC and no systemd, the bundle installs garrett as a service and removes it again
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q musl-tools > /dev/null
+          rustup target add x86_64-unknown-linux-musl
+          (cd rust && cargo build --release --locked --target x86_64-unknown-linux-musl)
+          mkdir -p agents site && cp rust/target/x86_64-unknown-linux-musl/release/garrett agents/garrett-linux-x86_64
+          python3 -B packaging/build-release.py site --agents agents > /dev/null
+          docker run --rm --privileged -v "$PWD/site:/site:ro" alpine:3.20 sh -ec '
+            apk add --no-cache openrc > /dev/null
+            mkdir -p /run/openrc && touch /run/openrc/softlevel
+            mkdir -p /etc/garrett && printf "MODE=report\nUPDATE=off\nSHIELD=off\n" > /etc/garrett/garrett.conf
+            tar -xzf /site/garrett-linux-x86_64.tar.gz -C /tmp
+            sh /tmp/garrett/install.sh
+            sleep 6
+            rc-service garrett status
+            garrett version
+            garrett status
+            pgrep -f garrett-agent > /dev/null
+            grep -q "watching this machine by itself (mode: report)" /var/log/garrett.log
+            sh /tmp/garrett/install.sh --remove
+            sleep 2
+            if pgrep -f garrett-agent > /dev/null; then echo "the agent is still running after removal"; exit 1; fi
+            for left in /usr/lib/garrett /usr/bin/garrett /etc/init.d/garrett /var/lib/garrett; do if [ -e "$left" ]; then echo "left behind: $left"; exit 1; fi; done
+          '

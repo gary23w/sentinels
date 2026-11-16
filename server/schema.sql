@@ -55,3 +55,14 @@ CREATE TABLE IF NOT EXISTS audit (
   action TEXT NOT NULL,
   detail TEXT NOT NULL DEFAULT ''
 );
+-- Marks of requests seen by edge systems that cannot run the agent (see src/edge.mjs). Kept for fifteen minutes.
+-- No request text is ever stored here: values are labels and short marks.
+CREATE TABLE IF NOT EXISTS edge_marks (
+  system TEXT NOT NULL,
+  client TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  value TEXT NOT NULL DEFAULT '',
+  extra TEXT NOT NULL DEFAULT '',
+  at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS edge_marks_client ON edge_marks(system, client, at);

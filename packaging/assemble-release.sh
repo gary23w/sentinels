@@ -15,7 +15,7 @@ rm -rf "$OUT"; mkdir -p "$OUT/agents" "$OUT/dist" "$OUT/site"
 OUT=$(CDPATH= cd -- "$OUT" && pwd)
 VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' "$HERE/rust/Cargo.toml" | head -1)
 head -1 "$HERE/debian/changelog" | grep -q "($VERSION)" || { echo "debian/changelog does not start with version $VERSION." >&2; exit 1; }
-NAMES="garrett-linux-x86_64 garrett-linux-aarch64 garrett-macos garrett-windows.exe"
+NAMES="garrett-linux-x86_64 garrett-linux-aarch64 garrett-linux-armv7 garrett-macos garrett-windows.exe"
 for name in $NAMES; do
   # A download from the workflow puts each file in a folder of its own name.
   if [ -f "$BUILT/$name/$name" ]; then cp "$BUILT/$name/$name" "$OUT/agents/$name"; else cp "$BUILT/$name" "$OUT/agents/$name"; fi
@@ -30,8 +30,8 @@ python3 -B "$HERE/packaging/build-release.py" "$OUT/dist" --agents "$OUT/agents"
 # The update list: the version, then the SHA-256 of each program file. An agent installs nothing this list
 # does not name, and nothing at all unless the list carries the project's signature.
 { echo "garrett $VERSION"; for name in $NAMES; do grep "  $name\$" "$OUT/dist/SHA256SUMS"; done; } > "$OUT/site/update.txt"
-[ "$(wc -l < "$OUT/site/update.txt")" = 5 ] || { echo "The update list is incomplete." >&2; exit 1; }
-for name in $NAMES garrett-linux-x86_64.tar.gz garrett-linux-aarch64.tar.gz garrett-macos.tar.gz garrett-windows.zip garrett-service.tar.gz garrett-service-windows.zip SHA256SUMS; do cp "$OUT/dist/$name" "$OUT/site/$name"; done
+[ "$(wc -l < "$OUT/site/update.txt")" = 6 ] || { echo "The update list is incomplete." >&2; exit 1; }
+for name in $NAMES garrett-linux-x86_64.tar.gz garrett-linux-aarch64.tar.gz garrett-linux-armv7.tar.gz garrett-macos.tar.gz garrett-windows.zip garrett-service.tar.gz garrett-service-windows.zip SHA256SUMS; do cp "$OUT/dist/$name" "$OUT/site/$name"; done
 for name in install.sh install.ps1 service.sh service.ps1; do sed 's/\r$//' "$HERE/packaging/$name" > "$OUT/site/$name"; done
 # The site's front page, and the manual as a page.
 sed "s/@VERSION@/$VERSION/g" "$HERE/packaging/site/index.html" > "$OUT/site/index.html"

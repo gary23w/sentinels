@@ -5,6 +5,7 @@
 
   garrett-linux-x86_64.tar.gz     for Linux without apt, 64-bit Intel/AMD: unpack, sudo sh garrett/install.sh
   garrett-linux-aarch64.tar.gz    the same for 64-bit ARM
+  garrett-linux-armv7.tar.gz      the same for 32-bit ARM (ARMv7 with hardware floating point: small boards and devices)
   garrett-macos.tar.gz            for macOS (Apple silicon and Intel): unpack, double-click "Install garrett.command"
   garrett-windows.zip             for Windows: unpack, double-click "Install garrett.cmd"
   garrett-service.tar.gz          the Sentinel service for your own Linux machine (packaging/service.sh installs it)
@@ -14,9 +15,9 @@
 The agent is one program file for each system. They are built and tested on hosted machines by
 .github/workflows/release.yml; --agents names the folder they were downloaded to:
 
-  garrett-linux-x86_64  garrett-linux-aarch64  garrett-macos  garrett-windows.exe
+  garrett-linux-x86_64  garrett-linux-aarch64  garrett-linux-armv7  garrett-macos  garrett-windows.exe
 
-A bundle is built for each agent that is there; --all fails unless all four are (a release uses it).
+A bundle is built for each agent that is there; --all fails unless all five are (a release uses it).
 
 SHA256SUMS lists every file already in the output folder, so the Debian packages (packaging/build-deb.sh) and
 anything else that belongs to the release go there first. packaging/assemble-release.sh does all of it in order.
@@ -67,15 +68,16 @@ def main(arguments):
     if "--agents" not in arguments:
         raise SystemExit("Give --agents <folder with the built agents>.")
     agents = Path(arguments[arguments.index("--agents") + 1]).resolve()
-    names = ("garrett-linux-x86_64", "garrett-linux-aarch64", "garrett-macos", "garrett-windows.exe")
+    names = ("garrett-linux-x86_64", "garrett-linux-aarch64", "garrett-linux-armv7", "garrett-macos", "garrett-windows.exe")
     built = {name: (agents / name).read_bytes() for name in names if (agents / name).is_file()}
     if "--all" in arguments and len(built) != len(names):
         raise SystemExit("Not every agent is in %s: missing %s" % (agents, ", ".join(name for name in names if name not in built)))
     notices = [("LICENSE", unix("LICENSE"), 0o644), ("NOTICES.md", unix("rust/NOTICES.md"), 0o644)]
     launcher = ("garrett", unix("packaging/garrett"), 0o755)
-    for processor in (item for item in ("x86_64", "aarch64") if "garrett-linux-" + item in built):
+    for processor in (item for item in ("x86_64", "aarch64", "armv7") if "garrett-linux-" + item in built):
         tarball(out / ("garrett-linux-%s.tar.gz" % processor), notices + [("garrett-agent", built["garrett-linux-" + processor], 0o755), launcher, ("unblock", unix("packaging/unblock"), 0o755),
-                ("garrett.service", unix("debian/garrett.service"), 0o644), ("install.sh", unix("packaging/linux/install.sh"), 0o755)])
+                ("garrett.service", unix("debian/garrett.service"), 0o644), ("garrett.openrc", unix("packaging/linux/garrett.openrc"), 0o755),
+                ("install.sh", unix("packaging/linux/install.sh"), 0o755)])
     if "garrett-macos" in built:
         tarball(out / "garrett-macos.tar.gz", notices + [("garrett-agent", built["garrett-macos"], 0o755), launcher, ("install.sh", unix("packaging/macos/install.sh"), 0o755),
                 ("Install garrett.command", unix("packaging/macos/Install garrett.command"), 0o755)])

@@ -78,6 +78,7 @@ pub fn file_name() -> Option<&'static str> {
     match (std::env::consts::OS, std::env::consts::ARCH) {
         ("linux", "x86_64") => Some("garrett-linux-x86_64"),
         ("linux", "aarch64") => Some("garrett-linux-aarch64"),
+        ("linux", "arm") => Some("garrett-linux-armv7"),
         ("macos", _) => Some("garrett-macos"),
         ("windows", "x86_64") => Some("garrett-windows.exe"),
         _ => None,

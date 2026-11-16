@@ -9,8 +9,9 @@
 #
 # Options:  --server <address>  --key <enrolment key>  --mode kill|decide|pause|report  --label <name>
 #
-#   Debian, Ubuntu and relatives   adds the signed apt repository and installs the package
-#   other Linux with systemd       installs the same files from the release bundle, after checking its SHA-256
+#   Debian, Ubuntu and relatives   adds the signed apt repository and installs the package (64-bit Intel/AMD and ARM)
+#   other Linux                    installs the same files from the release bundle, after checking its SHA-256: with
+#                                  systemd or OpenRC it runs as a service; 32-bit ARM boards and devices included
 #   macOS                          installs a LaunchDaemon from the release bundle, after checking its SHA-256
 #
 # Once installed, garrett keeps itself current: it installs each new version by itself, after checking that the
@@ -60,7 +61,12 @@ bundle() {
   sh "$WORK/garrett/install.sh"
 }
 
-if [ "$SYSTEM" = Linux ] && command -v apt-get >/dev/null 2>&1; then
+# The apt repository carries packages for 64-bit Intel/AMD and 64-bit ARM. Anything else takes the bundle.
+PACKAGED=no
+if [ "$SYSTEM" = Linux ] && command -v apt-get >/dev/null 2>&1 && command -v dpkg >/dev/null 2>&1; then
+  case "$(dpkg --print-architecture 2>/dev/null)" in amd64|arm64) PACKAGED=yes ;; esac
+fi
+if [ "$PACKAGED" = yes ]; then
   mkdir -p /usr/share/keyrings
   fetch "$BASE/garrett.gpg" /usr/share/keyrings/garrett.gpg
   echo "deb [signed-by=/usr/share/keyrings/garrett.gpg] $BASE stable main" > /etc/apt/sources.list.d/garrett.list
@@ -71,7 +77,8 @@ elif [ "$SYSTEM" = Linux ]; then
   case "$(uname -m)" in
     x86_64|amd64) bundle garrett-linux-x86_64.tar.gz ;;
     aarch64|arm64) bundle garrett-linux-aarch64.tar.gz ;;
-    *) echo "garrett is built for 64-bit Intel/AMD and 64-bit ARM machines. This one is $(uname -m)." >&2; exit 1 ;;
+    armv7l|armv8l) bundle garrett-linux-armv7.tar.gz ;;
+    *) echo "garrett is built for 64-bit Intel/AMD, 64-bit ARM and 32-bit ARMv7 machines. This one is $(uname -m)." >&2; exit 1 ;;
   esac
 elif [ "$SYSTEM" = Darwin ]; then
   bundle garrett-macos.tar.gz

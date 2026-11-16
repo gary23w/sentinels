@@ -1,5 +1,6 @@
 import { analyze } from './analyst.mjs';
 import { CLOUD_EVIDENCE, CLOUD_SOURCES, evaluateCloud } from './cloud.mjs';
+import { judge, rowsOf } from './edge.mjs';
 import { currentPolicy, learningView, recallSimilar, rememberVerdict, resetLearning } from './learning.mjs';
 import { LOCKED, SIGNALS, TRUST, WATCH_HOSTS, levelFor, reported } from './signals.mjs';
 import { bodyJson, fail, json, now, randomToken, sameSecret, seal, sha256, text, unseal, whole } from './util.mjs';
@@ -18,6 +19,9 @@ import { bodyJson, fail, json, now, randomToken, sameSecret, seal, sha256, text,
 //            GET  /v1/coverage  GET /v1/fleet  POST /v1/fleet/add {"address","reason"}  POST /v1/fleet/remove {"address"}
 //   Cloud audit records (INGEST_TOKEN or ADMIN_TOKEN)
 //            POST /v1/cloud-events  {"source": "entra-audit" | "entra-signin" | "aws-cloudtrail" | "azure-activity", "records": [...]}
+//   Edge systems and devices with no agent (INGEST_TOKEN or ADMIN_TOKEN)
+//            POST /v1/edge-events   {"name": "<the system>", "records": [...]}   marks of its requests, see edge.mjs
+//            GET  /v1/edge/refused  the visitors an operator confirmed as attackers, for the edge system to refuse
 //
 // The only command this service ever sends an agent is the operator's own decision on a program that agent
 // paused. It cannot name a process or run anything on a device.
@@ -291,6 +295,63 @@ async function cloudEvents(request, env, ctx) {
   }
   return json({ accepted: true, records: input.records.length, saved });
 }
+// Marks of requests an edge system saw (see edge.mjs): the request text itself is never sent. Each visitor whose
+// marks of the last minutes add up to a reportable case gets one, under a stand-in device named after the system.
+const EDGE_NAME = /^[A-Za-z0-9][A-Za-z0-9 ._-]{0,39}$/;
+async function edgeEvents(request, env, ctx) {
+  const input = await bodyJson(request, 512 * 1024);
+  if (typeof input.name !== 'string' || !EDGE_NAME.test(input.name) || !Array.isArray(input.records) || input.records.length > 1000) fail(400, 'Send {"name", "records"} with at most 1000 records.');
+  const label = 'Edge (' + input.name + ')', stamp = now(), rows = [], clients = new Set();
+  for (const record of input.records) {
+    const kept = rowsOf(record);
+    if (!kept) fail(400, 'Invalid record.');
+    // The sender's clock is taken only when it is close to this one.
+    const at = whole(record.at, stamp - 300, stamp + 60) ? record.at : stamp;
+    for (const [kind, value, extra] of kept) rows.push([label, record.client, kind, value, extra, at]);
+    if (kept.length) clients.add(record.client);
+  }
+  let device = await env.DB.prepare("SELECT id FROM devices WHERE platform='edge' AND label=?").bind(label).first();
+  if (!device) {
+    if ((await env.DB.prepare("SELECT COUNT(*) AS n FROM devices WHERE platform='edge'").first()).n >= 50) fail(409, 'This service already has 50 edge systems.');
+    device = { id: crypto.randomUUID() };
+    await env.DB.prepare("INSERT INTO devices(id,label,platform,created_at) VALUES(?,?,'edge',?)").bind(device.id, label, stamp).run();
+  }
+  await env.DB.prepare('UPDATE devices SET last_seen_at=?,summary=? WHERE id=?').bind(stamp, JSON.stringify({ records: input.records.length }), device.id).run();
+  await env.DB.prepare('DELETE FROM edge_marks WHERE at<?').bind(stamp - 900).run();
+  const insert = env.DB.prepare('INSERT INTO edge_marks(system,client,kind,value,extra,at) VALUES(?,?,?,?,?,?)');
+  for (let start = 0; start < rows.length; start += 50) await env.DB.batch(rows.slice(start, start + 50).map(row => insert.bind(...row)));
+  let saved = 0;
+  for (const client of [...clients].slice(0, 40)) {
+    const seen = await env.DB.prepare('SELECT kind,value,extra,at FROM edge_marks WHERE system=? AND client=? AND at>? ORDER BY at DESC LIMIT 4000').bind(label, client, stamp - 300).all();
+    const signals = judge(seen.results, stamp).map(found => ({ id: found.id, points: SIGNALS[found.id].weight, category: 'web', evidence: found.evidence }));
+    if (!signals.length) continue;
+    const score = signals.reduce((sum, signal) => sum + signal.points, 0), level = levelFor(score, 1);
+    if (!reported(level)) continue;
+    const key = (await sha256('edge:' + label + ':' + client)).slice(0, 32);
+    const old = await env.DB.prepare('SELECT id,state,severity,level FROM cases WHERE device_id=? AND case_key=?').bind(device.id, key).first();
+    if (old?.state === 'trusted') continue;
+    const detail = { key, name: 'Web client ' + client, path: '', parent: '', signals, remotes: [{ address: client, port: 0, names: [], direction: 'in' }], chain: [], actions: [], persistence: [], score, categories: ['web'], level, observed_at: stamp };
+    const id = old?.id || crypto.randomUUID(), severity = score >= 7 ? 'high' : 'medium', title = titleFor(detail, false, false);
+    await env.DB.prepare("INSERT INTO cases(id,device_id,case_key,level,severity,title,detail,first_seen_at,last_seen_at) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(device_id,case_key) DO UPDATE SET state='open',level=excluded.level,severity=CASE WHEN cases.state='open' AND cases.severity='high' THEN 'high' ELSE excluded.severity END,title=excluded.title,detail=excluded.detail,last_seen_at=excluded.last_seen_at WHERE cases.state!='trusted'")
+      .bind(id, device.id, key, level, severity, title, await seal(detail, env.DATA_KEY), stamp, stamp).run();
+    saved++;
+    if (!old || old.state !== 'open' || (old.severity !== 'high' && severity === 'high')) {
+      ctx?.waitUntil(alert(env, { text: label + ': a visitor ' + why(detail) + '. Nothing was refused by Sentinel; review the case.', title, level, severity, device: label, case_id: id, paused: false, stopped: false, signals: signals.map(signal => signal.id) }));
+      if (hasModel(env)) ctx?.waitUntil(analyzeCase(env, id));
+    }
+  }
+  return json({ accepted: true, records: input.records.length, saved });
+}
+// The visitors an operator confirmed as attackers on an edge system in the last week. Nothing is refused on a
+// score alone: an edge system that reads this list refuses only whom a person has judged.
+async function edgeRefused(env) {
+  const rows = await env.DB.prepare("SELECT c.detail FROM audit a JOIN cases c ON c.id=a.detail JOIN devices d ON d.id=c.device_id WHERE a.actor='operator' AND a.action='case_confirm' AND a.at>? AND d.platform='edge' AND c.state='resolved' ORDER BY a.at DESC LIMIT 200").bind(now() - 7 * 86400).all();
+  const addresses = new Set();
+  for (const row of rows.results) {
+    try { const address = (await unseal(row.detail, env.DATA_KEY)).remotes?.[0]?.address; if (typeof address === 'string' && IP.test(address) && !privateAddress(address)) addresses.add(address); } catch {}
+  }
+  return json({ addresses: [...addresses].sort() });
+}
 function watchMap(env, ctx) {
   if (env.WATCHLIST === 'off') return {};
   if (now() - watchCache.at > 900) { watchCache = { at: now(), map: watchCache.map }; ctx?.waitUntil(refreshWatch(env)); }
@@ -451,6 +512,10 @@ async function route(request, env, ctx) {
   if (method === 'POST' && path === '/v1/cloud-events') {
     if (!(await sameSecret(bearer, env.INGEST_TOKEN) || await sameSecret(bearer, env.ADMIN_TOKEN))) fail(401, 'An ingest token is required.');
     return cloudEvents(request, env, ctx);
+  }
+  if (path === '/v1/edge-events' && method === 'POST' || path === '/v1/edge/refused' && method === 'GET') {
+    if (!(await sameSecret(bearer, env.INGEST_TOKEN) || await sameSecret(bearer, env.ADMIN_TOKEN))) fail(401, 'An ingest token is required.');
+    return method === 'POST' ? edgeEvents(request, env, ctx) : edgeRefused(env);
   }
   if (!await sameSecret(/^Bearer (.+)$/.exec(request.headers.get('Authorization') || '')?.[1], env.ADMIN_TOKEN)) fail(401, 'An operator token is required.');
   if (method === 'GET' && path === '/v1/devices') {
