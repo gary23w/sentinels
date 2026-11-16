@@ -224,6 +224,28 @@ hr { display: none; }
     undone down there: each report is a case for you to judge.</p>
 </section>
 <section class="Sh">
+<h1 class="Sh" id="AT_THE_NETWORK_CARD"><a class="permalink" href="#AT_THE_NETWORK_CARD">AT
+  THE NETWORK CARD</a></h1>
+<p class="Pp">Two things happen on the wire that no program on this machine
+    starts:</p>
+<ul class="Bl-bullet">
+  <li>Another machine on the network starts answering in place of the gateway,
+      so that what this machine sends out passes through it. garrett reads the
+      system's table of neighbours every two seconds (every thirty on a Mac) and
+      reports the moment the gateway's hardware address becomes one that already
+      belongs to another machine on the network. A new router is learned without
+      a word.</li>
+  <li>On Linux, a machine on the network tries port after port here. garrett
+      reads the first packet of each arriving connection attempt at the network
+      card: who sent it and which port it asked for, never what follows. Thirty
+      different ports from one neighbour in a minute are reported, once an hour
+      for each neighbour. Scans from the open internet are not reported.</li>
+</ul>
+<p class="Pp">Both are reported and nothing is done about them: what is wrong is
+    on another machine. Addresses on the newer kind of network (IPv6) are not
+    read yet.</p>
+</section>
+<section class="Sh">
 <h1 class="Sh" id="UPDATES"><a class="permalink" href="#UPDATES">UPDATES</a></h1>
 <p class="Pp">The running agent asks the project's site a few times a day
     whether a newer version is out, and installs it. It installs nothing unless
