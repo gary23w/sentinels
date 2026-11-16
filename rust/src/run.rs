@@ -184,6 +184,44 @@ fn build(state: &State, salt: &str, mode: &str, clean: bool, fallback_kill: bool
     watcher.set_process_feed(feeds.process_feed());
     let folders = watcher.startup_folders();
     let watcher: Shared2 = Arc::new(Mutex::new(watcher));
+    // At the network card. The table of neighbours is read every two seconds: a machine that starts answering
+    // for the gateway is seen while it is doing it. On Linux the first packet of each arriving connection attempt
+    // is read as well, by a thread that waits on the card itself.
+    {
+        let watcher = watcher.clone();
+        let _ = std::thread::Builder::new().name("garrett-gateway".into()).spawn(move || {
+            let mut watch = crate::lan::GatewayWatch::default();
+            let pause = if cfg!(target_os = "macos") { 30 } else { 2 }; // there it is asked through two programs
+            while !STOP.load(Ordering::SeqCst) {
+                if let Some(found) = crate::lan::read().and_then(|seen| watch.take(&seen)) {
+                    match watcher.lock() {
+                        Ok(mut watcher) => watcher.network_found(&found, now()),
+                        Err(_) => return,
+                    }
+                }
+                for _ in 0..pause {
+                    if STOP.load(Ordering::SeqCst) {
+                        return;
+                    }
+                    std::thread::sleep(Duration::from_secs(1));
+                }
+            }
+        });
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let watcher = watcher.clone();
+        let _ = std::thread::Builder::new().name("garrett-card".into()).spawn(move || {
+            let mut watch = crate::lan::ScanWatch::default();
+            let _ = crate::lan::listen(&STOP, |source, port| {
+                if let Some(found) = watch.attempt(&source, port, now()) {
+                    if let Ok(mut watcher) = watcher.lock() {
+                        watcher.network_found(&found, now());
+                    }
+                }
+            });
+        });
+    }
     // Below the system: read every few minutes by a thread of its own, so nothing slow is done while the watcher
     // is held. The first reading is the starting point; only a later change is handed over.
     {

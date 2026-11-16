@@ -29,6 +29,8 @@ export const SIGNALS = {
   kernel_module_loose: S(5, 'hardware', 'had a kernel module loaded that is not among the installed ones'),
   driver_checks_off: S(6, 'hardware', 'was restarted with driver signature checks off'),
   boot_code_changed: S(6, 'hardware', 'had the code it starts from changed without a boot loader update'),
+  gateway_impersonated: S(6, 'network', 'is a machine on the network answering in place of the gateway'),
+  port_scan: S(5, 'network', 'is a machine on the network that tried many ports here in one minute'),
   system_tool_misuse: S(4, 'behaviour', 'is a Windows system tool being used the way malware loaders use one'),
   discovery_command: S(2, 'behaviour', 'ran a who-am-I command the way an intruder does on arrival'),
   threat_executed: S(3, 'behaviour', 'ran or is still active according to Windows Defender'),
@@ -79,7 +81,7 @@ export const WATCH_HOSTS = ['webhook.site', 'pastebin.com', 'paste.ee', 'rentry.
   'api.telegram.org', 'api.anthropic.com', 'api.deepseek.com', 'open.bigmodel.cn', 'api.x.ai', 'xcai.pro'];
 // Which signals this service knows, said to agents with the shared state: an agent newer than the service keeps
 // back the signals a lower number does not cover. Raise it whenever a signal is added.
-export const SIGNAL_SET = 3;
+export const SIGNAL_SET = 4;
 export const TRUST = new Set(['installed_program', 'owner_trusted', 'known_baseline']);
 // Never learned up or down: published indicators, the antivirus's own verdict, attacks on a service, and
 // directory attacks.

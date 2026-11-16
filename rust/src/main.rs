@@ -304,6 +304,11 @@ fn command(arguments: &[String]) -> Result<i32, String> {
             for line in garrett::hardware::describe(&facts) {
                 println!("{line}");
             }
+            match garrett::lan::read() {
+                Some(seen) if seen.table.contains_key(&seen.gateway) => println!("  network gateway     its hardware address is kept, with {} neighbour(s) on the network", seen.table.len().saturating_sub(1)),
+                Some(_) => println!("  network gateway     has not answered yet"),
+                None => println!("  network gateway     could not be read here"),
+            }
             let kept = garrett::hardware::HardwareWatch::new(&state.directory);
             match kept.known() {
                 Some(before) => {

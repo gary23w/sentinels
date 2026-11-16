@@ -164,7 +164,7 @@ test('a script served from an uploads folder, a smuggled object and an overflow 
 test('the service says which signals it knows and takes the later ones', async () => {
   const { validateCase } = await import('../src/service.mjs');
   const { SIGNAL_SET, SIGNALS } = await import('../src/signals.mjs');
-  assert.equal(SIGNAL_SET, 3);
+  assert.equal(SIGNAL_SET, 4);
   for (const [id, points] of [['helper_with_child', 5], ['privilege_jump', 6]]) {
     assert.ok(SIGNALS[id]);
     const taken = validateCase({ key: 'a'.repeat(32), name: 'sh', path: '/usr/bin/dash', parent: 'bash', signals: [{ id, points, category: 'x', evidence: 'e' }], remotes: [], categories: [], level: 'SUSPECT', score: points, observed_at: 1794832407, first_seen: 1794832407 });

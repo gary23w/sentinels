@@ -25,6 +25,7 @@ pub mod clean_win;
 #[cfg(target_os = "linux")]
 pub mod feed;
 pub mod hardware;
+pub mod lan;
 pub mod learn;
 pub mod linux;
 #[cfg(target_os = "linux")]

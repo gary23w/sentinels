@@ -593,6 +593,21 @@ impl<S: Sensor, H: Hands> Watcher<S, H> {
         }
     }
 
+    // ------------------------------------------------------------ at the network card: the gateway, and a scan
+
+    /// Something was found on the wire that no program here started. Reported with the next look; what is wrong
+    /// is on another machine, so nothing is done about it from here.
+    pub fn network_found(&mut self, found: &crate::lan::Found, now: f64) {
+        let points = (found.points + self.policy.get(found.signal).copied().unwrap_or(0)).clamp(0, 9);
+        let key = self.digest(&format!("network:{}:{}", found.signal, found.address));
+        if points < 5 || self.trusted.contains(&key) || self.more.extra.len() >= 32 {
+            return;
+        }
+        self.more.extra.push(json!({"key": key, "level": level_for(points, 1), "score": points, "name": clean(&format!("network neighbour {}", found.address), 80), "path": "", "parent": "",
+            "categories": ["network"], "signals": [{"id": found.signal, "points": points, "category": "network", "evidence": clean(&found.evidence, 200)}],
+            "remotes": [{"address": clean(&found.address, 60), "port": 0, "names": [], "direction": "in"}], "first_seen": now.trunc() as i64, "observed_at": now.trunc() as i64}));
+    }
+
     // ------------------------------------------------------------ a privilege escalation, seen as it happens
 
     /// A program that has just started and carries the mark of a privilege escalation: root that no program
