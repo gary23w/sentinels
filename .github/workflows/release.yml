@@ -59,7 +59,10 @@ jobs:
       - name: Tools
         run: cargo install cross --locked --version 0.2.5
       - name: Test
-        run: cd rust && cross test --release --locked --target armv7-unknown-linux-musleabihf
+        run: |
+          # One test compares the agent's signal table with the service's: the build container is shown that folder.
+          export CROSS_CONTAINER_OPTS="--volume $GITHUB_WORKSPACE/server:/server:ro"
+          cd rust && cross test --release --locked --target armv7-unknown-linux-musleabihf
       - name: Build
         run: |
           cd rust && cross build --release --locked --target armv7-unknown-linux-musleabihf
