@@ -22,12 +22,13 @@ const INJECTION = [
   [/ {50,}/, 'a memory corruption probe']
 ];
 export const INJECTION_LABELS = INJECTION.map(([, label]) => label);
-const SHELL_PARAMETER = /[?&](cmd|exec|command|shell|execute|run)=/i;
-const LOGIN_PATH = /\/(wp-login\.php|login|signin|sign-in|logon|auth|authenticate|session|token|oauth\/token)(\/|\.|$)/i;
+const SHELL_PARAMETER = /[?&](cmd|exec|command|shell|execute|run)=|[?&]action=ajjs_run\b/i;
+const PLANTED = /^\/wp-json\/[a-z][a-z-]*-[0-9a-f]{6,}\/v1\/[0-9a-f]{6,}/i;
+const LOGIN_PATH = /\/(wp-login\.php|xmlrpc\.php|login|signin|sign-in|logon|auth|authenticate|session|token|oauth\/token)(\/|\.|$)/i;
 const UPLOADS = /\/(uploads?|uploaded|user_?files)\//;
 const SCRIPT_EXTENSIONS = ['.php', '.phtml', '.phar', '.jsp', '.jspx', '.aspx', '.ashx', '.asp', '.cfm'];
 const NUMBER = /\d{1,12}/g;
-export const EDGE_KINDS = ['missing', 'injection', 'login', 'error', 'shell', 'uploaded', 'number'];
+export const EDGE_KINDS = ['missing', 'injection', 'login', 'error', 'shell', 'uploaded', 'planted', 'number'];
 const ADDRESS = /^[0-9a-fA-F:.]{3,45}$/;
 
 // "%2e%2e" and "+" as the server will read them. Text that is not valid is left as it is.
@@ -68,6 +69,7 @@ export function markOf(method, target, status, cookie = '') {
     if (numbers) { marks.shape = markOfText(decoded.replace(NUMBER, '#').slice(0, 200)); marks.number = markOfText(numbers[numbers.length - 1]); }
   }
   const lowered = stem.toLowerCase();
+  if (status === 200 && PLANTED.test(lowered)) marks.planted = true;
   if (SCRIPT_EXTENSIONS.some(extension => lowered.endsWith(extension)) && status === 200) { if (SHELL_PARAMETER.test(decoded)) marks.shell = true; else if (UPLOADS.test(lowered)) marks.uploaded = true; }
   return Object.keys(marks).length ? marks : null;
 }
@@ -83,6 +85,7 @@ export function rowsOf(record) {
   if (record.error === true) rows.push(['error', '', '']);
   if (record.shell === true) rows.push(['shell', '', '']);
   if (record.uploaded === true) rows.push(['uploaded', '', '']);
+  if (record.planted === true) rows.push(['planted', '', '']);
   if (record.shape !== undefined || record.number !== undefined) { if (!mark(record.shape) || !mark(record.number)) return null; rows.push(['number', record.shape, record.number]); }
   return rows;
 }
@@ -106,9 +109,10 @@ export function judge(rows, stamp) {
   if (walked >= 40) say('web_enumeration', 'walked through ' + walked + ' record numbers on one address pattern in one minute');
   const logins = within('login', 60).length;
   if (logins >= 30) say('web_login_burst', 'made ' + logins + ' sign-in attempts in one minute');
-  const shell = within('shell', 300).length, uploaded = within('uploaded', 300).length;
+  const shell = within('shell', 300).length, uploaded = within('uploaded', 300).length, planted = within('planted', 300).length;
   if (shell > 0) say('web_shell_request', 'called a server-side script with a command parameter ' + shell + ' time(s) and was answered');
   else if (uploaded > 0) say('web_shell_request', 'was served a server-side script from an uploads folder ' + uploaded + ' time(s)');
+  else if (planted > 0) say('web_shell_request', 'was answered ' + planted + " time(s) on an address shaped like a planted plugin's");
   const errors = within('error', 60).length;
   if (errors >= 20) say('web_error_burst', 'made the application fail ' + errors + ' times in one minute with requests that carry a body');
   return found;

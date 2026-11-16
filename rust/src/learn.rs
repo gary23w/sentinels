@@ -31,6 +31,7 @@ pub const SIGNALS: &[(&str, i64, &str)] = &[
     ("boot_protection_off", 6, "hardware"), ("boot_entry_added", 5, "hardware"), ("firmware_downgraded", 5, "hardware"), ("firmware_changed_unannounced", 6, "hardware"),
     ("kernel_module_loose", 5, "hardware"), ("driver_checks_off", 6, "hardware"), ("boot_code_changed", 6, "hardware"),
     ("gateway_impersonated", 6, "network"), ("port_scan", 5, "network"), ("keyboard_injection", 5, "behaviour"),
+    ("script_from_download", 5, "lineage"), ("lateral_sweep", 5, "pattern"),
     ("system_tool_misuse", 4, "behaviour"),
     ("discovery_command", 2, "behaviour"), ("threat_executed", 3, "behaviour"), ("antivirus_detection", 5, "antivirus"), ("tor_routing", 3, "destinations"),
     ("learned_attack_shape", 2, "learned"), ("fleet_indicator", 3, "destinations"), ("metadata_access_from_web", 2, "behaviour"),
@@ -60,7 +61,7 @@ pub const REFERENCE_ATTACKS: &[&[&str]] = &[
     &["fleet_indicator", "runs_from_temp"], &["fleet_indicator", "unsigned_program"], &["inbound_from_suspect_peer", "remote_session_shell"],
     &["web_shell_file"], &["web_fuzzing", "web_injection_attempt"], &["web_injection_attempt", "web_injection_answered"], &["web_login_burst", "web_enumeration"],
     &["advisory_indicator"], &["inbound_advisory_indicator"], &["remote_access_burst"], &["antivirus_detection"], &["credential_theft_tool"],
-    &["helper_with_child"], &["privilege_jump"],
+    &["helper_with_child"], &["privilege_jump"], &["script_from_download"],
     &["kerberoast_pattern"], &["dcsync_pattern"], &["logon_failure_burst"], &["audit_log_cleared"], &["privileged_group_change"],
 ];
 

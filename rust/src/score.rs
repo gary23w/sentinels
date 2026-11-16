@@ -20,7 +20,7 @@ pub const LLM_API_HOSTS: &[&str] = &["api.anthropic.com", "api.deepseek.com", "o
 pub const ADVISORY_TOOL_NAMES: &[&str] = &["chisel", "vshell", "adaptix"];
 pub const DROP_HOSTS: &[&str] = &[
     "webhook.site", "pastebin.com", "paste.ee", "rentry.co", "transfer.sh", "file.io", "gofile.io", "catbox.moe",
-    "0x0.st", "temp.sh", "ngrok.io", "ngrok-free.app", "ngrok.app", "trycloudflare.com", "loca.lt", "serveo.net",
+    "0x0.st", "temp.sh", "bashupload.com", "ngrok.io", "ngrok-free.app", "ngrok.app", "trycloudflare.com", "loca.lt", "serveo.net",
     "localhost.run", "duckdns.org", "ddns.net", "no-ip.org", "hopto.org", "api.telegram.org",
 ];
 /// Services that tell a program the public address of the machine it runs on. Bots and stealers ask on arrival.
@@ -31,6 +31,8 @@ pub const REMOTE_TOOLS: &[&str] = &["anydesk", "teamviewer", "teamviewerqs", "ru
     "supremo", "ultraviewer_desktop", "dwagent", "tacticalrmm", "ateraagent", "getscreen", "rutserv"];
 /// The programs a person opens to type commands into, on Linux and macOS.
 pub const TERMINALS: &[&str] = &["gnome-terminal-server", "gnome-terminal", "konsole", "xterm", "xfce4-terminal", "kitty", "alacritty", "tilix", "terminator", "lxterminal", "qterminal", "terminal", "iterm2"];
+/// The ports one machine administers another through. A program trying them on many neighbours is looking for the next machine.
+pub const ADMIN_PORTS: &[u16] = &[135, 445, 3389, 5985, 5986];
 pub const TOR_NAMES: &[&str] = &["tor", "tor.exe"];
 pub const TOR_SOCKS_PORTS: &[u16] = &[9050, 9150];
 pub const TOR_RELAY_PORTS: &[u16] = &[9001, 9030];
@@ -140,6 +142,10 @@ pub fn risky_commands() -> &'static Vec<(Regex, &'static str)> {
         (r"(?i)msiexec(\.exe)?\s.*https?://.*\s[/-]q|msiexec(\.exe)?\s.*\s[/-]q\w*\s.*https?://", "an installer fetched from the internet and run silently"),
         (r"(?i)\brelease_agent\b|\bnotify_on_release\b", "a container escape through the cgroup release agent"),
         (r"(?i)\bsecurity\s+(dump-keychain|export\s+-k)\b", "the keychain copied out from a command line"),
+        (r#"(?i)(wscript|cscript)(\.exe)?["\s].*\\(AppData|Temp|Downloads|ProgramData|Users\\Public)\\[^"]*\.(js|jse|vbs|vbe|wsf)\b"#, "a script in a user folder run through Windows Script Host"),
+        (r"(?i)AmsiScanBuffer|amsiInitFailed|AmsiUtils", "the script scanner switched off from inside a script"),
+        (r"(?i)\[(System\.)?Reflection\.Assembly\]::Load\(", "a program loaded straight from memory"),
+        (r"(?i)\\\\(127\.0\.0\.1|localhost)\\(c|admin)\$", "output written to this machine's own administrative share, the way remote-execution tools work"),
         (r"(?i)\bnvme\s+(fw-download|fw-commit|fw-activate)\b", "firmware written to a storage drive"),
         (r"(?i)\binsmod\s+(\./|/tmp/|/var/tmp/|/dev/shm/|/home/|/root/)", "a kernel module loaded from a temporary or home folder"),
         (r"(?i)bcdedit(\.exe)?\s.*\b(testsigning|nointegritychecks)\s+on\b", "driver signature checks switched off for the next start"),
@@ -152,7 +158,7 @@ fn credential_theft() -> &'static Vec<(Regex, &'static str)> {
     static CELL: OnceLock<Vec<(Regex, &'static str)>> = OnceLock::new();
     labelled(&CELL, &[
         (r"(?i)mimikatz|sekurlsa::|lsadump::|kerberos::(list|ptt|golden)", "a credential dumping tool"),
-        (r"(?i)\brubeus\b|invoke-kerberoast|\bkerberoast\b|asreproast", "Kerberos ticket harvesting (Kerberoasting)"),
+        (r"(?i)\brubeus\b|invoke-kerberoast|\bkerberoast\b|asreproast|\$krb5tgs\$", "Kerberos ticket harvesting (Kerberoasting)"),
         (r"(?i)dcsync|secretsdump|invoke-dcsync", "a domain replication dump (DCSync)"),
         (r"(?i)ntdsutil\b.*\b(ifm|ntds)|\bntds\.dit\b", "a copy of the domain database"),
         (r"(?i)comsvcs(\.dll)?[ ,#]+.*minidump|procdump(64)?(\.exe)?\s.*lsass|\blsass\.dmp\b", "a memory dump of the sign-in process"),
@@ -209,6 +215,20 @@ pub fn borrowed_name(place: &str, words: &str) -> bool {
     }
     // Google's updater of that name starts from Google's own software-update folder and nowhere else.
     (words.contains("<string>com.apple.") && user_program.is_match(words)) || (words.contains("<string>com.google.keystone") && !words.contains("/Google/GoogleSoftwareUpdate/"))
+}
+
+/// A script handed to Windows Script Host straight out of a downloads folder or out of an archive that was just
+/// opened: how a download that calls itself a document runs. People who write scripts keep them elsewhere.
+pub fn downloaded_script(line: &str) -> bool {
+    static CELL: OnceLock<Regex> = OnceLock::new();
+    regex(&CELL, r#"(?i)(\\Downloads\\|\\Temp\\Temp\d+_[^\\"]*\\|\.zip\\|\\7z[0-9a-z]{4,}\\|\\Rar\$[^\\"]*\\)[^"]*\.(js|jse|vbs|vbe|wsf|hta)\b"#).is_match(line)
+}
+
+/// A folder named like the Windows folder with a space after its name: Windows takes what runs from it for a
+/// system program and gives it administrator rights without asking.
+pub fn mock_windows_folder(path: &str) -> bool {
+    static CELL: OnceLock<Regex> = OnceLock::new();
+    regex(&CELL, r"(?i)^(\\\\\?\\)?[a-z]:\\windows +\\").is_match(path)
 }
 
 /// A browser started where nobody can see it: off the screen and also headless or one dot in size, or carrying an
@@ -429,6 +449,9 @@ pub fn score_process(view: &View, now: f64, policy: &HashMap<String, i64>, shape
     } else if under_web {
         add(&mut signals, "shell_from_web_server", 3, "lineage", &format!("A shell was started by the web server process {source_name}, the pattern a web shell leaves."));
     }
+    if system == "windows" && has(&["wscript.exe", "cscript.exe", "mshta.exe"], name) && cmdline.is_some_and(downloaded_script) {
+        add(&mut signals, "script_from_download", 5, "lineage", "A script was handed to Windows Script Host straight out of a downloads folder or an archive that was just opened: how a download that calls itself a document runs.");
+    }
     // Started by a system helper that starts nothing like it: what a privilege escalation leaves behind.
     let odd_parent = if system == "windows" {
         is_script_host(name) && has(CHILDLESS_WINDOWS, &parent)
@@ -526,7 +549,9 @@ pub fn score_process(view: &View, now: f64, policy: &HashMap<String, i64>, shape
     }
 
     // behaviour: system tools used the way malware loaders use them
-    if name == "cmstp.exe" && is_script_host(&parent) {
+    if system == "windows" && mock_windows_folder(path) {
+        add(&mut signals, "system_tool_misuse", 5, "behaviour", "Runs from a folder named like the Windows folder with a space after its name, the trick that gets administrator rights without a prompt.");
+    } else if name == "cmstp.exe" && is_script_host(&parent) {
         add(&mut signals, "system_tool_misuse", 5, "behaviour", &format!("cmstp.exe was started by {}, a known way to get administrator rights without a prompt.", view.parent_name));
     } else if has(ASSEMBLY_HOSTS, name) && !internet.is_empty() && (is_script_host(&parent) || parent.is_empty()) {
         let by = if view.parent_name.is_empty() { "an unknown program" } else { view.parent_name.as_str() };
@@ -606,6 +631,12 @@ pub fn score_process(view: &View, now: f64, policy: &HashMap<String, i64>, shape
             break;
         }
     }
+    // Looking for the next machine: many neighbours tried on the ports one machine administers another through.
+    let swept: BTreeSet<&str> = view.contacts.iter().filter(|(address, port, times)| ADMIN_PORTS.contains(port) && crate::net::neighbour(address) && times.iter().any(|stamp| now - stamp <= 60.0))
+        .map(|(address, _, _)| address.as_str()).collect();
+    if swept.len() >= 15 && !trusted_install {
+        add(&mut signals, "lateral_sweep", 5, "pattern", &format!("{} machines on this network were tried on remote-administration ports in one minute.", swept.len()));
+    }
     if !browser {
         let burst: BTreeSet<&str> = view.contacts.iter().filter(|(address, _, times)| is_internet(address) && times.iter().any(|stamp| now - stamp <= 60.0)).map(|(address, _, _)| address.as_str()).collect();
         if burst.len() >= 20 {
@@ -674,6 +705,7 @@ const CONTAIN_CHAINS: &[(&[&str], &str)] = &[
     (&["script_from_document", "risky_command_line"], "a document, mail or browser program started a script with a download-and-run command"),
     (&["script_from_shortcut", "risky_command_line"], "a shortcut or pasted command started a download-and-run script"),
     (&["program_from_attachment", "fresh_file"], "a program that just arrived was started from a mail or archive program"),
+    (&["script_from_download"], "a script was run straight out of a download through Windows Script Host"),
     (&["advisory_indicator", "runs_from_temp"], "a program in a temporary folder connected to an address listed in FBI FLASH-20261113-001"),
     (&["advisory_indicator", "unsigned_program"], "an unsigned program connected to an address listed in FBI FLASH-20261113-001"),
     (&["fleet_indicator", "runs_from_temp"], "a program in a temporary folder connected to an address another of your machines was attacked through"),

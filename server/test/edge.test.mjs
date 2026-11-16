@@ -164,10 +164,23 @@ test('a script served from an uploads folder, a smuggled object and an overflow 
 test('the service says which signals it knows and takes the later ones', async () => {
   const { validateCase } = await import('../src/service.mjs');
   const { SIGNAL_SET, SIGNALS } = await import('../src/signals.mjs');
-  assert.equal(SIGNAL_SET, 5);
+  assert.equal(SIGNAL_SET, 6);
   for (const [id, points] of [['helper_with_child', 5], ['privilege_jump', 6]]) {
     assert.ok(SIGNALS[id]);
     const taken = validateCase({ key: 'a'.repeat(32), name: 'sh', path: '/usr/bin/dash', parent: 'bash', signals: [{ id, points, category: 'x', evidence: 'e' }], remotes: [], categories: [], level: 'SUSPECT', score: points, observed_at: 1794832407, first_seen: 1794832407 });
     assert.equal(taken.signals[0].id, id);
   }
+});
+
+test('what is done to a WordPress site is marked at the edge too', () => {
+  assert.deepEqual(markOf('POST', '/xmlrpc.php', 200), { login: true });
+  assert.equal(markOf('GET', '/wp-json/platformist-quadendpointer-abcdef/v1/abcdefab', 200).planted, true);
+  assert.equal(markOf('GET', '/wp-json/wp/v/posts', 200), null);
+  assert.equal(markOf('GET', '/wp-json/platformist-quadendpointer-abcdef/v1/abcdefab', 404).planted, undefined);
+  assert.equal(markOf('GET', '/wp-admin/admin-ajax.php?action=ajjs_run', 200).shell, true);
+  assert.equal(markOf('POST', '/wp-admin/admin-ajax.php?action=heartbeat', 200), null);
+  assert.deepEqual(rowsOf({ client: VISITOR, planted: true }), [['planted', '', '']]);
+  const row = (kind, at) => ({ kind, value: '', extra: '', at });
+  assert.deepEqual(judge([row('planted', 100)], 110), [{ id: 'web_shell_request', evidence: "This web client was answered 1 time(s) on an address shaped like a planted plugin's." }]);
+  assert.equal(judge(Array.from({ length: 30 }, (_, index) => row('login', 100 + index)), 131)[0].id, 'web_login_burst');
 });

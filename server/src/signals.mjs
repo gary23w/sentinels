@@ -32,6 +32,8 @@ export const SIGNALS = {
   gateway_impersonated: S(6, 'network', 'is a machine on the network answering in place of the gateway'),
   port_scan: S(5, 'network', 'is a machine on the network that tried many ports here in one minute'),
   keyboard_injection: S(5, 'behaviour', 'is a command window opened seconds after a keyboard never seen before was plugged in'),
+  script_from_download: S(5, 'lineage', 'is a script run through Windows Script Host straight out of a download'),
+  lateral_sweep: S(5, 'pattern', 'tried many machines on the network on remote-administration ports in one minute'),
   system_tool_misuse: S(4, 'behaviour', 'is a Windows system tool being used the way malware loaders use one'),
   discovery_command: S(2, 'behaviour', 'ran a who-am-I command the way an intruder does on arrival'),
   threat_executed: S(3, 'behaviour', 'ran or is still active according to Windows Defender'),
@@ -79,10 +81,10 @@ export const SIGNALS = {
 // Hosts whose current addresses the service looks up and hands to agents, so a connection to one is recognised
 // on machines that keep no DNS cache. The lookups leave from the service, never from your machines.
 export const WATCH_HOSTS = ['webhook.site', 'pastebin.com', 'paste.ee', 'rentry.co', 'transfer.sh', 'file.io', 'gofile.io', 'catbox.moe', '0x0.st', 'temp.sh',
-  'api.telegram.org', 'api.anthropic.com', 'api.deepseek.com', 'open.bigmodel.cn', 'api.x.ai', 'xcai.pro'];
+  'api.telegram.org', 'bashupload.com', 'api.anthropic.com', 'api.deepseek.com', 'open.bigmodel.cn', 'api.x.ai', 'xcai.pro'];
 // Which signals this service knows, said to agents with the shared state: an agent newer than the service keeps
 // back the signals a lower number does not cover. Raise it whenever a signal is added.
-export const SIGNAL_SET = 5;
+export const SIGNAL_SET = 6;
 export const TRUST = new Set(['installed_program', 'owner_trusted', 'known_baseline']);
 // Never learned up or down: published indicators, the antivirus's own verdict, attacks on a service, and
 // directory attacks.
@@ -100,7 +102,7 @@ export const REFERENCE_ATTACKS = [
   ['web_shell_file'], ['web_fuzzing', 'web_injection_attempt'], ['web_injection_attempt', 'web_injection_answered'], ['web_login_burst', 'web_enumeration'],
   ['advisory_indicator'], ['inbound_advisory_indicator'], ['remote_access_burst'], ['antivirus_detection'], ['credential_theft_tool'],
   ['kerberoast_pattern'], ['dcsync_pattern'], ['logon_failure_burst'], ['audit_log_cleared'], ['privileged_group_change'],
-  ['helper_with_child'], ['privilege_jump']
+  ['helper_with_child'], ['privilege_jump'], ['script_from_download']
 ];
 export const levelFor = (score, categories) => score <= 2 ? 'CLEAR' : score <= 4 ? 'WATCH' : score <= 6 ? 'SUSPECT' : categories >= 3 ? 'HOSTILE' : 'SUSPECT';
 export const reported = level => level === 'SUSPECT' || level === 'HOSTILE';

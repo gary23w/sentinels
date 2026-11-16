@@ -20,6 +20,7 @@ struct Patterns {
     combined: Regex,
     injection: Vec<(Regex, &'static str)>,
     shell_parameter: Regex,
+    planted: Regex,
     uploads: Regex,
     login_path: Regex,
     number: Regex,
@@ -42,10 +43,12 @@ fn patterns() -> &'static Patterns {
                 (make(r#"(?i)\bO:\d{1,3}:"[a-z_\\][a-z0-9_\\]{0,80}":\d{1,3}:\{"#), "object injection"),
                 (make(r" {50,}"), "a memory corruption probe"),
             ],
-            shell_parameter: make(r"(?i)[?&](cmd|exec|command|shell|execute|run)="),
+            shell_parameter: make(r"(?i)[?&](cmd|exec|command|shell|execute|run)=|[?&]action=ajjs_run\b"),
+            // The address a planted WordPress plugin answers on: a made-up name ending in a run of hex, then more hex.
+            planted: make(r"(?i)^/wp-json/[a-z][a-z-]*-[0-9a-f]{6,}/v1/[0-9a-f]{6,}"),
             // Where a site keeps what its visitors send it. Nothing there is meant to run on the server.
             uploads: make(r"/(uploads?|uploaded|user_?files)/"),
-            login_path: make(r"(?i)/(wp-login\.php|login|signin|sign-in|logon|auth|authenticate|session|token|oauth/token)(/|\.|$)"),
+            login_path: make(r"(?i)/(wp-login\.php|xmlrpc\.php|login|signin|sign-in|logon|auth|authenticate|session|token|oauth/token)(/|\.|$)"),
             number: make(r"\d{1,12}"),
         }
     })
@@ -64,6 +67,7 @@ struct Client {
     numbers: HashMap<String, HashMap<String, f64>>,
     shell: Vec<f64>,
     uploaded: Vec<f64>,
+    planted: Vec<f64>,
     errors: Vec<f64>,
 }
 
@@ -305,6 +309,9 @@ impl WebWatch {
             }
         }
         let lowered = stem.to_lowercase();
+        if status == 200 && known.planted.is_match(&lowered) {
+            state.planted.push(now);
+        }
         if SCRIPT_EXTENSIONS.iter().any(|extension| lowered.ends_with(extension)) && status == 200 {
             if known.shell_parameter.is_match(decoded) {
                 state.shell.push(now);
@@ -371,6 +378,7 @@ impl WebWatch {
             state.logins.retain(|stamp| now - *stamp <= 60.0);
             state.shell.retain(|stamp| now - *stamp <= 300.0);
             state.uploaded.retain(|stamp| now - *stamp <= 300.0);
+            state.planted.retain(|stamp| now - *stamp <= 300.0);
             state.errors.retain(|stamp| now - *stamp <= 60.0);
             for values in state.numbers.values_mut() {
                 values.retain(|_, stamp| now - *stamp <= 60.0);
@@ -399,6 +407,8 @@ impl WebWatch {
                 marks.push(("web_shell_request", 3, format!("called a server-side script with a command parameter {} time(s) and was answered", state.shell.len())));
             } else if !state.uploaded.is_empty() {
                 marks.push(("web_shell_request", 3, format!("was served a server-side script from an uploads folder {} time(s)", state.uploaded.len())));
+            } else if !state.planted.is_empty() {
+                marks.push(("web_shell_request", 3, format!("was answered {} time(s) on an address shaped like a planted plugin's", state.planted.len())));
             }
             if state.errors.len() >= 20 {
                 marks.push(("web_error_burst", 2, format!("made the application fail {} times in one minute with requests that carry a body", state.errors.len())));

@@ -5,7 +5,7 @@
 use garrett::agent::known_to;
 use garrett::linux::Snap;
 use garrett::parse::{Conn, Proc};
-use garrett::score::{bare_download, borrowed_name, hidden_browser, risky_commands, score_process, user_writable, Remote, View};
+use garrett::score::{bare_download, borrowed_name, containment_reason, downloaded_script, hidden_browser, mock_windows_folder, risky_commands, score_process, user_writable, Remote, View};
 use garrett::watch::{Hands, Mode, Sensor, Watcher};
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -436,4 +436,112 @@ fn a_command_window_seconds_after_a_keyboard_never_seen_before_is_reported_and_n
     let later = Snap { proc: Proc { pid: 700, ..shell.proc.clone() }, parent: "konsole".into(), ..shell.clone() };
     watcher.on_exec(&later, T + 200.0);
     assert!(look(&mut watcher, T + 200.0).is_empty(), "long after the keyboard arrived");
+}
+
+#[test]
+fn a_script_run_straight_out_of_a_download_is_stopped_and_scripts_kept_elsewhere_are_not() {
+    for line in [
+        "\"C:\\Windows\\System32\\WScript.exe\" \"C:\\Users\\sam\\AppData\\Local\\Temp\\Temp1_contract_template.zip\\contract template 4821.js\"",
+        "wscript.exe C:\\Users\\sam\\Downloads\\agreement.js",
+        "\"C:\\Windows\\System32\\WScript.exe\" \"C:\\Users\\sam\\Downloads\\forms.zip\\lease.jse\"",
+        "cscript.exe //nologo C:\\Users\\sam\\AppData\\Local\\Temp\\7zO4F2A1B\\invoice.vbs",
+        "mshta.exe C:\\Users\\sam\\AppData\\Local\\Temp\\Rar$DIa1234.5678\\notice.hta",
+    ] {
+        assert!(downloaded_script(line), "{line}");
+    }
+    for line in ["wscript.exe C:\\Scripts\\logon.vbs", "cscript.exe //nologo C:\\Windows\\System32\\slmgr.vbs /dli", "wscript.exe \"C:\\Program Files\\Vendor\\helper.js\"", "wscript.exe"] {
+        assert!(!downloaded_script(line), "{line}");
+    }
+    let opened = windows("wscript.exe", "explorer.exe", "\"C:\\Windows\\System32\\WScript.exe\" \"C:\\Users\\sam\\AppData\\Local\\Temp\\Temp1_contract_template.zip\\contract template 4821.js\"");
+    let outcome = score_process(&opened, T, &HashMap::new(), &[], ROOT);
+    assert!(outcome.signals.iter().any(|signal| signal.id == "script_from_download"), "{:?}", outcome.signals);
+    assert!(outcome.level == "SUSPECT" || outcome.level == "HOSTILE");
+    assert!(!containment_reason(&outcome).is_empty(), "it is stopped, not only reported");
+    // Started by anything else, the download alone is reason enough.
+    let other = View { parent_name: "sihost.exe".into(), cmdline: Some("wscript.exe C:\\Users\\sam\\Downloads\\forms.zip\\lease.jse".into()), ..opened.clone() };
+    assert_eq!(containment_reason(&score_process(&other, T, &HashMap::new(), &[], ROOT)), "a script was run straight out of a download through Windows Script Host");
+    let logon = windows("wscript.exe", "userinit.exe", "wscript.exe C:\\Scripts\\logon.vbs");
+    assert_eq!(judged(&logon).0, "CLEAR");
+    // The same words on Linux are nothing: there is no Windows Script Host there.
+    assert!(!judged(&linux("wscript.exe", "/home/sam/Downloads/wscript.exe", "bash", "wscript.exe /home/sam/Downloads/a.js")).1.contains(&"script_from_download".to_string()));
+}
+
+#[test]
+fn the_rest_of_what_the_loader_does_on_a_windows_machine_is_recognised() {
+    // The folder that only looks like the Windows folder.
+    assert!(mock_windows_folder("C:\\Windows \\System32\\easinvoker.exe"));
+    assert!(mock_windows_folder("\\\\?\\C:\\Windows \\System32\\netutils.dll"));
+    assert!(!mock_windows_folder("C:\\Windows\\System32\\easinvoker.exe"));
+    assert!(!mock_windows_folder("C:\\Windows Kits\\10\\bin\\signtool.exe"));
+    let mut mock = windows("easinvoker.exe", "powershell.exe", "easinvoker.exe");
+    mock.path = "C:\\Windows \\System32\\easinvoker.exe".into();
+    let outcome = score_process(&mock, T, &HashMap::new(), &[], ROOT);
+    assert!(outcome.signals.iter().any(|signal| signal.id == "system_tool_misuse" && signal.points == 5), "{:?}", outcome.signals);
+    assert!(!outcome.signals.iter().any(|signal| signal.id == "installed_program"), "it is not in the Windows folder");
+    assert!(!containment_reason(&outcome).is_empty());
+    // Command lines.
+    let labels = |line: &str| -> Vec<&'static str> { risky_commands().iter().filter(|(pattern, _)| pattern.is_match(line)).map(|(_, label)| *label).collect() };
+    for (line, label) in [
+        ("wscript.exe \"C:\\Users\\sam\\AppData\\Roaming\\Adobe\\LICENS~1.JS\"", "a script in a user folder run through Windows Script Host"),
+        ("powershell -c [Ref].Assembly.GetType('System.Management.Automation.AmsiUtils')", "the script scanner switched off from inside a script"),
+        ("powershell -c [System.Reflection.Assembly]::Load($bytes).EntryPoint.Invoke($null,$null)", "a program loaded straight from memory"),
+        ("cmd.exe /Q /c echo whoami ^> \\\\127.0.0.1\\C$\\__output 2^>^&1", "output written to this machine's own administrative share, the way remote-execution tools work"),
+    ] {
+        assert!(labels(line).contains(&label), "{line}: {:?}", labels(line));
+    }
+    for line in ["wscript.exe C:\\Scripts\\logon.vbs", "powershell -c Get-Process", "robocopy \\\\fileserver\\c$\\data d:\\backup", "powershell -c [Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms')"] {
+        assert!(labels(line).is_empty(), "{line}: {:?}", labels(line));
+    }
+    // Looking for the next machine: fifteen neighbours tried on the ports one machine administers another through.
+    let sweep = |machines: u8, port: u16| -> View {
+        let mut view = windows("powershell.exe", "wsmprovhost.exe", "powershell.exe -c Invoke-Command");
+        view.contacts = (1..=machines).map(|last| (format!("10.0.5.{last}"), port, vec![T - 5.0])).collect();
+        view
+    };
+    assert!(judged(&sweep(20, 445)).1.contains(&"lateral_sweep".to_string()));
+    assert!(judged(&sweep(20, 5985)).1.contains(&"lateral_sweep".to_string()));
+    assert!(!judged(&sweep(5, 445)).1.contains(&"lateral_sweep".to_string()), "a few file servers");
+    assert!(!judged(&sweep(40, 443)).1.contains(&"lateral_sweep".to_string()), "web traffic to many machines");
+    let mut old = sweep(20, 445);
+    for contact in old.contacts.iter_mut() {
+        contact.2 = vec![T - 3600.0];
+    }
+    assert!(!judged(&old).1.contains(&"lateral_sweep".to_string()), "an hour ago");
+    let mut upload = windows("powershell.exe", "wscript.exe", "powershell.exe");
+    upload.remotes = vec![Remote { address: "93.184.216.34".into(), port: 443, names: vec!["bashupload.com".into()] }];
+    assert!(judged(&upload).1.contains(&"drop_or_tunnel_host".to_string()));
+}
+
+#[test]
+fn what_is_done_to_a_wordpress_site_shows_in_its_own_log() {
+    use garrett::web::WebWatch;
+    use std::io::Write;
+    let base = std::env::temp_dir().join(format!("garrett-wider-wp-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(base.join("www")).unwrap();
+    let log = base.join("access.log");
+    std::fs::write(&log, b"an earlier line\n").unwrap();
+    let mut watch = WebWatch::new(vec![log.to_string_lossy().into_owned()], vec![base.join("www").to_string_lossy().into_owned()]);
+    assert!(watch.poll(T).0.is_empty());
+    let line = |client: &str, method: &str, target: &str, status: u16| format!("{client} - - [16/Nov/2026:10:00:00 +0000] \"{method} {target} HTTP/1.1\" {status} 512\n");
+    let mut text = String::new();
+    for _ in 0..40 {
+        text += &line("198.51.100.20", "POST", "/xmlrpc.php", 200);
+    }
+    text += &line("198.51.100.21", "POST", "/xmlrpc.php", 200);
+    text += &line("198.51.100.22", "GET", "/wp-json/platformist-quadendpointer-abcdef/v1/abcdefab", 200);
+    text += &line("198.51.100.23", "GET", "/wp-json/wp/v2/posts", 200);
+    text += &line("198.51.100.23", "GET", "/wp-json/contact-form/v1/contact-forms/feedback", 200);
+    text += &line("198.51.100.24", "GET", "/wp-admin/admin-ajax.php?action=ajjs_run", 200);
+    text += &line("198.51.100.25", "POST", "/wp-admin/admin-ajax.php?action=heartbeat", 200);
+    std::fs::OpenOptions::new().append(true).open(&log).unwrap().write_all(text.as_bytes()).unwrap();
+    let (clients, _) = watch.poll(T + 1.0);
+    let said = |client: &str| -> Vec<String> { clients.iter().filter(|(name, _)| name == client).flat_map(|(_, marks)| marks.iter().map(|(id, _, text)| format!("{id}: {text}"))).collect() };
+    assert!(said("198.51.100.20").iter().any(|text| text.starts_with("web_login_burst")), "{:?}", said("198.51.100.20"));
+    assert!(said("198.51.100.21").is_empty(), "one call to it is how some sites are used");
+    assert_eq!(said("198.51.100.22"), vec!["web_shell_request: was answered 1 time(s) on an address shaped like a planted plugin's".to_string()]);
+    assert!(said("198.51.100.23").is_empty(), "{:?}", said("198.51.100.23"));
+    assert!(said("198.51.100.24").iter().any(|text| text.starts_with("web_shell_request")), "{:?}", said("198.51.100.24"));
+    assert!(said("198.51.100.25").is_empty());
+    let _ = std::fs::remove_dir_all(&base);
 }
