@@ -1,3 +1,46 @@
+garrett (1.5.0) stable; urgency=medium
+
+  * Privilege escalation is reported as it happens. On Linux: a root shell
+    that an ordinary user's program started without going through su, sudo
+    or any other program that grants root, and a root shell that su, passwd
+    or a program like them turned into directly, which they never do unless
+    they were tampered with. On Windows: a shell running as SYSTEM under a
+    program of an ordinary account. These are reported, never ended.
+  * A shell under a system helper that starts none is reported: winlogon,
+    lsass, ctfmon and WerFault on Windows; the kernel's helper thread and
+    the network share sign-in helper on Linux.
+  * A new SSH sign-in key added to an account while nobody is signed in over
+    SSH is reported. The key is left where it is.
+  * More command lines are recognised: the download warning removed from a
+    new file and AppleScript downloads on macOS; forfiles, mavinject, a
+    silent installer fetched from the internet, a boot setting that hides
+    memory and .NET loaders talking to the internet on Windows; a container
+    escape through the cgroup release agent on Linux; the keychain copied
+    out on macOS; firmware written to a storage drive.
+  * Web servers and edge systems: a script served from an uploads folder,
+    an object smuggled in a request or a cookie, and a long run of plus
+    signs are marked. ColdFusion and phar scripts count as scripts.
+  * A scheduled job that downloads from a bare internet address, and a macOS
+    login item that carries Apple's name but starts a program from a user's
+    folder, are reported when they appear.
+  * A program that is not a browser talking to the Telegram bot service is
+    weighed like one talking to a paste or file-drop host.
+  * A browser started where nobody can see it (off the screen and headless
+    or one dot in size, or hidden with an extension loaded) is reported:
+    password stealers open one that way to read what it has saved.
+  * A remote-control tool that runs from a download folder minutes after it
+    arrived is reported, the way a fake helpdesk has its victim start one.
+    One installed in the program folders is left alone.
+  * A program outside the program folders that asks an outside service for
+    the machine's public address has that counted against it.
+  * On macOS a script started from Script Editor is treated like one started
+    from a document, and a login item that borrows the name of Google's
+    updater is reported.
+  * The service tells agents which signals it knows, and a newer agent
+    keeps back the ones an older service would refuse.
+
+ -- sentinels <noreply@sentinels.invalid>  Mon, 16 Nov 2026 22:00:00 +0000
+
 garrett (1.4.1) stable; urgency=medium
 
   * A visitor confirmed as an attacker on an edge system stays refused when
