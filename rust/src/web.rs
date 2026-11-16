@@ -13,13 +13,14 @@ pub const WEB_LOG_GLOBS: &[&str] = &["/var/log/nginx/*access*.log", "/var/log/ap
 /// log there, so one agent on the root machine can read them all.
 pub const CONTAINER_LOG_GLOBS: &[&str] = &["/var/lib/docker/containers/*/*-json.log", "/var/log/pods/*/*/*.log"];
 pub const WEB_ROOTS: &[&str] = &["/var/www", "/usr/share/nginx/html", "/srv/www", "C:\\inetpub\\wwwroot"];
-pub const SCRIPT_EXTENSIONS: &[&str] = &[".php", ".phtml", ".jsp", ".jspx", ".aspx", ".ashx", ".asp"];
+pub const SCRIPT_EXTENSIONS: &[&str] = &[".php", ".phtml", ".phar", ".jsp", ".jspx", ".aspx", ".ashx", ".asp", ".cfm"];
 
 struct Patterns {
     cri: Regex,
     combined: Regex,
     injection: Vec<(Regex, &'static str)>,
     shell_parameter: Regex,
+    uploads: Regex,
     login_path: Regex,
     number: Regex,
 }
@@ -38,8 +39,12 @@ fn patterns() -> &'static Patterns {
                 (make(r"(?i)[;|`]\s*(cat|id|whoami|uname|wget|curl|nc|bash|sh)\b|\$\((id|whoami|cat)\b"), "command injection"),
                 (make(r"(?i)\{\{\s*\d+\s*\*\s*\d+\s*\}\}|\$\{\s*\d+\s*\*\s*\d+\s*\}|<%=\s*\d+\s*\*"), "template injection"),
                 (make(r"(?i)169\.254\.169\.254|metadata\.google\.internal|=(gopher|file|dict)://|=https?://(127\.0\.0\.1|localhost)\b"), "server-side request forgery"),
+                (make(r#"(?i)\bO:\d{1,3}:"[a-z_\\][a-z0-9_\\]{0,80}":\d{1,3}:\{"#), "object injection"),
+                (make(r" {50,}"), "a memory corruption probe"),
             ],
             shell_parameter: make(r"(?i)[?&](cmd|exec|command|shell|execute|run)="),
+            // Where a site keeps what its visitors send it. Nothing there is meant to run on the server.
+            uploads: make(r"/(uploads?|uploaded|user_?files)/"),
             login_path: make(r"(?i)/(wp-login\.php|login|signin|sign-in|logon|auth|authenticate|session|token|oauth/token)(/|\.|$)"),
             number: make(r"\d{1,12}"),
         }
@@ -58,6 +63,7 @@ struct Client {
     logins: Vec<f64>,
     numbers: HashMap<String, HashMap<String, f64>>,
     shell: Vec<f64>,
+    uploaded: Vec<f64>,
     errors: Vec<f64>,
 }
 
@@ -299,8 +305,12 @@ impl WebWatch {
             }
         }
         let lowered = stem.to_lowercase();
-        if SCRIPT_EXTENSIONS.iter().any(|extension| lowered.ends_with(extension)) && known.shell_parameter.is_match(decoded) && status == 200 {
-            state.shell.push(now);
+        if SCRIPT_EXTENSIONS.iter().any(|extension| lowered.ends_with(extension)) && status == 200 {
+            if known.shell_parameter.is_match(decoded) {
+                state.shell.push(now);
+            } else if known.uploads.is_match(&lowered) {
+                state.uploaded.push(now);
+            }
         }
     }
 
@@ -360,6 +370,7 @@ impl WebWatch {
             state.injection.retain(|item| now - item.0 <= 300.0);
             state.logins.retain(|stamp| now - *stamp <= 60.0);
             state.shell.retain(|stamp| now - *stamp <= 300.0);
+            state.uploaded.retain(|stamp| now - *stamp <= 300.0);
             state.errors.retain(|stamp| now - *stamp <= 60.0);
             for values in state.numbers.values_mut() {
                 values.retain(|_, stamp| now - *stamp <= 60.0);
@@ -386,6 +397,8 @@ impl WebWatch {
             }
             if !state.shell.is_empty() {
                 marks.push(("web_shell_request", 3, format!("called a server-side script with a command parameter {} time(s) and was answered", state.shell.len())));
+            } else if !state.uploaded.is_empty() {
+                marks.push(("web_shell_request", 3, format!("was served a server-side script from an uploads folder {} time(s)", state.uploaded.len())));
             }
             if state.errors.len() >= 20 {
                 marks.push(("web_error_burst", 2, format!("made the application fail {} times in one minute with requests that carry a body", state.errors.len())));

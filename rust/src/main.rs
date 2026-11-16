@@ -47,6 +47,8 @@ pub fn view_from(value: &Value) -> View {
         suspects: list("suspects").iter().map(text).collect(),
         served: value["served"].as_bool().unwrap_or(false),
         siege: value["siege"].as_bool().unwrap_or(false),
+        jumped: value["jumped"].as_bool().unwrap_or(false),
+        handed: value["handed"].as_bool().unwrap_or(false),
     }
 }
 

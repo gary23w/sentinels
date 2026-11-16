@@ -64,6 +64,12 @@ extern "system" {
     fn GetExtendedTcpTable(table: *mut c_void, size: *mut u32, sorted: i32, family: u32, class: i32, reserved: u32) -> u32;
 }
 
+#[link(name = "advapi32")]
+extern "system" {
+    fn OpenProcessToken(process: Handle, access: u32, token: *mut Handle) -> i32;
+    fn GetTokenInformation(token: Handle, class: i32, out: *mut c_void, size: u32, used: *mut u32) -> i32;
+}
+
 #[link(name = "shell32")]
 extern "system" {
     fn IsUserAnAdmin() -> i32;
@@ -142,6 +148,50 @@ fn command_line(pid: u32) -> Option<String> {
     }).flatten()
 }
 
+/// The account a process runs as, as the bytes of its identifier. `None` when it cannot be asked.
+pub fn account(pid: u32) -> Option<Vec<u8>> {
+    with(pid, QUERY_LIMITED, |handle| {
+        let mut token: Handle = std::ptr::null_mut();
+        if unsafe { OpenProcessToken(handle, 0x0008, &mut token) } == 0 || token.is_null() {
+            return None; // TOKEN_QUERY was refused
+        }
+        // TOKEN_USER: a pointer to the identifier and its attributes, then the identifier itself, in this answer.
+        let mut buffer = [0u64; 16];
+        let mut used = 0u32;
+        let read = unsafe { GetTokenInformation(token, 1, buffer.as_mut_ptr() as *mut c_void, std::mem::size_of_val(&buffer) as u32, &mut used) } != 0;
+        unsafe { CloseHandle(token) };
+        if !read {
+            return None;
+        }
+        let (start, bytes) = (buffer.as_ptr() as usize, std::mem::size_of_val(&buffer));
+        let pointer = unsafe { *(buffer.as_ptr() as *const usize) };
+        if pointer < start || pointer + 8 > start + bytes {
+            return None;
+        }
+        let parts = unsafe { *((pointer + 1) as *const u8) } as usize;
+        let length = 8 + 4 * parts;
+        if parts > 15 || pointer + length > start + bytes {
+            return None;
+        }
+        Some(unsafe { std::slice::from_raw_parts(pointer as *const u8, length) }.to_vec())
+    }).flatten()
+}
+
+/// What an account identifier is: "system" for the machine's own account, "person" for an account of the
+/// machine, a domain or a cloud directory, "" for anything else (services, the network account).
+pub fn account_kind(identifier: &[u8]) -> &'static str {
+    const SYSTEM: [u8; 12] = [1, 1, 0, 0, 0, 0, 0, 5, 18, 0, 0, 0];
+    if identifier == SYSTEM {
+        "system"
+    } else if identifier.len() >= 12 && identifier[0] == 1 && identifier[2..8] == [0, 0, 0, 0, 0, 5] && identifier[8..12] == [21, 0, 0, 0] {
+        "person" // S-1-5-21-...
+    } else if identifier.len() >= 12 && identifier[0] == 1 && identifier[2..8] == [0, 0, 0, 0, 0, 12] && identifier[8..12] == [1, 0, 0, 0] {
+        "person" // S-1-12-1-...
+    } else {
+        ""
+    }
+}
+
 /// One program that has just started: who it is, who started it, and its command line.
 pub fn snapshot(pid: u32) -> Option<Snap> {
     let (path, started) = identity(pid);
@@ -153,7 +203,12 @@ pub fn snapshot(pid: u32) -> Option<Snap> {
         let mut basic = [0usize; 6];
         if unsafe { NtQueryInformationProcess(handle, 0, basic.as_mut_ptr() as *mut c_void, std::mem::size_of_val(&basic) as u32, std::ptr::null_mut()) } == 0 { basic[5] as u32 } else { 0 }
     }).unwrap_or(0);
-    let above = if parent > 4 { base(&identity(parent).0) } else { String::new() };
+    let (above_path, above_started) = if parent > 4 { identity(parent) } else { (String::new(), 0) };
+    let above = base(&above_path);
+    // A shell that runs as SYSTEM under a program of an ordinary account: nothing on Windows grants that. Asked
+    // only of script hosts, and only when the parent is older than the child, so its number is really its own.
+    let jumped = parent > 4 && above_started > 0 && above_started <= started && crate::score::is_script_host(&base(&path).to_lowercase())
+        && account(pid).is_some_and(|own| account_kind(&own) == "system") && account(parent).is_some_and(|theirs| account_kind(&theirs) == "person");
     // A process is listed a moment before its command line can be read: asked again for up to two milliseconds.
     let mut line = command_line(pid).unwrap_or_default();
     let until = std::time::Instant::now() + Duration::from_millis(2);
@@ -161,7 +216,7 @@ pub fn snapshot(pid: u32) -> Option<Snap> {
         std::thread::yield_now();
         line = command_line(pid).unwrap_or_default();
     }
-    Some(Snap { proc: Proc { pid, ppid: parent, name: base(&path), path, started }, cmdline: line, parent: above })
+    Some(Snap { proc: Proc { pid, ppid: parent, name: base(&path), path, started }, cmdline: line, parent: above, jumped, handed: false })
 }
 
 fn cache() -> &'static Mutex<HashMap<u32, Proc>> {

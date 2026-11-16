@@ -17,14 +17,17 @@ const INJECTION = [
   [/\.\.\/\.\.\/|\.\.\\\.\.\\|\/etc\/passwd|win\.ini|boot\.ini/i, 'path traversal'],
   [/[;|`]\s*(cat|id|whoami|uname|wget|curl|nc|bash|sh)\b|\$\((id|whoami|cat)\b/i, 'command injection'],
   [/\{\{\s*\d+\s*\*\s*\d+\s*\}\}|\$\{\s*\d+\s*\*\s*\d+\s*\}|<%=\s*\d+\s*\*/i, 'template injection'],
-  [/169\.254\.169\.254|metadata\.google\.internal|=(gopher|file|dict):\/\/|=https?:\/\/(127\.0\.0\.1|localhost)\b/i, 'server-side request forgery']
+  [/169\.254\.169\.254|metadata\.google\.internal|=(gopher|file|dict):\/\/|=https?:\/\/(127\.0\.0\.1|localhost)\b/i, 'server-side request forgery'],
+  [/\bO:\d{1,3}:"[a-z_\\][a-z0-9_\\]{0,80}":\d{1,3}:\{/i, 'object injection'],
+  [/ {50,}/, 'a memory corruption probe']
 ];
 export const INJECTION_LABELS = INJECTION.map(([, label]) => label);
 const SHELL_PARAMETER = /[?&](cmd|exec|command|shell|execute|run)=/i;
 const LOGIN_PATH = /\/(wp-login\.php|login|signin|sign-in|logon|auth|authenticate|session|token|oauth\/token)(\/|\.|$)/i;
-const SCRIPT_EXTENSIONS = ['.php', '.phtml', '.jsp', '.jspx', '.aspx', '.ashx', '.asp'];
+const UPLOADS = /\/(uploads?|uploaded|user_?files)\//;
+const SCRIPT_EXTENSIONS = ['.php', '.phtml', '.phar', '.jsp', '.jspx', '.aspx', '.ashx', '.asp', '.cfm'];
 const NUMBER = /\d{1,12}/g;
-export const EDGE_KINDS = ['missing', 'injection', 'login', 'error', 'shell', 'number'];
+export const EDGE_KINDS = ['missing', 'injection', 'login', 'error', 'shell', 'uploaded', 'number'];
 const ADDRESS = /^[0-9a-fA-F:.]{3,45}$/;
 
 // "%2e%2e" and "+" as the server will read them. Text that is not valid is left as it is.
@@ -42,13 +45,21 @@ export function markOfText(text) {
   }
   return a.toString(16).padStart(8, '0') + b.toString(16).padStart(8, '0');
 }
-// What one request is a sign of. `target` is the path and query as requested. Returns the marks to forward, or
-// null for a request that is a sign of nothing.
-export function markOf(method, target, status) {
+// A cookie's value as the application will read it, when it was sent as base64: an object smuggled to the
+// application usually is. Anything else is returned as it came.
+function unwrapped(value) {
+  if (!/^[A-Za-z0-9+/_-]{16,}={0,2}$/.test(value)) return value;
+  try { return atob(value.replace(/-/g, '+').replace(/_/g, '/')).slice(0, 400); } catch { return value; }
+}
+// What one request is a sign of. `target` is the path and query as requested; `cookie` is its Cookie header where
+// the edge system has it. Returns the marks to forward, or null for a request that is a sign of nothing.
+export function markOf(method, target, status, cookie = '') {
   if (typeof target !== 'string' || !Number.isInteger(status)) return null;
   const decoded = unquotePlus(unquotePlus(target)).slice(0, 2000), stem = decoded.split('?')[0], marks = {};
   if (status === 403 || status === 404) marks.missing = markOfText(stem.slice(0, 200));
-  const found = INJECTION.find(([pattern]) => pattern.test(decoded));
+  // Only an object is looked for in a cookie: every other pattern is about the address.
+  const smuggled = typeof cookie === 'string' && cookie.slice(0, 4000).split(';').some(pair => { const value = pair.slice(pair.indexOf('=') + 1).trim(), last = value.slice(value.lastIndexOf(':') + 1); let plain = value; try { plain = decodeURIComponent(value); } catch {} return [plain, unwrapped(plain), unwrapped(last)].some(text => INJECTION[5][0].test(text)); });
+  const found = INJECTION.find(([pattern]) => pattern.test(decoded)) || (smuggled ? INJECTION[5] : undefined);
   if (found) { marks.injection = found[1]; if (status === 200 || status >= 500) marks.answered = true; }
   if (method === 'POST' && LOGIN_PATH.test(stem)) marks.login = true;
   if (['POST', 'PUT', 'PATCH'].includes(method) && status >= 500) marks.error = true;
@@ -57,11 +68,11 @@ export function markOf(method, target, status) {
     if (numbers) { marks.shape = markOfText(decoded.replace(NUMBER, '#').slice(0, 200)); marks.number = markOfText(numbers[numbers.length - 1]); }
   }
   const lowered = stem.toLowerCase();
-  if (SCRIPT_EXTENSIONS.some(extension => lowered.endsWith(extension)) && SHELL_PARAMETER.test(decoded) && status === 200) marks.shell = true;
+  if (SCRIPT_EXTENSIONS.some(extension => lowered.endsWith(extension)) && status === 200) { if (SHELL_PARAMETER.test(decoded)) marks.shell = true; else if (UPLOADS.test(lowered)) marks.uploaded = true; }
   return Object.keys(marks).length ? marks : null;
 }
 const mark = value => typeof value === 'string' && /^[0-9a-f]{16}$/.test(value);
-// One forwarded record, checked: { client, at?, missing?, injection?, answered?, login?, error?, shell?, shape?, number? }.
+// One forwarded record, checked: { client, at?, missing?, injection?, answered?, login?, error?, shell?, uploaded?, shape?, number? }.
 // Returns the rows to keep, [kind, value, extra], or null when the record is not in that form.
 export function rowsOf(record) {
   if (!record || typeof record !== 'object' || typeof record.client !== 'string' || !ADDRESS.test(record.client)) return null;
@@ -71,6 +82,7 @@ export function rowsOf(record) {
   if (record.login === true) rows.push(['login', '', '']);
   if (record.error === true) rows.push(['error', '', '']);
   if (record.shell === true) rows.push(['shell', '', '']);
+  if (record.uploaded === true) rows.push(['uploaded', '', '']);
   if (record.shape !== undefined || record.number !== undefined) { if (!mark(record.shape) || !mark(record.number)) return null; rows.push(['number', record.shape, record.number]); }
   return rows;
 }
@@ -94,8 +106,9 @@ export function judge(rows, stamp) {
   if (walked >= 40) say('web_enumeration', 'walked through ' + walked + ' record numbers on one address pattern in one minute');
   const logins = within('login', 60).length;
   if (logins >= 30) say('web_login_burst', 'made ' + logins + ' sign-in attempts in one minute');
-  const shell = within('shell', 300).length;
+  const shell = within('shell', 300).length, uploaded = within('uploaded', 300).length;
   if (shell > 0) say('web_shell_request', 'called a server-side script with a command parameter ' + shell + ' time(s) and was answered');
+  else if (uploaded > 0) say('web_shell_request', 'was served a server-side script from an uploads folder ' + uploaded + ' time(s)');
   const errors = within('error', 60).length;
   if (errors >= 20) say('web_error_burst', 'made the application fail ' + errors + ' times in one minute with requests that carry a body');
   return found;

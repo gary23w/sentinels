@@ -28,7 +28,7 @@ export function recordsOf(events) {
     if (typeof client !== 'string') continue;
     let target;
     try { const url = new URL(request.url); target = url.pathname + url.search; } catch { continue; }
-    const marks = markOf(String(request.method || 'GET').toUpperCase(), target, status);
+    const marks = markOf(String(request.method || 'GET').toUpperCase(), target, status, headers.cookie || headers.Cookie || '');
     if (marks) records.push({ client, at: Math.floor((Number(item.eventTimestamp) || Date.now()) / 1000), ...marks });
   }
   return records;

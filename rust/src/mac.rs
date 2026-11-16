@@ -66,7 +66,7 @@ pub fn snapshot(pid: u32) -> Option<Snap> {
         }
     }
     // Identity matches what `ps` gives the full looks: no start time is known there either.
-    Some(Snap { proc: Proc { pid, ppid: parent, name: base(&path), path, started: 0 }, cmdline: words, parent: above })
+    Some(Snap { proc: Proc { pid, ppid: parent, name: base(&path), path, started: 0 }, cmdline: words, parent: above, jumped: false, handed: false })
 }
 
 /// Ask the machine what is running and connected, and keep the answers for the next look.

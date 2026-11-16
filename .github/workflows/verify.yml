@@ -78,6 +78,11 @@ jobs:
           (cd rust && cargo test --release --locked --test live --no-run)
           live=$(ls rust/target/release/deps/live-* | grep -v '\.d$' | head -1)
           sudo env GARRETT_LIVE_ADDRESS=1.0.0.1 "$live" --ignored --nocapture live_block
+      - name: Root that no program granted is noticed
+        run: |
+          sudo apt-get install -y libcap2-bin gcc >/dev/null
+          live=$(ls rust/target/release/deps/live-* | grep -v '\.d$' | head -1)
+          sudo "$live" --ignored --nocapture live_jump
       - name: Removal leaves nothing
         run: |
           sudo apt-get purge -y garrett >/dev/null
@@ -168,6 +173,38 @@ jobs:
           $left = @(Get-NetFirewallRule -DisplayName 'Garrett fleet block' -ErrorAction SilentlyContinue).Count
           "rules left: $left"
           if ($code -ne 0 -or $left -ne 0) { throw 'fleet blocking did not behave as expected' }
+      - name: A SYSTEM shell started by a person's program is noticed
+        shell: pwsh
+        run: |
+          # A stand-in for a privilege escalation: this session's own shell starts cmd.exe with the machine's own account.
+          Add-Type @'
+          using System; using System.Diagnostics; using System.Runtime.InteropServices;
+          public static class Up {
+            [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] public struct Start { public int cb; public string reserved, desktop, title; public int x, y, xSize, ySize, xChars, yChars, fill, flags; public short show, reserved2; public IntPtr reserved3, input, output, error; }
+            [StructLayout(LayoutKind.Sequential)] public struct Made { public IntPtr process, thread; public int pid, tid; }
+            [DllImport("advapi32", SetLastError = true)] public static extern bool OpenProcessToken(IntPtr process, uint access, out IntPtr token);
+            [DllImport("advapi32", SetLastError = true)] public static extern bool DuplicateTokenEx(IntPtr token, uint access, IntPtr attributes, int level, int type, out IntPtr made);
+            [DllImport("advapi32", SetLastError = true, CharSet = CharSet.Unicode)] public static extern bool CreateProcessWithTokenW(IntPtr token, int logon, string application, string command, int creation, IntPtr environment, string directory, ref Start start, out Made made);
+            public static int Run(string name, string command) {
+              Process.EnterDebugMode();
+              foreach (var source in Process.GetProcessesByName(name)) {
+                IntPtr token, primary;
+                try { if (!OpenProcessToken(source.Handle, 0x0002, out token)) continue; } catch { continue; }
+                if (!DuplicateTokenEx(token, 0x02000000, IntPtr.Zero, 2, 1, out primary)) continue;
+                var start = new Start(); start.cb = Marshal.SizeOf(start); Made made;
+                if (CreateProcessWithTokenW(primary, 0, null, command, 0x08000000, IntPtr.Zero, null, ref start, out made)) return made.pid;
+              }
+              return 0;
+            }
+          }
+          '@
+          $made = 0
+          foreach ($name in 'winlogon', 'services', 'spoolsv', 'svchost') { $made = [Up]::Run($name, 'cmd.exe /c ping -n 60 127.0.0.1'); if ($made) { "made from $name"; break } }
+          if (-not $made) { throw 'no stand-in could be started' }
+          $env:GARRETT_LIVE_PID = "$made"
+          Push-Location rust; cargo test --release --locked --test live -- --ignored --nocapture live_system_shell; $code = $LASTEXITCODE; Pop-Location
+          Stop-Process -Id $made -Force -ErrorAction SilentlyContinue
+          if ($code) { throw 'the live check failed' }
       - name: Removal leaves nothing
         shell: pwsh
         run: |

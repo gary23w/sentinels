@@ -16,6 +16,9 @@ export const SIGNALS = {
   script_from_shortcut: S(3, 'lineage', 'is a download-and-run command started from a shortcut or the Run box'),
   program_from_attachment: S(3, 'lineage', 'was started from a mail or archive program, the way an opened attachment runs'),
   remote_session_shell: S(3, 'lineage', 'was started inside a remote session from another machine'),
+  helper_with_child: S(5, 'lineage', 'was started by a system helper that has no reason to start it'),
+  privilege_jump: S(6, 'privilege', 'got the highest rights on the machine in a way nothing on it grants'),
+  signin_key_added: S(5, 'behaviour', 'is a new SSH sign-in key added while nobody was signed in over SSH'),
   system_tool_misuse: S(4, 'behaviour', 'is a Windows system tool being used the way malware loaders use one'),
   discovery_command: S(2, 'behaviour', 'ran a who-am-I command the way an intruder does on arrival'),
   threat_executed: S(3, 'behaviour', 'ran or is still active according to Windows Defender'),
@@ -38,7 +41,7 @@ export const SIGNALS = {
   web_injection_answered: S(2, 'web', 'had injection-shaped requests processed by the application'),
   web_enumeration: S(3, 'web', 'walked through record numbers on the web application'),
   web_login_burst: S(3, 'web', 'made a burst of sign-in attempts on the web application'),
-  web_shell_request: S(3, 'web', 'called a server-side script with a command parameter'),
+  web_shell_request: S(3, 'web', 'called a server-side script the way a web shell is called'),
   web_error_burst: S(2, 'web', 'made the web application fail repeatedly with requests that carry a body'),
   web_shell_file: S(5, 'web', 'is a new server-side script that appeared in a web folder'),
   inbound_from_suspect_peer: S(4, 'inbound', 'accepted a connection from one of your own machines that has an open attack case'),
@@ -63,7 +66,10 @@ export const SIGNALS = {
 // Hosts whose current addresses the service looks up and hands to agents, so a connection to one is recognised
 // on machines that keep no DNS cache. The lookups leave from the service, never from your machines.
 export const WATCH_HOSTS = ['webhook.site', 'pastebin.com', 'paste.ee', 'rentry.co', 'transfer.sh', 'file.io', 'gofile.io', 'catbox.moe', '0x0.st', 'temp.sh',
-  'api.anthropic.com', 'api.deepseek.com', 'open.bigmodel.cn', 'api.x.ai', 'xcai.pro'];
+  'api.telegram.org', 'api.anthropic.com', 'api.deepseek.com', 'open.bigmodel.cn', 'api.x.ai', 'xcai.pro'];
+// Which signals this service knows, said to agents with the shared state: an agent newer than the service keeps
+// back the signals a lower number does not cover. Raise it whenever a signal is added.
+export const SIGNAL_SET = 2;
 export const TRUST = new Set(['installed_program', 'owner_trusted', 'known_baseline']);
 // Never learned up or down: published indicators, the antivirus's own verdict, attacks on a service, and
 // directory attacks.
@@ -80,7 +86,8 @@ export const REFERENCE_ATTACKS = [
   ['cloud_credential_added'], ['cloud_advisory_indicator'], ['cloud_privilege_grant', 'cloud_permission_probe'], ['cloud_policy_weakened', 'cloud_privilege_grant'], ['cloud_resource_staging', 'cloud_permission_probe'],
   ['web_shell_file'], ['web_fuzzing', 'web_injection_attempt'], ['web_injection_attempt', 'web_injection_answered'], ['web_login_burst', 'web_enumeration'],
   ['advisory_indicator'], ['inbound_advisory_indicator'], ['remote_access_burst'], ['antivirus_detection'], ['credential_theft_tool'],
-  ['kerberoast_pattern'], ['dcsync_pattern'], ['logon_failure_burst'], ['audit_log_cleared'], ['privileged_group_change']
+  ['kerberoast_pattern'], ['dcsync_pattern'], ['logon_failure_burst'], ['audit_log_cleared'], ['privileged_group_change'],
+  ['helper_with_child'], ['privilege_jump']
 ];
 export const levelFor = (score, categories) => score <= 2 ? 'CLEAR' : score <= 4 ? 'WATCH' : score <= 6 ? 'SUSPECT' : categories >= 3 ? 'HOSTILE' : 'SUSPECT';
 export const reported = level => level === 'SUSPECT' || level === 'HOSTILE';

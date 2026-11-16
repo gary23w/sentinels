@@ -26,7 +26,8 @@ pub const SIGNALS: &[(&str, i64, &str)] = &[
     ("unsigned_program", 2, "identity"), ("user_writable_path", 1, "identity"), ("runs_from_temp", 3, "identity"), ("fresh_file", 2, "identity"),
     ("system_name_elsewhere", 3, "identity"), ("advisory_tool_name", 2, "identity"), ("script_from_document", 3, "lineage"),
     ("shell_from_web_server", 3, "lineage"), ("risky_command_line", 3, "lineage"), ("script_from_shortcut", 3, "lineage"),
-    ("program_from_attachment", 3, "lineage"), ("remote_session_shell", 3, "lineage"), ("system_tool_misuse", 4, "behaviour"),
+    ("program_from_attachment", 3, "lineage"), ("remote_session_shell", 3, "lineage"), ("helper_with_child", 5, "lineage"), ("privilege_jump", 6, "privilege"), ("signin_key_added", 5, "behaviour"),
+    ("system_tool_misuse", 4, "behaviour"),
     ("discovery_command", 2, "behaviour"), ("threat_executed", 3, "behaviour"), ("antivirus_detection", 5, "antivirus"), ("tor_routing", 3, "destinations"),
     ("learned_attack_shape", 2, "learned"), ("fleet_indicator", 3, "destinations"), ("metadata_access_from_web", 2, "behaviour"),
     ("advisory_indicator", 5, "destinations"), ("drop_or_tunnel_host", 2, "destinations"), ("llm_api_host", 1, "destinations"), ("unusual_port", 1, "destinations"),
@@ -55,6 +56,7 @@ pub const REFERENCE_ATTACKS: &[&[&str]] = &[
     &["fleet_indicator", "runs_from_temp"], &["fleet_indicator", "unsigned_program"], &["inbound_from_suspect_peer", "remote_session_shell"],
     &["web_shell_file"], &["web_fuzzing", "web_injection_attempt"], &["web_injection_attempt", "web_injection_answered"], &["web_login_burst", "web_enumeration"],
     &["advisory_indicator"], &["inbound_advisory_indicator"], &["remote_access_burst"], &["antivirus_detection"], &["credential_theft_tool"],
+    &["helper_with_child"], &["privilege_jump"],
     &["kerberoast_pattern"], &["dcsync_pattern"], &["logon_failure_burst"], &["audit_log_cleared"], &["privileged_group_change"],
 ];
 

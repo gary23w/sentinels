@@ -266,6 +266,7 @@ impl<S: Sensor, H: Hands> Watcher<S, H> {
         if self.mine(proc) {
             return;
         }
+        self.escalation_case(snap, now);
         let lowered = proc.name.to_lowercase();
         let identity = (proc.pid, proc.started);
         let mut frozen = false;
@@ -845,7 +846,7 @@ impl<S: Sensor, H: Hands> Watcher<S, H> {
                 inbound: tracked.inbound.iter().map(|(port, sources)| (*port as u16, sources.clone())).collect(),
                 trusted: self.trusted.contains(&key), baseline_days: days, baseline_overlap: overlap, detections: Vec::new(), file_age: tracked.file_age, events: Vec::new(),
                 origin: tracked.origin.clone(), agent: marks, exits: self.exits.clone(), fleet: self.fleet.clone(), suspects: self.suspects.clone(),
-                served: tracked.served, siege,
+                served: tracked.served, siege, jumped: false, handed: false,
             };
             let outcome = score_process(&view, now, &self.policy, &self.shapes, &self.system_root);
             if !labels.is_empty() {

@@ -21,7 +21,7 @@ pub const ADVISORY_TOOL_NAMES: &[&str] = &["chisel", "vshell", "adaptix"];
 pub const DROP_HOSTS: &[&str] = &[
     "webhook.site", "pastebin.com", "paste.ee", "rentry.co", "transfer.sh", "file.io", "gofile.io", "catbox.moe",
     "0x0.st", "temp.sh", "ngrok.io", "ngrok-free.app", "ngrok.app", "trycloudflare.com", "loca.lt", "serveo.net",
-    "localhost.run", "duckdns.org", "ddns.net", "no-ip.org", "hopto.org",
+    "localhost.run", "duckdns.org", "ddns.net", "no-ip.org", "hopto.org", "api.telegram.org",
 ];
 pub const TOR_NAMES: &[&str] = &["tor", "tor.exe"];
 pub const TOR_SOCKS_PORTS: &[u16] = &[9050, 9150];
@@ -41,6 +41,16 @@ pub const DOCUMENT_PARENTS_MORE: &[&str] = &[
 ];
 pub const LOADER_TOOLS: &[&str] = &["msbuild.exe", "cmstp.exe"];
 pub const LOADER_HOSTS: &[&str] = &["regsvr32.exe", "rundll32.exe", "mshta.exe"];
+/// .NET tools that load whatever assembly they are handed: another program is easily run inside one.
+pub const ASSEMBLY_HOSTS: &[&str] = &["regasm.exe", "regsvcs.exe", "installutil.exe"];
+/// Windows system programs that start no shells of their own. A shell under one of them is what a privilege
+/// escalation leaves, or a replaced accessibility tool on the sign-in screen.
+pub const CHILDLESS_WINDOWS: &[&str] = &["winlogon.exe", "lsass.exe", "ctfmon.exe", "werfault.exe", "fontdrvhost.exe", "dwm.exe", "csrss.exe", "smss.exe"];
+/// The helper the kernel calls for a network share's sign-in: it starts nothing.
+pub const CHILDLESS_UNIX: &[&str] = &["cifs.upcall"];
+/// The kernel starts a few helpers itself (module loading, crash handling). These it has no reason to start.
+pub const KERNEL_STRANGERS: &[&str] = &["sh", "bash", "dash", "zsh", "ksh", "curl", "wget", "nc", "ncat", "socat"];
+pub const CONTAINER_STORES: &[&str] = &["/var/lib/docker/overlay2/", "/var/lib/containers/storage/overlay/", "/var/lib/containerd/", "/run/containerd/"];
 pub const WEB_SERVER_PREFIXES: &[&str] = &["w3wp", "httpd", "apache2", "nginx", "php-fpm", "php-cgi", "php", "tomcat", "java", "catalina"];
 pub const SYSTEM_NAMES: &[&str] = &[
     "svchost.exe", "csrss.exe", "lsass.exe", "explorer.exe", "runtimebroker.exe", "services.exe", "winlogon.exe",
@@ -114,6 +124,13 @@ pub fn risky_commands() -> &'static Vec<(Regex, &'static str)> {
         (r"(?i)certutil(\.exe)?\s.*-urlcache\b.*https?:|bitsadmin(\.exe)?\s.*/transfer\b.*https?:", "a download through a Windows system tool"),
         (r"(?i)(regsvr32|rundll32)(\.exe)?\s.*\\(Temp|AppData|Downloads|ProgramData|Users\\Public)\\", "a library loaded from a temporary or downloads folder"),
         (r"(?is)socket\b.{0,200}(dup2|pty\.spawn|subprocess)|fsockopen\(.{0,120}(exec|proc_open|shell_exec)", "a scripted reverse shell"),
+        (r"(?i)\bxattr\s+-(d|c|cr|rc|dr|rd)\b.*(/tmp/|/var/folders/|/Downloads/)", "the download warning removed from a new file"),
+        (r"(?i)\bosascript\b.*do shell script.*(curl|base64|/tmp/)", "a download run through AppleScript"),
+        (r"(?i)forfiles(\.exe)?\s.*/c\s.*(mshta|powershell|curl|https?:)", "a command hidden behind a Windows system tool"),
+        (r"(?i)mavinject(32|64)?(\.exe)?\s.*/injectrunning", "code injected into a running program with a Windows system tool"),
+        (r"(?i)bcdedit(\.exe)?\s.*\bremovememory\b", "a boot setting that hides memory from Windows"),
+        (r"(?i)msiexec(\.exe)?\s.*https?://.*\s[/-]q|msiexec(\.exe)?\s.*\s[/-]q\w*\s.*https?://", "an installer fetched from the internet and run silently"),
+        (r"(?i)\brelease_agent\b|\bnotify_on_release\b", "a container escape through the cgroup release agent"),
     ])
 }
 
@@ -148,7 +165,7 @@ pub fn discovery() -> &'static Regex {
 
 fn windows_writable() -> &'static Regex {
     static CELL: OnceLock<Regex> = OnceLock::new();
-    regex(&CELL, r"(?i)\\(AppData|Temp|Tmp|Downloads|Users\\Public|ProgramData|Windows\\Tasks)\\")
+    regex(&CELL, r"(?i)\\(AppData|Temp|Tmp|Downloads|Users\\Public|ProgramData|Windows\\Tasks)\\|\\Users\\[^\\]+\\(Pictures|Music|Videos)\\")
 }
 
 pub fn unix_temp() -> &'static Regex {
@@ -159,6 +176,21 @@ pub fn unix_temp() -> &'static Regex {
 pub fn unix_writable() -> &'static Regex {
     static CELL: OnceLock<Regex> = OnceLock::new();
     regex(&CELL, r"^(/tmp/|/var/tmp/|/dev/shm/|/private/tmp/|/private/var/tmp/)|/(Downloads|\.cache)/")
+}
+
+/// A startup entry that fetches from a bare internet address: a name costs an intruder money and leaves a trail,
+/// so their own entries often have none. Software from a vendor comes from a named host.
+pub fn bare_download(words: &str) -> bool {
+    static CELL: OnceLock<Regex> = OnceLock::new();
+    regex(&CELL, r"(?i)\b(curl|wget)\b[^\n]{0,200}https?://\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b").is_match(words)
+}
+
+/// A macOS startup entry that carries Apple's name but starts a program kept in a user's or a temporary folder.
+/// Apple's own entries start programs from the system folders.
+pub fn borrowed_name(place: &str, words: &str) -> bool {
+    static CELL: OnceLock<Regex> = OnceLock::new();
+    let user_program = regex(&CELL, r"<string>(/Users/|/private/tmp/|/tmp/|/private/var/folders/|/var/folders/)[^<]*</string>");
+    (place.contains("/Library/LaunchAgents/") || place.contains("/Library/LaunchDaemons/")) && words.contains("<string>com.apple.") && user_program.is_match(words)
 }
 
 /// Text that came from the device, made safe to show: control characters and angle brackets become spaces.
@@ -252,6 +284,10 @@ pub struct View {
     pub served: bool,
     /// That parent was just used for an attack, and this is not a command it normally runs.
     pub siege: bool,
+    /// It runs as root, an ordinary user's program started it, and it never went through a program that grants root.
+    pub jumped: bool,
+    /// It is a root shell that a system program which never becomes one turned into directly.
+    pub handed: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -360,6 +396,22 @@ pub fn score_process(view: &View, now: f64, policy: &HashMap<String, i64>, shape
     } else if under_web {
         add(&mut signals, "shell_from_web_server", 3, "lineage", &format!("A shell was started by the web server process {source_name}, the pattern a web shell leaves."));
     }
+    // Started by a system helper that starts nothing like it: what a privilege escalation leaves behind.
+    let odd_parent = if system == "windows" {
+        is_script_host(name) && has(CHILDLESS_WINDOWS, &parent)
+    } else {
+        has(CHILDLESS_UNIX, &parent) || (parent == "kthreadd" && (has(KERNEL_STRANGERS, name) || unix_temp().is_match(path) || starts(path, CONTAINER_STORES)))
+    };
+    if odd_parent {
+        add(&mut signals, "helper_with_child", 5, "lineage", &format!("Started by {}, a system helper that has no reason to start it: the mark of a privilege escalation.", view.parent_name));
+    }
+    if view.handed {
+        add(&mut signals, "privilege_jump", 6, "privilege", "A system program that gives root only after asking turned straight into a root shell: the mark of that program having been tampered with.");
+    } else if view.jumped && system == "windows" {
+        add(&mut signals, "privilege_jump", 6, "privilege", "Runs as SYSTEM, but an ordinary user's program started it: nothing that grants that stood between them.");
+    } else if view.jumped {
+        add(&mut signals, "privilege_jump", 6, "privilege", "Runs as root, but an ordinary user's program started it and it never went through a program that grants root.");
+    }
     let remote_session = REMOTE_SESSION_PARENTS.iter().find(|(parent, _)| *parent == source).map(|(_, phrase)| *phrase);
     if let Some(line) = cmdline {
         if discovery().is_match(line) && (under_web || remote_session.is_some() || is_document_parent(source)) {
@@ -409,7 +461,7 @@ pub fn score_process(view: &View, now: f64, policy: &HashMap<String, i64>, shape
         }
     }
 
-    let runs_others_code = scripted || has(LOADER_TOOLS, name) || has(DIRECTORY_TOOLS, name);
+    let runs_others_code = scripted || has(LOADER_TOOLS, name) || has(ASSEMBLY_HOSTS, name) || has(DIRECTORY_TOOLS, name);
     let trusted_install = system_path(path, system, system_root) && !runs_others_code;
 
     // Tor: the client itself outside the system folders, or any other program routing through it
@@ -431,6 +483,9 @@ pub fn score_process(view: &View, now: f64, policy: &HashMap<String, i64>, shape
     // behaviour: system tools used the way malware loaders use them
     if name == "cmstp.exe" && is_script_host(&parent) {
         add(&mut signals, "system_tool_misuse", 5, "behaviour", &format!("cmstp.exe was started by {}, a known way to get administrator rights without a prompt.", view.parent_name));
+    } else if has(ASSEMBLY_HOSTS, name) && !internet.is_empty() && (is_script_host(&parent) || parent.is_empty()) {
+        let by = if view.parent_name.is_empty() { "an unknown program" } else { view.parent_name.as_str() };
+        add(&mut signals, "system_tool_misuse", 4, "behaviour", &format!("{} is talking to the internet after being started by {by}, the pattern of a program hidden inside it.", view.name));
     } else if name == "msbuild.exe" && !internet.is_empty() && (is_script_host(&parent) || parent.is_empty()) {
         let by = if view.parent_name.is_empty() { "an unknown program" } else { view.parent_name.as_str() };
         add(&mut signals, "system_tool_misuse", 4, "behaviour", &format!("MSBuild.exe is talking to the internet after being started by {by}, the pattern of a program hidden inside it."));

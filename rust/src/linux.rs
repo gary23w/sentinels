@@ -14,6 +14,12 @@ pub struct Snap {
     pub proc: Proc,
     pub cmdline: String,
     pub parent: String,
+    /// It runs as root, an ordinary user's program started it, and it never went through a program that grants
+    /// root. Only the kernel's start feed can tell (see `feed`); everywhere else this is false.
+    pub jumped: bool,
+    /// It is a root shell that a system program which asks before it gives root turned into directly, without
+    /// the step such a program always takes in between (Linux), so the program itself was tampered with.
+    pub handed: bool,
 }
 
 fn base(path: &str) -> &str {
@@ -31,6 +37,20 @@ pub fn exec_worth(path: &str) -> bool {
     let name = base(path).to_lowercase();
     SHELLS.contains(&name.as_str()) || INTERPRETER_PREFIXES.iter().any(|prefix| name.starts_with(prefix)) || DIRECTORY_TOOLS.contains(&name.as_str()) || unix_writable().is_match(path)
 }
+
+#[cfg(target_os = "linux")]
+fn has_capabilities(name: &std::ffi::CStr) -> bool {
+    unsafe { libc::getxattr(name.as_ptr(), c"security.capability".as_ptr(), std::ptr::null_mut(), 0) > 0 }
+}
+
+#[cfg(all(unix, not(target_os = "linux")))]
+fn has_capabilities(_name: &std::ffi::CStr) -> bool {
+    false
+}
+
+/// Programs that hold root to do one small job, or that hand a root shell over only as a separate process: none
+/// of them ever becomes a root shell itself.
+const STAID: &[&str] = &["su", "passwd", "chsh", "chfn", "gpasswd", "chage", "expiry", "mount", "umount", "fusermount", "fusermount3", "unix_chkpwd", "ssh-keysign", "at", "ping", "ping6"];
 
 pub struct LinuxSensor {
     pub proc: PathBuf,
@@ -102,9 +122,99 @@ impl LinuxSensor {
     /// One program that has just started. `None` when it is already gone.
     pub fn snapshot(&self, pid: u32) -> Option<Snap> {
         let proc = self.identity(pid)?;
-        let parent = base(&self.exe(proc.ppid)).to_string();
+        // A kernel thread has no program file: it is known by the name the kernel gives it.
+        let parent = self.identity(proc.ppid).map(|above| above.name).unwrap_or_default();
         let cmdline = self.cmdline(pid)?.trim().to_string();
-        Some(Snap { proc, cmdline, parent })
+        Some(Snap { proc, cmdline, parent, jumped: false, handed: false })
+    }
+
+    /// (real, effective, saved, file-system) user of a process.
+    fn users(&self, pid: u32) -> Option<[u32; 4]> {
+        let raw = lossy(&std::fs::read(self.proc.join(pid.to_string()).join("status")).ok()?);
+        let line = raw.lines().find(|line| line.starts_with("Uid:"))?;
+        let found: Vec<u32> = line[4..].split_whitespace().filter_map(|part| part.parse().ok()).collect();
+        (found.len() == 4).then(|| [found[0], found[1], found[2], found[3]])
+    }
+
+    /// The user a process runs as, read from who owns its folder here: one question, for a feed that asks it of
+    /// every new process. `None` when it is gone.
+    pub fn owner(&self, pid: u32) -> Option<u32> {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::MetadataExt;
+            std::fs::metadata(self.proc.join(pid.to_string())).ok().map(|meta| meta.uid())
+        }
+        #[cfg(not(unix))]
+        {
+            self.users(pid).map(|found| found[1])
+        }
+    }
+
+    /// Whether a program file hands root to whoever runs it: owned by root and marked set-user-id, or carrying
+    /// capabilities. The file is looked up where the process itself sees it, so a container's own files are the
+    /// ones read. `None` when it cannot be read.
+    #[cfg(unix)]
+    fn grants_root(&self, pid: u32, image: &Path) -> Option<bool> {
+        use std::os::unix::ffi::OsStrExt;
+        use std::os::unix::fs::MetadataExt;
+        let inside = self.proc.join(pid.to_string()).join("root").join(image.strip_prefix("/").ok()?);
+        let meta = std::fs::metadata(&inside).ok()?;
+        if meta.uid() == 0 && meta.mode() & 0o4000 != 0 {
+            return Some(true);
+        }
+        let name = std::ffi::CString::new(inside.as_os_str().as_bytes()).ok()?;
+        Some(has_capabilities(&name))
+    }
+
+    #[cfg(not(unix))]
+    fn grants_root(&self, _pid: u32, _image: &Path) -> Option<bool> {
+        None
+    }
+
+    /// True when this process runs as root, the process that started it belongs to an ordinary user, and none
+    /// of the programs it has been since it was born (`images`, the newest last) grants root. That is what a
+    /// kernel or service exploit leaves: root without `su`, `sudo` or any other program allowed to give it.
+    /// With nothing known about its past, or a file that cannot be read, the answer is no.
+    pub fn jumped(&self, proc: &Proc, images: &[PathBuf]) -> bool {
+        if proc.ppid <= 2 || images.is_empty() {
+            return false;
+        }
+        let (Some(own), Some(above)) = (self.users(proc.pid), self.users(proc.ppid)) else { return false };
+        if own[1] != 0 || above.contains(&0) {
+            return false;
+        }
+        images.iter().all(|image| self.grants_root(proc.pid, image) == Some(false))
+    }
+
+    /// Whether a program file contains these bytes, read where the process itself sees the file.
+    fn mentions(&self, pid: u32, image: &Path, needle: &[u8]) -> bool {
+        let Ok(inside) = image.strip_prefix("/") else { return false };
+        let inside = self.proc.join(pid.to_string()).join("root").join(inside);
+        if !std::fs::metadata(&inside).is_ok_and(|meta| meta.len() <= 4_194_304) {
+            return false;
+        }
+        std::fs::read(&inside).is_ok_and(|body| body.windows(needle.len()).any(|part| part == needle))
+    }
+
+    /// True when this process is a root shell, the process that started it belongs to an ordinary user, and the
+    /// program it was a moment ago is one that grants root only to do its own small job, or (`su`) only after
+    /// asking and then by starting the shell as a separate process. Such a program turning straight into a root
+    /// shell is what overwriting its code in memory looks like from outside.
+    pub fn handed(&self, proc: &Proc, images: &[PathBuf]) -> bool {
+        if proc.ppid <= 2 || images.len() < 2 || !SHELLS.contains(&proc.name.to_lowercase().as_str()) {
+            return false;
+        }
+        let (Some(own), Some(above)) = (self.users(proc.pid), self.users(proc.ppid)) else { return false };
+        if own[1] != 0 || above.contains(&0) {
+            return false;
+        }
+        let before = &images[images.len() - 2];
+        let name = base(&before.to_string_lossy()).to_string();
+        if !STAID.contains(&name.as_str()) || self.grants_root(proc.pid, before) != Some(true) {
+            return false;
+        }
+        // An `su` built without the sign-in library starts the shell in its own place, and that is its ordinary way.
+        name != "su" || self.mentions(proc.pid, before, b"libpam")
     }
 
     /// Processes that appeared since the last call: one directory listing, then only the new ones are read.

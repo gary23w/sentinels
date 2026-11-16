@@ -256,6 +256,7 @@ impl Cleaner {
         for home in self.homes() {
             folders.extend([("startup service", home.join(".config/systemd/user")), ("login item", home.join(".config/autostart")), ("login item", home.join("Library/LaunchAgents"))]);
             shared.extend([".bashrc", ".profile", ".bash_profile", ".zshrc", ".zprofile"].iter().map(|name| ("shell startup file", home.join(name))));
+            shared.push(("sign-in key", home.join(".ssh/authorized_keys")));
         }
         let mut places: Vec<(&'static str, PathBuf, bool)> = Vec::new();
         for (kind, folder) in folders {
@@ -581,7 +582,10 @@ impl StartupWatch {
             all.sort_unstable();
             self.known.insert(name.clone(), json!({"sig": signature, "lines": all}));
             changed = true;
-            if !new.is_empty() && !self.first {
+            // The keys an account already had when this agent first read them are its starting point: an agent
+            // that learns to read this place in a newer version must not take every old key for a new one.
+            let settled = kind == "sign-in key" && old.is_none() && std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).is_ok_and(|now| now.as_secs() as i64 - status.mtime() > 120);
+            if !new.is_empty() && !self.first && !settled {
                 // A file that was not there, or was there only as an empty file a moment ago, is new as a whole.
                 found.push(Appeared { kind: kind.to_string(), where_: name, whole: whole && was_empty, lines: new });
             }

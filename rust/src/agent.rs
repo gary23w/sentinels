@@ -8,6 +8,30 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
+/// Signals added after the first release of the service, with the signal set that first knew each. A service
+/// refuses a whole case over one signal it does not know, so it is sent only the ones it has said it knows.
+pub const LATER_SIGNALS: &[(&str, u64)] = &[("helper_with_child", 2), ("privilege_jump", 2), ("signin_key_added", 2)];
+
+/// The case as a service with this signal set can take it: without the signals it does not know, or `None`
+/// when nothing that makes it a case is left.
+pub fn known_to(mut case: Value, signal_set: u64) -> Option<Value> {
+    let strange = |signal: &Value| signal["id"].as_str().is_some_and(|id| LATER_SIGNALS.iter().any(|(known, since)| *known == id && *since > signal_set));
+    let Some(signals) = case["signals"].as_array() else { return Some(case) };
+    if !signals.iter().any(strange) {
+        return Some(case);
+    }
+    let kept: Vec<Value> = signals.iter().filter(|signal| !strange(signal)).cloned().collect();
+    let score: i64 = kept.iter().filter_map(|signal| signal["points"].as_i64()).sum();
+    if score < 5 {
+        return None;
+    }
+    let categories: std::collections::BTreeSet<&str> = kept.iter().filter(|signal| signal["points"].as_i64().is_some_and(|points| points > 0)).filter_map(|signal| signal["category"].as_str()).collect();
+    case["categories"] = serde_json::json!(categories);
+    case["score"] = serde_json::json!(score);
+    case["signals"] = serde_json::json!(kept);
+    Some(case)
+}
+
 pub const PROTOCOL: &str = "sentinel-v1";
 pub const MODES: &[&str] = &["report", "pause", "decide", "kill"];
 const MAX_RESPONSE_BYTES: u64 = 256 * 1024;

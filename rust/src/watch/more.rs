@@ -5,7 +5,7 @@ use super::{protected, Hands, Identity, Mode, Sensor, Watcher};
 use crate::linux::Snap;
 use crate::net;
 use crate::parse::Proc;
-use crate::score::{clean, level_for, risky_commands, ADVISORY_ADDRESSES, WEB_SERVER_PREFIXES};
+use crate::score::{clean, level_for, risky_commands, score_process, View, ADVISORY_ADDRESSES, WEB_SERVER_PREFIXES};
 use regex::Regex;
 use serde_json::{json, Map, Value};
 use std::collections::{HashMap, HashSet};
@@ -39,6 +39,8 @@ pub(crate) struct More {
     /// Programs a responder ended at the event, to clean up after at the next look: (case, the programs, where each lived, since when).
     pub after_event: Vec<(String, Vec<Proc>, HashMap<Identity, String>, f64)>,
     pub extra: Vec<Value>,
+    /// Privilege escalations said at the moment they were seen, by case, and when.
+    pub escalations: HashMap<String, f64>,
     pub seen: (usize, usize),
     pub process_feed: bool,
     pub clean_up: bool,
@@ -574,6 +576,35 @@ impl<S: Sensor, H: Hands> Watcher<S, H> {
         addresses.filter(|address| ADVISORY_ADDRESSES.contains(&address.as_str()) || self.fleet.iter().any(|(known, _)| known == address)).collect()
     }
 
+    // ------------------------------------------------------------ a privilege escalation, seen as it happens
+
+    /// A program that has just started and carries the mark of a privilege escalation: root that no program
+    /// granted, or a shell under a system helper that starts none. It may be gone before the next full look, so
+    /// it is reported now. It is never held or ended here.
+    pub(crate) fn escalation_case(&mut self, snap: &crate::linux::Snap, now: f64) {
+        let proc = &snap.proc;
+        let view = View { name: proc.name.clone(), path: proc.path.clone(), parent_name: snap.parent.clone(), system: self.sensor.system().to_string(),
+            cmdline: Some(snap.cmdline.clone()), jumped: snap.jumped, handed: snap.handed, ..View::default() };
+        let outcome = score_process(&view, now, &self.policy, &self.shapes, &self.system_root);
+        let marked = outcome.signals.iter().any(|signal| signal.points > 0 && (signal.id == "privilege_jump" || signal.id == "helper_with_child"));
+        if !marked || (outcome.level != "SUSPECT" && outcome.level != "HOSTILE") {
+            return;
+        }
+        let key = self.case_key(proc, &snap.parent);
+        if self.trusted.contains(&key) || self.more.extra.len() >= 32 || self.more.escalations.get(&key).is_some_and(|said| now - said < 3600.0) {
+            return;
+        }
+        if self.more.escalations.len() >= 512 {
+            self.more.escalations.clear();
+        }
+        self.more.escalations.insert(key.clone(), now);
+        let name = clean(&proc.name, 80);
+        self.more.extra.push(json!({"key": key, "level": outcome.level, "score": outcome.score, "name": if name.is_empty() { "unknown program".to_string() } else { name },
+            "path": clean(&proc.path, 300), "parent": clean(&snap.parent, 80), "categories": outcome.categories,
+            "signals": outcome.signals.iter().take(12).map(|signal| json!({"id": signal.id, "points": signal.points, "category": signal.category, "evidence": signal.evidence})).collect::<Vec<_>>(),
+            "remotes": [], "first_seen": now.trunc() as i64, "observed_at": now.trunc() as i64}));
+    }
+
     // ------------------------------------------------------------ startup entries that appear while watching
 
     /// A startup entry that appeared while this agent was watching and that runs something an intruder would.
@@ -582,8 +613,15 @@ impl<S: Sensor, H: Hands> Watcher<S, H> {
         let Some(found) = self.more.startup.as_mut().map(|watch| watch.poll()) else { return Vec::new() };
         let mut cases = Vec::new();
         for item in found {
+            if item.kind == "sign-in key" {
+                cases.extend(self.key_case(&item, procs, now));
+                continue;
+            }
             let words = String::from_utf8_lossy(&item.lines.join(&b'\n')).into_owned();
-            let hits: std::collections::BTreeSet<&str> = risky_commands().iter().filter(|(pattern, _)| pattern.is_match(&words)).map(|(_, label)| *label).collect();
+            let mut hits: std::collections::BTreeSet<&str> = risky_commands().iter().filter(|(pattern, _)| pattern.is_match(&words)).map(|(_, label)| *label).collect();
+            if crate::score::bare_download(&words) {
+                hits.insert("a download from a bare internet address");
+            }
             let mut files: Vec<String> = startup_drop().find_iter(&words).map(|found| found.as_str().to_string()).collect::<std::collections::BTreeSet<_>>().into_iter().collect();
             files.truncate(8);
             let weighted = |policy: &HashMap<String, i64>, signal: &str, points: i64| (points + policy.get(signal).copied().unwrap_or(0)).clamp(0, 9);
@@ -595,6 +633,10 @@ impl<S: Sensor, H: Hands> Watcher<S, H> {
             let temp = weighted(&self.policy, "runs_from_temp", 3);
             if !files.is_empty() && temp > 0 {
                 signals.push(json!({"id": "runs_from_temp", "points": temp, "category": "identity", "evidence": clean(&format!("A new {} was added that starts a program kept in a temporary folder.", item.kind), 200)}));
+            }
+            let borrowed = weighted(&self.policy, "system_name_elsewhere", 3);
+            if crate::score::borrowed_name(&item.where_, &words) && borrowed > 0 {
+                signals.push(json!({"id": "system_name_elsewhere", "points": borrowed, "category": "identity", "evidence": clean(&format!("A new {} carries Apple's name but starts a program kept in a user's folder.", item.kind), 200)}));
             }
             if signals.is_empty() {
                 continue; // an ordinary new entry: installing software adds these all the time
@@ -624,6 +666,24 @@ impl<S: Sensor, H: Hands> Watcher<S, H> {
             cases.push(case);
         }
         cases
+    }
+
+    /// A key that lets someone sign in over SSH was added to an account while nobody was signed in over SSH:
+    /// the way an intruder who got in through a service makes sure of the way back. With a session open it is
+    /// taken for the owner's own work. Reported; the key is never touched, so nobody is locked out by a mistake.
+    #[cfg(unix)]
+    fn key_case(&mut self, item: &crate::clean::Appeared, procs: &[Proc], now: f64) -> Option<Value> {
+        let session = procs.iter().any(|proc| proc.ppid > 1 && (proc.name == "sshd" || proc.name == "sshd-session"));
+        let points = (5 + self.policy.get("signin_key_added").copied().unwrap_or(0)).clamp(0, 9);
+        let key = self.digest(&format!("startup:{}", item.where_));
+        if session || points < 5 || self.trusted.contains(&key) {
+            return None;
+        }
+        let account = Path::new(&item.where_).parent().and_then(Path::parent).and_then(Path::file_name).map(|name| name.to_string_lossy().into_owned()).unwrap_or_default();
+        let evidence = clean(&format!("{} new SSH sign-in key(s) were added for the account {account} while nobody was signed in over SSH.", item.lines.len()), 200);
+        Some(json!({"key": key, "level": level_for(points, 1), "score": points, "name": "authorized_keys", "path": clean(&item.where_, 300), "parent": "", "categories": ["behaviour"],
+            "signals": [{"id": "signin_key_added", "points": points, "category": "behaviour", "evidence": evidence}], "remotes": [],
+            "first_seen": now.trunc() as i64, "observed_at": now.trunc() as i64, "persistence": [{"kind": "sign-in key", "where": clean(&item.where_, 200)}]}))
     }
 
     /// The same on Windows: a Run value, a scheduled task, a service or a startup-folder item that appeared while

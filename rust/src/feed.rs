@@ -3,11 +3,17 @@
 //! A command that lives for a few milliseconds is gone before any sampler looks. This thread is told about
 //! every program start as it happens and reads that process's identity and command line at once.
 //! It only listens: nothing on the machine waits for it.
+//!
+//! It is also told about every new process. One that is born belonging to an ordinary user is followed through
+//! the programs it becomes, so that one which turns up as root without ever having been a program that grants
+//! root is noticed (`LinuxSensor::jumped`), and so is one that becomes a root shell straight out of a program
+//! that never turns into one (`LinuxSensor::handed`). A process born as root costs one question and is not followed.
 
 
 
 use crate::linux::{exec_worth, LinuxSensor, Snap};
-use std::path::Path;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{channel, Receiver};
 use std::sync::Arc;
@@ -78,6 +84,8 @@ impl ExecFeed {
         let sensor = LinuxSensor::new(proc);
         std::thread::Builder::new().name("garrett-feed".into()).spawn(move || {
             let mut data = [0u8; 4096];
+            // Each followed process, and the programs it has been since it was born.
+            let mut followed: HashMap<u32, Vec<PathBuf>> = HashMap::new();
             while !stopped_in.load(Ordering::Relaxed) {
                 let got = unsafe { libc::recv(handle, data.as_mut_ptr() as *mut libc::c_void, data.len(), 0) };
                 if got < 0 {
@@ -88,6 +96,20 @@ impl ExecFeed {
                     break;
                 }
                 let got = got as usize;
+                if got >= 68 && word(&data, 36) == 1 {
+                    // PROC_EVENT_FORK: a new process (a new thread of an old one is not news).
+                    let (thread, born) = (word(&data, 60), word(&data, 64));
+                    if thread == born {
+                        if followed.len() >= 16384 {
+                            followed.clear(); // nothing says when a process ends: start over rather than grow
+                        }
+                        match sensor.owner(born) {
+                            Some(user) if user != 0 => followed.insert(born, Vec::new()),
+                            _ => followed.remove(&born),
+                        };
+                    }
+                    continue;
+                }
                 if got < 60 || word(&data, 36) != 2 {
                     continue; // not PROC_EVENT_EXEC
                 }
@@ -95,10 +117,21 @@ impl ExecFeed {
                 seen_in.fetch_add(1, Ordering::Relaxed);
                 let Ok(image) = std::fs::read_link(sensor.proc.join(pid.to_string()).join("exe")) else { continue };
                 caught_in.fetch_add(1, Ordering::Relaxed);
-                if !exec_worth(&image.to_string_lossy()) {
+                let worth = exec_worth(&image.to_string_lossy());
+                let mut too_long = false;
+                if let Some(images) = followed.get_mut(&pid) {
+                    images.push(image);
+                    too_long = images.len() > 8;
+                }
+                if too_long {
+                    followed.remove(&pid); // a long chain of programs: no longer followed
+                }
+                if !worth {
                     continue; // one look at its name, and nothing more is read
                 }
-                if let Some(snap) = sensor.snapshot(pid) {
+                if let Some(mut snap) = sensor.snapshot(pid) {
+                    snap.jumped = followed.get(&pid).is_some_and(|images| sensor.jumped(&snap.proc, images));
+                    snap.handed = followed.get(&pid).is_some_and(|images| sensor.handed(&snap.proc, images));
                     if sender.send(snap).is_err() {
                         break;
                     }

@@ -138,3 +138,36 @@ test('the Workers forwarder sends marks only, and the guard refuses only whom th
   assert.equal(asked.length, 1, 'the list is asked for once a minute, not once a request');
   assert.equal(await refused(visit('45.33.32.156'), {}, {}, fetcher), null, 'with no service configured nobody is refused');
 });
+
+test('a script served from an uploads folder, a smuggled object and an overflow probe are marked', () => {
+  assert.deepEqual(markOf('GET', '/wp-content/uploads/a.php', 200), { uploaded: true });
+  assert.equal(markOf('GET', '/wp-content/uploads/photo.jpg', 200), null);
+  assert.equal(markOf('GET', '/index.php', 200), null);
+  assert.equal(markOf('GET', '/uploads/a.php', 404).uploaded, undefined);
+  assert.equal(markOf('GET', '/uploads/a.php?cmd=id', 200).uploaded, undefined, 'a command parameter is the older mark');
+  assert.equal(markOf('GET', '/CFIDE/x.cfm?cmd=id', 200).shell, true);
+  assert.equal(markOf('GET', '/api?data=O:8:%22Requests%22:1:%7B%7D', 500).injection, 'object injection');
+  assert.equal(markOf('GET', '/r/' + '+'.repeat(60), 400).injection, 'a memory corruption probe');
+  assert.equal(markOf('GET', '/search?q=' + 'a+'.repeat(60), 200), null);
+  // An object sent in a cookie, as base64, alone or after a name and a colon. The cookie itself is not in the marks.
+  const object = btoa('O:8:"Requests":1:{s:3:"url";s:1:"x";}');
+  assert.deepEqual(markOf('GET', '/', 200, 'theme=dark; state=' + object), { injection: 'object injection', answered: true });
+  assert.equal(markOf('GET', '/', 403, 'warm=Warmer:' + object).injection, 'object injection');
+  assert.equal(markOf('GET', '/', 200, 'theme=dark; session=' + btoa('an ordinary session value 123456')), null);
+  assert.ok(!JSON.stringify(markOf('GET', '/', 200, 'state=' + object)).includes(object));
+  assert.deepEqual(rowsOf({ client: VISITOR, uploaded: true }), [['uploaded', '', '']]);
+  const row = (kind, at) => ({ kind, value: '', extra: '', at });
+  assert.deepEqual(judge([row('uploaded', 100)], 110), [{ id: 'web_shell_request', evidence: 'This web client was served a server-side script from an uploads folder 1 time(s).' }]);
+  assert.match(judge([row('uploaded', 100), row('shell', 101)], 110)[0].evidence, /with a command parameter 1 time/);
+});
+
+test('the service says which signals it knows and takes the later ones', async () => {
+  const { validateCase } = await import('../src/service.mjs');
+  const { SIGNAL_SET, SIGNALS } = await import('../src/signals.mjs');
+  assert.equal(SIGNAL_SET, 2);
+  for (const [id, points] of [['helper_with_child', 5], ['privilege_jump', 6]]) {
+    assert.ok(SIGNALS[id]);
+    const taken = validateCase({ key: 'a'.repeat(32), name: 'sh', path: '/usr/bin/dash', parent: 'bash', signals: [{ id, points, category: 'x', evidence: 'e' }], remotes: [], categories: [], level: 'SUSPECT', score: points, observed_at: 1794832407, first_seen: 1794832407 });
+    assert.equal(taken.signals[0].id, id);
+  }
+});

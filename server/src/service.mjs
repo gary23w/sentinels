@@ -2,7 +2,7 @@ import { analyze } from './analyst.mjs';
 import { CLOUD_EVIDENCE, CLOUD_SOURCES, evaluateCloud } from './cloud.mjs';
 import { judge, rowsOf } from './edge.mjs';
 import { currentPolicy, learningView, recallSimilar, rememberVerdict, resetLearning } from './learning.mjs';
-import { LOCKED, SIGNALS, TRUST, WATCH_HOSTS, levelFor, reported } from './signals.mjs';
+import { LOCKED, SIGNALS, SIGNAL_SET, TRUST, WATCH_HOSTS, levelFor, reported } from './signals.mjs';
 import { bodyJson, fail, json, now, randomToken, sameSecret, seal, sha256, text, unseal, whole } from './util.mjs';
 
 // Sentinel service: one Cloudflare Worker and one D1 database for one organisation.
@@ -180,7 +180,7 @@ async function readState(env, ctx) {
   const fleet = { indicators: Object.fromEntries(rows.results.map(row => [row.address, row.reason])), suspects,
     // FLEET_BLOCK=on: machines that may end programs also refuse traffic to and from the shared addresses.
     ...(env.FLEET_BLOCK === 'on' ? { block: rows.results.map(row => row.address).slice(0, 200) } : {}) };
-  const body = { policy: learned.policy, policy_revision: learned.revision, shapes: learned.shapes, watch: watchMap(env, ctx), fleet };
+  const body = { policy: learned.policy, policy_revision: learned.revision, shapes: learned.shapes, watch: watchMap(env, ctx), fleet, signals: SIGNAL_SET };
   const value = { ...body, revision: (await sha256(JSON.stringify(body))).slice(0, 16), devices,
     interval: clamp(Math.ceil(devices / positive(env.HEARTBEAT_WRITES_PER_SECOND, 25)), 300, 3600),
     pulse: clamp(Math.ceil(devices / positive(env.PULSE_REQUESTS_PER_SECOND, 500)), 60, 600) };
@@ -189,7 +189,7 @@ async function readState(env, ctx) {
 }
 // Every enrolled machine holds the same read key for the shared state. It opens nothing else.
 const stateKey = env => sha256('state:' + env.DATA_KEY);
-const sharedParts = state => ({ policy: state.policy, policy_revision: state.policy_revision, shapes: state.shapes, watch: state.watch, fleet: state.fleet });
+const sharedParts = state => ({ policy: state.policy, policy_revision: state.policy_revision, shapes: state.shapes, watch: state.watch, fleet: state.fleet, signals: state.signals });
 // Housekeeping, run on a timer (see the cron trigger in wrangler.example.jsonc): closed cases, expired shared
 // addresses and old audit lines are removed so the database stays small however long the service runs.
 export async function housekeeping(env, ctx) {

