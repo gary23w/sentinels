@@ -10,6 +10,7 @@
 #   garrett learned                   what this machine has learned from your verdicts
 #   garrett shield                    the privacy shield: trackers refused at the firewall, and what is left open
 #   garrett traffic                   which programs here talk to which trackers
+#   garrett hardware                  what this machine says about its firmware, boot chain and kernel
 #   sudo garrett update               install the newest version now (it also does this by itself, a few times a day)
 #
 # To make it part of a fleet, enrol it with your Sentinel service:

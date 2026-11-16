@@ -139,6 +139,10 @@ pub fn risky_commands() -> &'static Vec<(Regex, &'static str)> {
         (r"(?i)\brelease_agent\b|\bnotify_on_release\b", "a container escape through the cgroup release agent"),
         (r"(?i)\bsecurity\s+(dump-keychain|export\s+-k)\b", "the keychain copied out from a command line"),
         (r"(?i)\bnvme\s+(fw-download|fw-commit|fw-activate)\b", "firmware written to a storage drive"),
+        (r"(?i)\binsmod\s+(\./|/tmp/|/var/tmp/|/dev/shm/|/home/|/root/)", "a kernel module loaded from a temporary or home folder"),
+        (r"(?i)bcdedit(\.exe)?\s.*\b(testsigning|nointegritychecks)\s+on\b", "driver signature checks switched off for the next start"),
+        (r"(?i)\bmokutil\s+--disable-validation\b|\bspctl\s+--(master|global)-disable\b", "the system's check of what may run switched off"),
+        (r"(?i)\bflashrom\b.*\s(-w|--write)\b|chipsec_util(\.py)?\s+spi\s+(write|erase)\b", "the firmware chip written from the running system"),
     ])
 }
 

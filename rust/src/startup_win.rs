@@ -104,6 +104,17 @@ fn number(key: &Open, name: &str) -> Option<u32> {
     read(key, name).filter(|(kind, data)| *kind == 4 && data.len() >= 4).map(|(_, data)| u32::from_le_bytes([data[0], data[1], data[2], data[3]]))
 }
 
+/// A text value of the machine's own part of the registry.
+pub(crate) fn machine_text(sub: &str, name: &str) -> Option<String> {
+    let key = open(MACHINE, sub)?;
+    read(&key, name).filter(|(kind, _)| *kind == 1 || *kind == 2).map(|(_, data)| letters(&data).trim().chars().filter(|letter| !letter.is_control()).take(200).collect::<String>()).filter(|found| !found.is_empty())
+}
+
+/// A number value of the machine's own part of the registry.
+pub(crate) fn machine_number(sub: &str, name: &str) -> Option<u32> {
+    number(&open(MACHINE, sub)?, name)
+}
+
 fn mark(text: &str) -> String {
     Sha256::digest(text.as_bytes()).iter().take(8).map(|byte| format!("{byte:02x}")).collect()
 }

@@ -34,6 +34,8 @@ garrett \- host intrusion sentinel that stops what it catches
 .br
 .B garrett traffic
 .br
+.B garrett hardware
+.br
 .B garrett update
 .RB [ \-\-check ]
 .br
@@ -102,6 +104,11 @@ refuses it although a program here uses it. See
 .TP
 .B traffic
 Which programs on this machine were seen talking to which trackers.
+.TP
+.B hardware
+What this machine says about its firmware, its boot chain and its kernel, and
+whether any of it changed since the agent last read it. See
+.BR "BELOW THE SYSTEM" .
 .TP
 .B update
 Install the newest version now.
@@ -183,6 +190,35 @@ here. A tracker that your own software uses is left open and named. A tracker
 that shares its addresses with sites people visit is measured and never
 refused, because refusing the address would break those sites. A browser can
 still reach a refused tracker through a proxy or a VPN.
+.SH BELOW THE SYSTEM
+An attack on the firmware or the boot chain survives a reinstall and is out of
+reach of anything that only watches programs. garrett cannot stand inside the
+firmware and never writes to it. It reads what the machine says about itself
+down there, every few minutes, remembers it, and reports a change that an
+update does not explain:
+.IP \(bu 2
+Secure Boot (on a Mac, System Integrity Protection) was on and is now off.
+.IP \(bu 2
+The firmware's list of what to start has a new or changed entry, which is
+where a boot kit puts itself. The entry a firmware update makes for itself is
+not reported.
+.IP \(bu 2
+The firmware is older than it was.
+.IP \(bu 2
+The security chip's measurement of the firmware changed while the firmware
+still gives the same version and date: its code was altered without an update.
+.IP \(bu 2
+On Linux, a kernel module is loaded that is not among the modules installed
+for the running kernel.
+.IP \(bu 2
+Windows was restarted with its driver signature checks off.
+.PP
+The first reading is the starting point and nothing is reported from it. A
+machine that does not tell one of these things (a virtual machine without a
+security chip, an old board) is simply not judged on it;
+.B garrett hardware
+shows what could be read. Nothing is ever changed or undone down there: each
+report is a case for you to judge.
 .SH UPDATES
 The running agent asks the project's site a few times a day whether a newer
 version is out, and installs it. It installs nothing unless the site's list of

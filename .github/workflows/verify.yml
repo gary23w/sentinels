@@ -83,6 +83,11 @@ jobs:
           sudo apt-get install -y libcap2-bin gcc >/dev/null
           live=$(ls rust/target/release/deps/live-* | grep -v '\.d$' | head -1)
           sudo "$live" --ignored --nocapture live_jump
+      - name: The machine below the system can be read
+        run: |
+          (cd rust && cargo build --release --locked)
+          sudo rust/target/release/garrett --state-dir /tmp/garrett-below hardware | tee /tmp/below.txt
+          grep -q "boot protection" /tmp/below.txt && grep -q "firmware" /tmp/below.txt
       - name: Removal leaves nothing
         run: |
           sudo apt-get purge -y garrett >/dev/null
@@ -118,6 +123,11 @@ jobs:
           (cd rust && cargo test --release --locked --test live --no-run)
           live=$(ls rust/target/release/deps/live-* | grep -v '\.d$' | head -1)
           sudo env GARRETT_LIVE_ADDRESS=1.0.0.1 "$live" --ignored --nocapture live_block
+      - name: The machine below the system can be read
+        run: |
+          (cd rust && cargo build --release --locked)
+          sudo rust/target/release/garrett --state-dir /tmp/garrett-below hardware | tee /tmp/below.txt
+          grep -q "boot protection" /tmp/below.txt && grep -q "firmware" /tmp/below.txt
       - name: Removal leaves nothing
         run: |
           curl -fsSL "$BASE/garrett-macos.tar.gz" | tar -xz -C /tmp
@@ -205,6 +215,13 @@ jobs:
           Push-Location rust; cargo test --release --locked --test live -- --ignored --nocapture live_system_shell; $code = $LASTEXITCODE; Pop-Location
           Stop-Process -Id $made -Force -ErrorAction SilentlyContinue
           if ($code) { throw 'the live check failed' }
+      - name: The machine below the system can be read
+        shell: pwsh
+        run: |
+          Push-Location rust; cargo build --release --locked; Pop-Location
+          $said = & rust\target\release\garrett.exe --state-dir "$env:TEMP\garrett-below" hardware
+          $said
+          if (-not ($said -match 'boot protection') -or -not ($said -match 'firmware')) { throw 'the reading is missing' }
       - name: Removal leaves nothing
         shell: pwsh
         run: |

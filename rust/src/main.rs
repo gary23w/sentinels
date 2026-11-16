@@ -141,6 +141,7 @@ const USAGE: &str = "usage: garrett [--state-dir <folder>] <command>
   restore <case>        put back everything cleaned up under a case
   confirm <case>        this was an attack: never leave that program running again
   learned [--reset]     what this machine has learned from your verdicts; --reset forgets it
+  hardware              what this machine says about its firmware, boot chain and kernel, and what changed
   shield                the privacy shield: what it refuses, what it leaves open and why
   shield on|off         switch it on or off on this machine (it is on unless you say otherwise)
   shield allow <name>   never refuse this tracker;  shield cut <name>: refuse it although a program here uses it
@@ -295,6 +296,28 @@ fn command(arguments: &[String]) -> Result<i32, String> {
             }
             let shared = shield::TRACKERS.iter().filter(|name| !shield::has_own_network(name)).count();
             println!("Measured but never refused: {shared} tracker names whose addresses are shared with sites people visit. Refusing those addresses would break the sites.");
+            Ok(0)
+        }
+        "hardware" => {
+            let facts = garrett::hardware::read();
+            println!("Below the system, as this machine tells it now:");
+            for line in garrett::hardware::describe(&facts) {
+                println!("{line}");
+            }
+            let kept = garrett::hardware::HardwareWatch::new(&state.directory);
+            match kept.known() {
+                Some(before) => {
+                    let found = garrett::hardware::changes(before, &facts);
+                    if found.is_empty() {
+                        println!("Nothing has changed since the agent's last reading that an update does not explain.");
+                    }
+                    for change in found {
+                        println!("CHANGED  {}", change.evidence);
+                    }
+                }
+                None => println!("The running agent has not kept a reading yet (it does within seconds of starting)."),
+            }
+            println!("garrett reads these and never writes to them. A change is reported as a case; it is yours to judge.");
             Ok(0)
         }
         "learned" => {

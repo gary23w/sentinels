@@ -576,6 +576,23 @@ impl<S: Sensor, H: Hands> Watcher<S, H> {
         addresses.filter(|address| ADVISORY_ADDRESSES.contains(&address.as_str()) || self.fleet.iter().any(|(known, _)| known == address)).collect()
     }
 
+    // ------------------------------------------------------------ below the system: firmware, boot, kernel modules
+
+    /// Something changed below the operating system that an update does not explain. Reported with the next look;
+    /// nothing is ever done about it from here, because nothing down there is this agent's to change.
+    pub fn hardware_changed(&mut self, found: &[crate::hardware::Change], now: f64) {
+        for change in found.iter().take(8) {
+            let points = (change.points + self.policy.get(change.signal).copied().unwrap_or(0)).clamp(0, 9);
+            let key = self.digest(&format!("hardware:{}:{}", change.signal, change.subject));
+            if points < 5 || self.trusted.contains(&key) || self.more.extra.len() >= 32 {
+                continue;
+            }
+            self.more.extra.push(json!({"key": key, "level": level_for(points, 1), "score": points, "name": clean(&change.subject, 80), "path": "", "parent": "", "categories": ["hardware"],
+                "signals": [{"id": change.signal, "points": points, "category": "hardware", "evidence": clean(&change.evidence, 200)}], "remotes": [],
+                "first_seen": now.trunc() as i64, "observed_at": now.trunc() as i64}));
+        }
+    }
+
     // ------------------------------------------------------------ a privilege escalation, seen as it happens
 
     /// A program that has just started and carries the mark of a privilege escalation: root that no program

@@ -22,6 +22,12 @@ export const SIGNALS = {
   hidden_browser: S(5, 'behaviour', 'is a browser started where nobody can see it'),
   remote_control_tool: S(3, 'behaviour', 'is a remote-control tool running from outside the program folders'),
   address_lookup_host: S(1, 'destinations', 'asked an outside service for the public address of the machine'),
+  boot_protection_off: S(6, 'hardware', 'had Secure Boot (or System Integrity Protection) switched off'),
+  boot_entry_added: S(5, 'hardware', 'had the firmware\'s list of what to start changed'),
+  firmware_downgraded: S(5, 'hardware', 'had an older firmware put back'),
+  firmware_changed_unannounced: S(6, 'hardware', 'had its firmware code altered without an update'),
+  kernel_module_loose: S(5, 'hardware', 'had a kernel module loaded that is not among the installed ones'),
+  driver_checks_off: S(6, 'hardware', 'was restarted with driver signature checks off'),
   system_tool_misuse: S(4, 'behaviour', 'is a Windows system tool being used the way malware loaders use one'),
   discovery_command: S(2, 'behaviour', 'ran a who-am-I command the way an intruder does on arrival'),
   threat_executed: S(3, 'behaviour', 'ran or is still active according to Windows Defender'),
@@ -72,7 +78,7 @@ export const WATCH_HOSTS = ['webhook.site', 'pastebin.com', 'paste.ee', 'rentry.
   'api.telegram.org', 'api.anthropic.com', 'api.deepseek.com', 'open.bigmodel.cn', 'api.x.ai', 'xcai.pro'];
 // Which signals this service knows, said to agents with the shared state: an agent newer than the service keeps
 // back the signals a lower number does not cover. Raise it whenever a signal is added.
-export const SIGNAL_SET = 2;
+export const SIGNAL_SET = 3;
 export const TRUST = new Set(['installed_program', 'owner_trusted', 'known_baseline']);
 // Never learned up or down: published indicators, the antivirus's own verdict, attacks on a service, and
 // directory attacks.

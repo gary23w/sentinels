@@ -184,6 +184,30 @@ fn build(state: &State, salt: &str, mode: &str, clean: bool, fallback_kill: bool
     watcher.set_process_feed(feeds.process_feed());
     let folders = watcher.startup_folders();
     let watcher: Shared2 = Arc::new(Mutex::new(watcher));
+    // Below the system: read every few minutes by a thread of its own, so nothing slow is done while the watcher
+    // is held. The first reading is the starting point; only a later change is handed over.
+    {
+        let (watcher, directory) = (watcher.clone(), state.directory.clone());
+        let _ = std::thread::Builder::new().name("garrett-hardware".into()).spawn(move || {
+            let mut watch = crate::hardware::HardwareWatch::new(&directory);
+            std::thread::sleep(Duration::from_secs(5));
+            while !STOP.load(Ordering::SeqCst) {
+                let found = watch.take(crate::hardware::read());
+                if !found.is_empty() {
+                    match watcher.lock() {
+                        Ok(mut watcher) => watcher.hardware_changed(&found, now()),
+                        Err(_) => return,
+                    }
+                }
+                for _ in 0..300 {
+                    if STOP.load(Ordering::SeqCst) {
+                        return;
+                    }
+                    std::thread::sleep(Duration::from_secs(1));
+                }
+            }
+        });
+    }
     let started: Arc<Mutex<Vec<Snap>>> = Arc::new(Mutex::new(Vec::new()));
 
     // The responders: each program start is judged at once by whichever of them is free, several at a time.
