@@ -191,8 +191,11 @@ fn build(state: &State, salt: &str, mode: &str, clean: bool, fallback_kill: bool
         let _ = std::thread::Builder::new().name("garrett-hardware".into()).spawn(move || {
             let mut watch = crate::hardware::HardwareWatch::new(&directory);
             std::thread::sleep(Duration::from_secs(5));
+            let mut readings = 0u64;
             while !STOP.load(Ordering::SeqCst) {
-                let found = watch.take(crate::hardware::read());
+                // The disks and the boot loader's files once an hour; everything else each time.
+                let found = watch.take(crate::hardware::read(readings % 12 == 0), now());
+                readings += 1;
                 if !found.is_empty() {
                     match watcher.lock() {
                         Ok(mut watcher) => watcher.hardware_changed(&found, now()),

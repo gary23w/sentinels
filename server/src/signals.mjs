@@ -28,6 +28,7 @@ export const SIGNALS = {
   firmware_changed_unannounced: S(6, 'hardware', 'had its firmware code altered without an update'),
   kernel_module_loose: S(5, 'hardware', 'had a kernel module loaded that is not among the installed ones'),
   driver_checks_off: S(6, 'hardware', 'was restarted with driver signature checks off'),
+  boot_code_changed: S(6, 'hardware', 'had the code it starts from changed without a boot loader update'),
   system_tool_misuse: S(4, 'behaviour', 'is a Windows system tool being used the way malware loaders use one'),
   discovery_command: S(2, 'behaviour', 'ran a who-am-I command the way an intruder does on arrival'),
   threat_executed: S(3, 'behaviour', 'ran or is still active according to Windows Defender'),

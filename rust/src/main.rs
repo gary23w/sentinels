@@ -299,7 +299,7 @@ fn command(arguments: &[String]) -> Result<i32, String> {
             Ok(0)
         }
         "hardware" => {
-            let facts = garrett::hardware::read();
+            let facts = garrett::hardware::read(true);
             println!("Below the system, as this machine tells it now:");
             for line in garrett::hardware::describe(&facts) {
                 println!("{line}");
@@ -307,7 +307,8 @@ fn command(arguments: &[String]) -> Result<i32, String> {
             let kept = garrett::hardware::HardwareWatch::new(&state.directory);
             match kept.known() {
                 Some(before) => {
-                    let found = garrett::hardware::changes(before, &facts);
+                    let updated = before.get("loader_update_seen").and_then(|seen| seen.parse::<f64>().ok()).unwrap_or(0.0);
+                    let found = garrett::hardware::changes(before, &facts, updated, agent::now());
                     if found.is_empty() {
                         println!("Nothing has changed since the agent's last reading that an update does not explain.");
                     }

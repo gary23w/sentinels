@@ -203,6 +203,11 @@ The firmware's list of what to start has a new or changed entry, which is
 where a boot kit puts itself. The entry a firmware update makes for itself is
 not reported.
 .IP \(bu 2
+The code the machine starts from changed: the boot sector of a disk, the space
+behind it where GRUB keeps its core on a BIOS machine, or a boot loader file on
+the firmware's partition, and no boot loader update was installed that would
+explain it. These are read once an hour.
+.IP \(bu 2
 The firmware is older than it was.
 .IP \(bu 2
 The security chip's measurement of the firmware changed while the firmware
