@@ -1,3 +1,22 @@
+garrett (1.7.0) stable; urgency=medium
+
+  * At the network card. Two things on the wire that no program on the
+    machine starts are now reported; nothing is done about either, because
+    what is wrong is on another machine.
+    - Another machine on the network starts answering in place of the
+      gateway. The system's table of neighbours is read every two seconds
+      (every thirty on a Mac) and the change is reported the moment the
+      gateway's hardware address becomes one that already belongs to
+      another machine. A new router is learned without a word.
+    - On Linux, a machine on the network tries port after port. The first
+      packet of each arriving connection attempt is read at the network
+      card: who sent it and which port it asked for, never what follows.
+      Thirty different ports from one neighbour in a minute are reported.
+      Scans from the open internet are not.
+  * garrett hardware also says whether the gateway could be read.
+
+ -- sentinels <noreply@sentinels.invalid>  Mon, 16 Nov 2026 23:30:00 +0000
+
 garrett (1.6.0) stable; urgency=medium
 
   * Below the system. The agent reads what the machine says about its
