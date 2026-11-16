@@ -10,7 +10,7 @@ use std::time::Duration;
 
 /// Signals added after the first release of the service, with the signal set that first knew each. A service
 /// refuses a whole case over one signal it does not know, so it is sent only the ones it has said it knows.
-pub const LATER_SIGNALS: &[(&str, u64)] = &[("helper_with_child", 2), ("privilege_jump", 2), ("signin_key_added", 2)];
+pub const LATER_SIGNALS: &[(&str, u64)] = &[("helper_with_child", 2), ("privilege_jump", 2), ("signin_key_added", 2), ("hidden_browser", 2), ("remote_control_tool", 2), ("address_lookup_host", 2)];
 
 /// The case as a service with this signal set can take it: without the signals it does not know, or `None`
 /// when nothing that makes it a case is left.

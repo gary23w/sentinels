@@ -100,16 +100,20 @@ fn live_jump() {
     }
     // Root that nothing granted: a process of the user `nobody` that holds the right to change user, changes to
     // root and starts a shell. No program on its way grants root.
-    let python = "import os; os.setuid(0); os.execv(\"/bin/sh\", [\"sh\", \"-c\", \"sleep 3\"])";
-    let line = format!("capsh --caps='cap_setuid+eip cap_setpcap,cap_setgid+ep' --keep=1 --user=nobody --addamb=cap_setuid -- -c \"python3 -c '{python}'; true\"");
-    let child = std::process::Command::new("sh").args(["-c", &line]).spawn().expect("capsh and python3 are needed");
+    let folder = std::path::Path::new("/usr/local/libexec/garrett-live");
+    let _ = std::fs::remove_dir_all(folder);
+    std::fs::create_dir_all(folder).unwrap();
+    std::fs::write(folder.join("up.py"), "import os
+os.setuid(0)
+os.execv('/bin/sh', ['sh', '-c', 'sleep 3'])
+").unwrap();
+    assert!(shell("chmod 755 /usr/local/libexec/garrett-live && chmod 644 /usr/local/libexec/garrett-live/up.py"));
+    let line = "capsh --caps='cap_setuid+eip cap_setpcap,cap_setgid+ep' --keep=1 --user=nobody --addamb=cap_setuid -- -c 'python3 /usr/local/libexec/garrett-live/up.py; true'";
+    let child = std::process::Command::new("sh").args(["-c", line]).spawn().expect("capsh and python3 are needed");
     assert_eq!(seen_within(6), (true, false), "root that no program granted");
     let _ = child.wait_with_output();
     // A stand-in for a tampered `su`: a program of that name that grants root, is built with the sign-in library's
     // name in it as the real one is, and turns straight into a root shell, which the real one never does.
-    let folder = std::path::Path::new("/usr/local/libexec/garrett-live");
-    let _ = std::fs::remove_dir_all(folder);
-    std::fs::create_dir_all(folder).unwrap();
     std::fs::write(folder.join("su.c"), "#include <unistd.h>\nconst char *library = \"libpam.so.0\";\nint main(void) { if (library[0] == 0 || setuid(0)) return 1; execl(\"/bin/sh\", \"sh\", \"-c\", \"sleep 3\", (char *)0); return 1; }\n").unwrap();
     assert!(shell("cd /usr/local/libexec/garrett-live && cc -O0 -o su su.c && chown root:root su && chmod 4755 su && chmod 755 ."), "the stand-in could not be built");
     let child = std::process::Command::new("sh").args(["-c", "sudo -n -u nobody sh -c '/usr/local/libexec/garrett-live/su; true'"]).spawn().unwrap();

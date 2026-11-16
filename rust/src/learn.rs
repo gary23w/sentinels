@@ -27,6 +27,7 @@ pub const SIGNALS: &[(&str, i64, &str)] = &[
     ("system_name_elsewhere", 3, "identity"), ("advisory_tool_name", 2, "identity"), ("script_from_document", 3, "lineage"),
     ("shell_from_web_server", 3, "lineage"), ("risky_command_line", 3, "lineage"), ("script_from_shortcut", 3, "lineage"),
     ("program_from_attachment", 3, "lineage"), ("remote_session_shell", 3, "lineage"), ("helper_with_child", 5, "lineage"), ("privilege_jump", 6, "privilege"), ("signin_key_added", 5, "behaviour"),
+    ("hidden_browser", 5, "behaviour"), ("remote_control_tool", 3, "behaviour"), ("address_lookup_host", 1, "destinations"),
     ("system_tool_misuse", 4, "behaviour"),
     ("discovery_command", 2, "behaviour"), ("threat_executed", 3, "behaviour"), ("antivirus_detection", 5, "antivirus"), ("tor_routing", 3, "destinations"),
     ("learned_attack_shape", 2, "learned"), ("fleet_indicator", 3, "destinations"), ("metadata_access_from_web", 2, "behaviour"),

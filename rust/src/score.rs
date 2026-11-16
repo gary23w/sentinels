@@ -23,6 +23,12 @@ pub const DROP_HOSTS: &[&str] = &[
     "0x0.st", "temp.sh", "ngrok.io", "ngrok-free.app", "ngrok.app", "trycloudflare.com", "loca.lt", "serveo.net",
     "localhost.run", "duckdns.org", "ddns.net", "no-ip.org", "hopto.org", "api.telegram.org",
 ];
+/// Services that tell a program the public address of the machine it runs on. Bots and stealers ask on arrival.
+pub const LOOKUP_HOSTS: &[&str] = &["api.ipify.org", "ifconfig.me", "icanhazip.com", "ip-api.com", "checkip.amazonaws.com", "ipinfo.io", "showip.net", "myexternalip.com", "ipecho.net"];
+/// Remote-control tools, by the name of the program that runs (without `.exe`). Installed by their owner they
+/// live in the program folders; a fake helpdesk has its victim start one from a download.
+pub const REMOTE_TOOLS: &[&str] = &["anydesk", "teamviewer", "teamviewerqs", "rustdesk", "screenconnect.clientservice", "screenconnect.windowsclient", "client32", "meshagent",
+    "supremo", "ultraviewer_desktop", "dwagent", "tacticalrmm", "ateraagent", "getscreen", "rutserv"];
 pub const TOR_NAMES: &[&str] = &["tor", "tor.exe"];
 pub const TOR_SOCKS_PORTS: &[u16] = &[9050, 9150];
 pub const TOR_RELAY_PORTS: &[u16] = &[9001, 9030];
@@ -37,7 +43,7 @@ pub const BROWSERS: &[&str] = &["chrome.exe", "msedge.exe", "firefox.exe", "brav
 pub const DOCUMENT_PARENTS_MORE: &[&str] = &[
     "winword.exe", "excel.exe", "powerpnt.exe", "outlook.exe", "onenote.exe", "acrord32.exe", "acrobat.exe",
     "foxitpdfreader.exe", "sumatrapdf.exe", "7zfm.exe", "7zg.exe", "winrar.exe", "thunderbird.exe",
-    "microsoft word", "microsoft excel", "microsoft powerpoint", "microsoft outlook", "preview", "mail",
+    "microsoft word", "microsoft excel", "microsoft powerpoint", "microsoft outlook", "preview", "mail", "script editor",
 ];
 pub const LOADER_TOOLS: &[&str] = &["msbuild.exe", "cmstp.exe"];
 pub const LOADER_HOSTS: &[&str] = &["regsvr32.exe", "rundll32.exe", "mshta.exe"];
@@ -131,6 +137,8 @@ pub fn risky_commands() -> &'static Vec<(Regex, &'static str)> {
         (r"(?i)bcdedit(\.exe)?\s.*\bremovememory\b", "a boot setting that hides memory from Windows"),
         (r"(?i)msiexec(\.exe)?\s.*https?://.*\s[/-]q|msiexec(\.exe)?\s.*\s[/-]q\w*\s.*https?://", "an installer fetched from the internet and run silently"),
         (r"(?i)\brelease_agent\b|\bnotify_on_release\b", "a container escape through the cgroup release agent"),
+        (r"(?i)\bsecurity\s+(dump-keychain|export\s+-k)\b", "the keychain copied out from a command line"),
+        (r"(?i)\bnvme\s+(fw-download|fw-commit|fw-activate)\b", "firmware written to a storage drive"),
     ])
 }
 
@@ -190,7 +198,24 @@ pub fn bare_download(words: &str) -> bool {
 pub fn borrowed_name(place: &str, words: &str) -> bool {
     static CELL: OnceLock<Regex> = OnceLock::new();
     let user_program = regex(&CELL, r"<string>(/Users/|/private/tmp/|/tmp/|/private/var/folders/|/var/folders/)[^<]*</string>");
-    (place.contains("/Library/LaunchAgents/") || place.contains("/Library/LaunchDaemons/")) && words.contains("<string>com.apple.") && user_program.is_match(words)
+    if !(place.contains("/Library/LaunchAgents/") || place.contains("/Library/LaunchDaemons/")) {
+        return false;
+    }
+    // Google's updater of that name starts from Google's own software-update folder and nowhere else.
+    (words.contains("<string>com.apple.") && user_program.is_match(words)) || (words.contains("<string>com.google.keystone") && !words.contains("/Google/GoogleSoftwareUpdate/"))
+}
+
+/// A browser started where nobody can see it: off the screen and also headless or one dot in size, or carrying an
+/// extension while hidden. Test tools hide a browser one way; a password stealer makes sure with two.
+pub fn hidden_browser(line: &str) -> bool {
+    static CELL: OnceLock<Regex> = OnceLock::new();
+    let low = line.to_lowercase();
+    if low.contains("--type=") {
+        return false; // one of the browser's own helper processes
+    }
+    let off_screen = regex(&CELL, r"--window-position=-\d{4,}").is_match(&low);
+    let (headless, dot, extension) = (low.contains("--headless"), low.contains("--window-size=1,1"), low.contains("--load-extension="));
+    (off_screen && (headless || dot)) || (extension && (headless || off_screen))
 }
 
 /// Text that came from the device, made safe to show: control characters and angle brackets become spaces.
@@ -461,8 +486,15 @@ pub fn score_process(view: &View, now: f64, policy: &HashMap<String, i64>, shape
         }
     }
 
-    let runs_others_code = scripted || has(LOADER_TOOLS, name) || has(ASSEMBLY_HOSTS, name) || has(DIRECTORY_TOOLS, name);
+    let unseen = browser && cmdline.is_some_and(hidden_browser);
+    if unseen {
+        add(&mut signals, "hidden_browser", 5, "behaviour", "The browser was started where nobody can see it, the way a password stealer opens one to read what it has saved.");
+    }
+    let runs_others_code = scripted || unseen || has(LOADER_TOOLS, name) || has(ASSEMBLY_HOSTS, name) || has(DIRECTORY_TOOLS, name);
     let trusted_install = system_path(path, system, system_root) && !runs_others_code;
+    if !trusted_install && has(REMOTE_TOOLS, name.strip_suffix(".exe").unwrap_or(name)) {
+        add(&mut signals, "remote_control_tool", 3, "behaviour", &format!("{} is a remote-control tool, and it runs from outside the program folders: what a fake helpdesk has its victim start.", view.name));
+    }
 
     // Tor: the client itself outside the system folders, or any other program routing through it
     if has(TOR_NAMES, name) {
@@ -535,6 +567,10 @@ pub fn score_process(view: &View, now: f64, policy: &HashMap<String, i64>, shape
             let named: Vec<String> = models.iter().chain(shared_models.iter()).take(2).cloned().collect();
             let by_address = if models.is_empty() { ", matched by address" } else { "" };
             add(&mut signals, "llm_api_host", 1, "destinations", &format!("Calls an AI model API ({}{by_address}) from a program outside the system folders.", named.join(", ")));
+        }
+        let (lookups, _) = matches(LOOKUP_HOSTS);
+        if !lookups.is_empty() && !trusted_install {
+            add(&mut signals, "address_lookup_host", 1, "destinations", &format!("Asked an outside service for this machine's public address ({}).", lookups.iter().take(2).cloned().collect::<Vec<_>>().join(", ")));
         }
         let odd: BTreeSet<u16> = internet.iter().map(|remote| remote.port).filter(|port| !USUAL_PORTS.contains(port)).collect();
         if !odd.is_empty() && !trusted_install {

