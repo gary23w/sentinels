@@ -13,6 +13,10 @@
 //
 // Settings: SENTINEL_URL and SENTINEL_TOKEN, as for the tail Worker. The list is asked for at most once a minute
 // in each place your Worker runs; if the service cannot be reached, nobody is refused.
+//
+// If your service is itself a Worker on the same account's workers.dev address, give the Worker that uses this the
+// compatibility flag "global_fetch_strictly_public". Without it Cloudflare answers the request for the list with
+// error 1042, and nobody is refused.
 let held = { at: 0, addresses: new Set() };
 
 export async function refusedAddresses(env, ctx, fetcher = fetch) {

@@ -87,6 +87,13 @@ test('marks forwarded by an edge system become a case for that visitor, kept wit
   assert.equal((await call('POST', '/v1/cases/' + cases[0].id + '/action', { action: 'confirm' }, ADMIN)).status, 200);
   assert.deepEqual((await call('GET', '/v1/edge/refused', null, INGEST)).body, { addresses: ['45.33.32.156'] });
   assert.equal((await call('GET', '/v1/edge/refused', null, 'wrong'.repeat(8))).status, 401);
+  // The visitor comes back and is turned away; that request is forwarded too and opens the case again. They stay
+  // refused, until the operator takes the verdict back.
+  assert.equal((await call('POST', '/v1/edge-events', { name: 'shop-api', records: [record('GET', '/', 403, '45.33.32.156')] }, INGEST)).body.saved, 1);
+  assert.equal((await call('GET', '/v1/cases?state=open', null, ADMIN)).body.cases.length, 1);
+  assert.deepEqual((await call('GET', '/v1/edge/refused', null, INGEST)).body, { addresses: ['45.33.32.156'] });
+  assert.equal((await call('POST', '/v1/cases/' + cases[0].id + '/action', { action: 'reopen' }, ADMIN)).status, 200);
+  assert.deepEqual((await call('GET', '/v1/edge/refused', null, INGEST)).body, { addresses: [] });
   // A directory scan alone is below the bar, as it is for the agent: it is kept, and counts with anything else.
   const again = service();
   const scan = Array.from({ length: 60 }, (_, index) => record('GET', '/wp-content/' + index + '.bak', 404));

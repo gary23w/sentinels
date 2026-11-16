@@ -343,9 +343,10 @@ async function edgeEvents(request, env, ctx) {
   return json({ accepted: true, records: input.records.length, saved });
 }
 // The visitors an operator confirmed as attackers on an edge system in the last week. Nothing is refused on a
-// score alone: an edge system that reads this list refuses only whom a person has judged.
+// score alone: an edge system that reads this list refuses only whom a person has judged. The visitor stays on
+// the list when they come back and the case opens again; an operator takes them off with "trust" or "reopen".
 async function edgeRefused(env) {
-  const rows = await env.DB.prepare("SELECT c.detail FROM audit a JOIN cases c ON c.id=a.detail JOIN devices d ON d.id=c.device_id WHERE a.actor='operator' AND a.action='case_confirm' AND a.at>? AND d.platform='edge' AND c.state='resolved' ORDER BY a.at DESC LIMIT 200").bind(now() - 7 * 86400).all();
+  const rows = await env.DB.prepare("SELECT c.detail FROM audit a JOIN cases c ON c.id=a.detail JOIN devices d ON d.id=c.device_id WHERE a.actor='operator' AND a.action='case_confirm' AND a.at>? AND d.platform='edge' AND NOT EXISTS (SELECT 1 FROM audit b WHERE b.detail=a.detail AND b.actor='operator' AND b.action IN ('case_trust','case_reopen') AND b.id>a.id) ORDER BY a.at DESC LIMIT 200").bind(now() - 7 * 86400).all();
   const addresses = new Set();
   for (const row of rows.results) {
     try { const address = (await unseal(row.detail, env.DATA_KEY)).remotes?.[0]?.address; if (typeof address === 'string' && IP.test(address) && !privateAddress(address)) addresses.add(address); } catch {}
