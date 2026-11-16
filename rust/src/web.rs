@@ -8,11 +8,11 @@ use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
-pub const WEB_LOG_GLOBS: &[&str] = &["/var/log/nginx/*access*.log", "/var/log/apache2/*access*.log", "/var/log/httpd/*access*log", "C:\\inetpub\\logs\\LogFiles\\W3SVC*\\*.log"];
+pub const WEB_LOG_GLOBS: &[&str] = &["/var/log/nginx/*access*.log", "/var/log/apache2/*access*.log", "/var/log/httpd/*access*log", "/var/log/httpd-access.log", "C:\\inetpub\\logs\\LogFiles\\W3SVC*\\*.log"];
 /// Where a container's output is kept on the machine that runs it. A web server in a container writes its access
 /// log there, so one agent on the root machine can read them all.
 pub const CONTAINER_LOG_GLOBS: &[&str] = &["/var/lib/docker/containers/*/*-json.log", "/var/log/pods/*/*/*.log"];
-pub const WEB_ROOTS: &[&str] = &["/var/www", "/usr/share/nginx/html", "/srv/www", "C:\\inetpub\\wwwroot"];
+pub const WEB_ROOTS: &[&str] = &["/var/www", "/usr/share/nginx/html", "/srv/www", "/usr/local/www", "C:\\inetpub\\wwwroot"];
 pub const SCRIPT_EXTENSIONS: &[&str] = &[".php", ".phtml", ".phar", ".jsp", ".jspx", ".aspx", ".ashx", ".asp", ".cfm"];
 
 struct Patterns {

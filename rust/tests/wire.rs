@@ -230,3 +230,19 @@ fn a_keyboard_never_seen_before_is_noticed_and_the_ones_this_machine_has_had_are
     assert_eq!(keyboards_linux(&base.join("nothing")), None, "a machine that does not tell");
     let _ = std::fs::remove_dir_all(&base);
 }
+
+#[test]
+fn freebsds_list_of_sockets_gives_the_connections_and_who_listens() {
+    use garrett::parse::parse_sockstat;
+    let connected = "USER     COMMAND    PID   FD PROTO  LOCAL ADDRESS         FOREIGN ADDRESS      \nroot     sshd       1234  4  tcp4   192.168.1.5:22        192.168.1.9:51000\nwww      nginx      2200  9  tcp4   192.168.1.5:443       93.184.216.34:40222\nsam      curl       3100  5  tcp4   192.168.1.5:50111     93.184.216.34:443\nsam      curl       3101  5  tcp6   2001:db8::5:50112     2606:4700::1111:443\nroot     syslogd    700   7  udp4   *:514                 *:*\n";
+    let listening = "USER     COMMAND    PID   FD PROTO  LOCAL ADDRESS         FOREIGN ADDRESS      \nroot     sshd       1234  3  tcp4   *:22                  *:*\nwww      nginx      2200  6  tcp4   *:443                 *:*\nroot     sshd       1234  5  tcp6   *:22                  *:*\n";
+    let (conns, doors) = parse_sockstat(connected, listening);
+    assert_eq!(conns.len(), 4);
+    assert_eq!(doors, std::collections::HashSet::from([1234, 2200]));
+    let by = |pid: u32| conns.iter().find(|conn| conn.pid == pid).unwrap();
+    assert!(by(1234).inbound && by(2200).inbound, "a connection on a port its program listens on arrived");
+    assert!(!by(3100).inbound);
+    assert_eq!((by(3100).raddr.as_str(), by(3100).rport, by(3100).lport), ("93.184.216.34", 443, 50111));
+    assert_eq!((by(3101).raddr.as_str(), by(3101).rport), ("2606:4700::1111", 443));
+    assert_eq!(parse_sockstat("", "").0.len(), 0);
+}

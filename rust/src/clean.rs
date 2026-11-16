@@ -110,7 +110,7 @@ impl Cleaner {
     }
 
     fn zones(&self) -> Vec<PathBuf> {
-        let zones = if self.system == "macos" { MACOS_ZONES } else if self.system == "linux" { LINUX_ZONES } else { &[] };
+        let zones = if self.system == "macos" { MACOS_ZONES } else if self.system == "linux" || self.system == "freebsd" { LINUX_ZONES } else { &[] };
         zones.iter().map(|zone| self.root.join(zone)).collect()
     }
 
@@ -230,7 +230,7 @@ impl Cleaner {
         let parent = if self.system == "macos" { "Users" } else { "home" };
         let mut homes: Vec<PathBuf> = sorted_entries(&self.root.join(parent), 200).unwrap_or_default().into_iter()
             .filter(|entry| entry.is_dir() && std::fs::symlink_metadata(entry).map(|meta| !meta.file_type().is_symlink()).unwrap_or(false)).collect();
-        if self.system == "linux" {
+        if self.system == "linux" || self.system == "freebsd" {
             homes.push(self.root.join("root"));
         } else if self.system == "macos" {
             homes.push(self.root.join("var/root"));
@@ -253,6 +253,9 @@ impl Cleaner {
         let mut folders: Vec<(&'static str, PathBuf)> = vec![("startup service", root.join("etc/systemd/system")), ("scheduled job", root.join("etc/cron.d")),
             ("startup service", root.join("Library/LaunchDaemons")), ("login item", root.join("Library/LaunchAgents"))];
         let mut shared: Vec<(&'static str, PathBuf)> = vec![("scheduled job", root.join("etc/crontab")), ("startup script", root.join("etc/rc.local"))];
+        // FreeBSD keeps its services' start scripts and its users' scheduled jobs here.
+        folders.push(("startup service", root.join("usr/local/etc/rc.d")));
+        shared.extend(sorted_entries(&root.join("var/cron/tabs"), 300).unwrap_or_default().into_iter().filter(|entry| plain_file(entry)).map(|entry| ("scheduled job", entry)));
         for home in self.homes() {
             folders.extend([("startup service", home.join(".config/systemd/user")), ("login item", home.join(".config/autostart")), ("login item", home.join("Library/LaunchAgents"))]);
             shared.extend([".bashrc", ".profile", ".bash_profile", ".zshrc", ".zprofile"].iter().map(|name| ("shell startup file", home.join(name))));

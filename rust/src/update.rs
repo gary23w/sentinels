@@ -80,6 +80,7 @@ pub fn file_name() -> Option<&'static str> {
         ("linux", "aarch64") => Some("garrett-linux-aarch64"),
         ("linux", "arm") => Some("garrett-linux-armv7"),
         ("macos", _) => Some("garrett-macos"),
+        ("freebsd", "x86_64") => Some("garrett-freebsd-x86_64"),
         ("windows", "x86_64") => Some("garrett-windows.exe"),
         _ => None,
     }

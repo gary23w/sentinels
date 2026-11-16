@@ -39,6 +39,8 @@ restart() {
     systemctl restart garrett.service
   elif [ "$(uname -s)" = Darwin ] && [ -f /Library/LaunchDaemons/com.garrett.agent.plist ]; then
     launchctl kickstart -k system/com.garrett.agent >/dev/null 2>&1 || true
+  elif [ "$(uname -s)" = FreeBSD ] && [ -x /usr/local/etc/rc.d/garrett ]; then
+    service garrett restart >/dev/null 2>&1 || true
   fi
 }
 case "${1:-}" in

@@ -68,6 +68,7 @@ pub fn platform() -> Option<&'static str> {
     match std::env::consts::OS {
         "linux" => Some("linux"),
         "macos" => Some("macos"),
+        "freebsd" => Some("freebsd"),
         "windows" => Some("windows"),
         _ => None,
     }

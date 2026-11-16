@@ -2,7 +2,7 @@
 //! cases kept on the machine. What differs between systems
 //! is behind `machine`.
 
-#![cfg(any(target_os = "linux", target_os = "macos", windows))]
+#![cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd", windows))]
 
 use crate::agent::{self, call, jitter, local_line, now, CallError, State};
 use crate::linux::Snap;
@@ -192,7 +192,7 @@ fn build(state: &State, salt: &str, mode: &str, clean: bool, fallback_kill: bool
         let _ = std::thread::Builder::new().name("garrett-gateway".into()).spawn(move || {
             let (mut watch, mut newer) = (crate::lan::GatewayWatch::default(), crate::lan::GatewayWatch::default());
             let mut keyboards = crate::devices::KeyboardWatch::new(&directory);
-            let pause = if cfg!(target_os = "macos") { 30 } else { 2 }; // there it is asked through two programs
+            let pause = if cfg!(any(target_os = "macos", target_os = "freebsd")) { 30 } else { 2 }; // there it is asked through two programs
             let mut readings = 0u64;
             while !STOP.load(Ordering::SeqCst) {
                 let mut found: Vec<crate::lan::Found> = crate::lan::read().and_then(|seen| watch.take(&seen, now())).into_iter().collect();
@@ -223,8 +223,8 @@ fn build(state: &State, salt: &str, mode: &str, clean: bool, fallback_kill: bool
             }
         });
     }
-    // macOS: the same first packets, through the system's packet device, on the card this machine sends out through.
-    #[cfg(target_os = "macos")]
+    // macOS and FreeBSD: the same first packets, through the system's packet device, on the card this machine sends out through.
+    #[cfg(any(target_os = "macos", target_os = "freebsd"))]
     {
         let watcher = watcher.clone();
         let _ = std::thread::Builder::new().name("garrett-card".into()).spawn(move || {

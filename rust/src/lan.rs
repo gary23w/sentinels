@@ -91,19 +91,19 @@ pub fn read_listing6(neighbours: &str, route: &str) -> Option<Neighbours> {
 }
 
 /// This machine's neighbours and way out for the newer kind of address, asked of the system's own tools.
-#[cfg(any(windows, target_os = "macos", target_os = "linux"))]
+#[cfg(any(windows, target_os = "macos", target_os = "freebsd", target_os = "linux"))]
 pub fn read6() -> Option<Neighbours> {
     let run = |arguments: &[&str]| crate::tool::run(arguments, None, std::time::Duration::from_secs(10)).unwrap_or_default();
     #[cfg(target_os = "linux")]
     let (neighbours, route) = (run(&["ip", "-6", "neigh", "show"]), run(&["ip", "-6", "route", "show", "default"]));
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "freebsd"))]
     let (neighbours, route) = (run(&["/usr/sbin/ndp", "-an"]), run(&["/sbin/route", "-n", "get", "-inet6", "default"]));
     #[cfg(windows)]
     let (neighbours, route) = (run(&["netsh.exe", "interface", "ipv6", "show", "neighbors"]), run(&["route.exe", "print", "-6"]));
     read_listing6(&neighbours, &route)
 }
 
-#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
+#[cfg(not(any(windows, target_os = "macos", target_os = "freebsd", target_os = "linux")))]
 pub fn read6() -> Option<Neighbours> {
     None
 }
@@ -120,12 +120,12 @@ pub fn card_of(route: &str) -> Option<String> {
 }
 
 /// The network card this machine sends out through.
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "freebsd"))]
 pub fn way_out_card() -> Option<String> {
     card_of(&crate::tool::run(&["/sbin/route", "-n", "get", "default"], None, std::time::Duration::from_secs(10)).unwrap_or_default())
 }
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "freebsd"))]
 pub fn read() -> Option<Neighbours> {
     let run = |arguments: &[&str]| crate::tool::run(arguments, None, std::time::Duration::from_secs(10)).unwrap_or_default();
     read_listing(&run(&["/usr/sbin/arp", "-an"]), &run(&["/sbin/route", "-n", "get", "default"]))
@@ -186,7 +186,7 @@ pub fn read() -> Option<Neighbours> {
     Some(Neighbours { gateway, table })
 }
 
-#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
+#[cfg(not(any(windows, target_os = "macos", target_os = "freebsd", target_os = "linux")))]
 pub fn read() -> Option<Neighbours> {
     None
 }

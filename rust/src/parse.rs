@@ -125,6 +125,27 @@ pub fn parse_lsof(raw: &str) -> Vec<Conn> {
     rows.iter().filter(|row| row.0 != "LISTEN" && row.4 != 0).map(|(_, owner, lport, raddr, rport, laddr)| Conn::new(*owner, *lport, raddr, *rport, listening.contains(&(*owner, *lport)), laddr)).collect()
 }
 
+/// FreeBSD's `sockstat -46 -c -P tcp` (connected) and the same with `-l` (listening): the connections, each marked
+/// as arriving when its program listens on that port, and the programs that listen.
+pub fn parse_sockstat(connected: &str, listening: &str) -> (Vec<Conn>, HashSet<u32>) {
+    // "address:port", the address possibly of the newer kind (its own colons) or "*".
+    let end = |text: &str| -> Option<(String, u32)> {
+        let (address, port) = text.rsplit_once(':')?;
+        Some((if address == "*" { String::new() } else { address.to_string() }, if port == "*" { 0 } else { port.parse().ok()? }))
+    };
+    // USER COMMAND PID FD PROTO LOCAL FOREIGN
+    let rows = |raw: &str| -> Vec<(u32, (String, u32), (String, u32))> {
+        raw.lines().filter_map(|line| {
+            let fields: Vec<&str> = line.split_whitespace().collect();
+            (fields.len() >= 7 && fields[4].starts_with("tcp")).then(|| Some((fields[2].parse::<u32>().ok()?, end(fields[5])?, end(fields[6])?))).flatten()
+        }).take(20000).collect()
+    };
+    let doors: HashSet<(u32, u32)> = rows(listening).into_iter().map(|(pid, local, _)| (pid, local.1)).collect();
+    let conns = rows(connected).into_iter().filter(|(_, _, remote)| remote.1 != 0 && !remote.0.is_empty())
+        .map(|(pid, local, remote)| Conn::new(pid, local.1, &remote.0, remote.1, doors.contains(&(pid, local.1)), &local.0)).collect();
+    (conns, doors.into_iter().map(|(pid, _)| pid).collect())
+}
+
 /// `ps -axo pid=,ppid=,comm=`: every process with its parent and program path.
 pub fn parse_ps(raw: &str) -> Vec<Proc> {
     static CELL: OnceLock<Regex> = OnceLock::new();

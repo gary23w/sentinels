@@ -4,6 +4,8 @@
 
 #[cfg(target_os = "linux")]
 pub use crate::live::{background, refresh_now, refresh_processes, sensor, startup_signal, Feeds, Live, RealHands, SYSTEM};
+#[cfg(target_os = "freebsd")]
+pub use crate::bsd::{background, refresh_now, refresh_processes, sensor, startup_signal, Feeds, Live, RealHands, SYSTEM};
 #[cfg(target_os = "macos")]
 pub use crate::mac::{background, refresh_now, refresh_processes, sensor, startup_signal, Feeds, Live, RealHands, SYSTEM};
 #[cfg(windows)]

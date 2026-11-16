@@ -18,6 +18,9 @@
 //!   agent, run     state, the service client, the service loop and the no-service loop
 
 pub mod agent;
+#[cfg(target_os = "freebsd")]
+pub mod bsd;
+pub mod bsdproc;
 #[cfg(unix)]
 pub mod clean;
 #[cfg(windows)]
@@ -34,7 +37,7 @@ pub mod linux;
 pub mod live;
 #[cfg(target_os = "macos")]
 pub mod mac;
-#[cfg(any(target_os = "linux", target_os = "macos", windows))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd", windows))]
 pub mod machine;
 pub mod net;
 #[cfg(target_os = "linux")]
@@ -42,7 +45,7 @@ pub mod notify;
 pub mod parse;
 pub mod persist;
 pub mod respond;
-#[cfg(any(target_os = "linux", target_os = "macos", windows))]
+#[cfg(any(target_os = "linux", target_os = "macos", target_os = "freebsd", windows))]
 pub mod run;
 pub mod score;
 pub mod shield;

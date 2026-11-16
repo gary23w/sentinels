@@ -26,7 +26,7 @@ import { bodyJson, fail, json, now, randomToken, sameSecret, seal, sha256, text,
 // The only command this service ever sends an agent is the operator's own decision on a program that agent
 // paused. It cannot name a process or run anything on a device.
 export const PROTOCOL = 'sentinel-v1';
-const PLATFORMS = ['windows', 'macos', 'linux'], MAX_CASES = 8, MAX_CASES_PER_DEVICE = 60;
+const PLATFORMS = ['windows', 'macos', 'linux', 'freebsd'], MAX_CASES = 8, MAX_CASES_PER_DEVICE = 60;
 // What one machine can set off by itself in a day, whatever it reports: addresses added to the shared list, and
 // questions put to the decision model. A machine an intruder controls holds a valid credential, so neither may
 // be unlimited. An operator's own verdict is not limited this way.

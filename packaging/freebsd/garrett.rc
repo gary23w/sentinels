@@ -1,0 +1,20 @@
+#!/bin/sh
+# garrett, the Sentinel agent, as a FreeBSD service. The same as on every other system: enrol first if the
+# configuration names a service, run as root, and start again if it ever stops.
+#
+# PROVIDE: garrett
+# REQUIRE: NETWORKING
+# KEYWORD: shutdown
+
+. /etc/rc.subr
+
+name="garrett"
+rcvar="garrett_enable"
+pidfile="/var/run/${name}.pid"
+command="/usr/sbin/daemon"
+command_args="-r -R 20 -P ${pidfile} -o /var/log/garrett.log /bin/sh -c '/usr/local/bin/garrett auto; exec /usr/local/bin/garrett run'"
+
+load_rc_config $name
+: ${garrett_enable:="NO"}
+
+run_rc_command "$1"
