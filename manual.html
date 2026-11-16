@@ -63,6 +63,8 @@ hr { display: none; }
   <br/>
   <b>garrett traffic</b>
   <br/>
+  <b>garrett hardware</b>
+  <br/>
   <b>garrett update</b> [<b>--check</b>]
   <br/>
   <b>garrett run</b></p>
@@ -115,6 +117,10 @@ hr { display: none; }
       refuses it although a program here uses it. See <b>PRIVACY</b>.</dd>
   <dt id="traffic"><a class="permalink" href="#traffic"><b>traffic</b></a></dt>
   <dd>Which programs on this machine were seen talking to which trackers.</dd>
+  <dt id="hardware"><a class="permalink" href="#hardware"><b>hardware</b></a></dt>
+  <dd>What this machine says about its firmware, its boot chain and its kernel,
+      and whether any of it changed since the agent last read it. See <b>BELOW
+      THE SYSTEM</b>.</dd>
   <dt id="update"><a class="permalink" href="#update"><b>update</b></a></dt>
   <dd>Install the newest version now. <b>--check</b> only says whether there is
       one. The running agent does this by itself a few times a day; see
@@ -184,6 +190,38 @@ hr { display: none; }
     A tracker that shares its addresses with sites people visit is measured and
     never refused, because refusing the address would break those sites. A
     browser can still reach a refused tracker through a proxy or a VPN.</p>
+</section>
+<section class="Sh">
+<h1 class="Sh" id="BELOW_THE_SYSTEM"><a class="permalink" href="#BELOW_THE_SYSTEM">BELOW
+  THE SYSTEM</a></h1>
+<p class="Pp">An attack on the firmware or the boot chain survives a reinstall
+    and is out of reach of anything that only watches programs. garrett cannot
+    stand inside the firmware and never writes to it. It reads what the machine
+    says about itself down there, every few minutes, remembers it, and reports a
+    change that an update does not explain:</p>
+<ul class="Bl-bullet">
+  <li>Secure Boot (on a Mac, System Integrity Protection) was on and is now
+    off.</li>
+  <li>The firmware's list of what to start has a new or changed entry, which is
+      where a boot kit puts itself. The entry a firmware update makes for itself
+      is not reported.</li>
+  <li>The code the machine starts from changed: the boot sector of a disk, the
+      space behind it where GRUB keeps its core on a BIOS machine, or a boot
+      loader file on the firmware's partition, and no boot loader update was
+      installed that would explain it. These are read once an hour.</li>
+  <li>The firmware is older than it was.</li>
+  <li>The security chip's measurement of the firmware changed while the firmware
+      still gives the same version and date: its code was altered without an
+      update.</li>
+  <li>On Linux, a kernel module is loaded that is not among the modules
+      installed for the running kernel.</li>
+  <li>Windows was restarted with its driver signature checks off.</li>
+</ul>
+<p class="Pp">The first reading is the starting point and nothing is reported
+    from it. A machine that does not tell one of these things (a virtual machine
+    without a security chip, an old board) is simply not judged on it;
+    <b>garrett hardware</b> shows what could be read. Nothing is ever changed or
+    undone down there: each report is a case for you to judge.</p>
 </section>
 <section class="Sh">
 <h1 class="Sh" id="UPDATES"><a class="permalink" href="#UPDATES">UPDATES</a></h1>
