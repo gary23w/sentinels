@@ -1,3 +1,15 @@
+garrett (1.4.0) stable; urgency=medium
+
+  * Systems that cannot run the agent are covered through the service: an
+    edge system forwards marks of its requests (never the request text) and
+    each visitor is judged by the rules the agent applies to a web server.
+  * A forwarder and a guard for Cloudflare Workers come with the service.
+  * A 32-bit ARM agent for small boards and devices.
+  * The bundle installs garrett as an OpenRC service where there is no
+    systemd, and no longer refuses a machine that has no ss command.
+
+ -- sentinels <noreply@sentinels.invalid>  Mon, 16 Nov 2026 12:00:00 +0000
+
 garrett (1.3.1) stable; urgency=medium
 
   * The privacy shield no longer holds up the part of the agent that stops
