@@ -1,3 +1,30 @@
+garrett (1.6.0) stable; urgency=medium
+
+  * Below the system. The agent reads what the machine says about its
+    firmware and its boot chain, remembers it, and reports a change that no
+    update explains. It only reads; nothing down there is ever changed.
+    - Secure Boot (on a Mac, System Integrity Protection) was on and is now
+      off.
+    - The firmware's list of what to start has a new or changed entry.
+    - The code the machine starts from changed: the boot sector of a disk,
+      the space behind it where GRUB keeps its core on a BIOS machine, or a
+      boot loader file on the firmware's partition, and no boot loader
+      update was installed (Linux and Windows).
+    - The firmware is older than it was.
+    - The security chip's measurement of the firmware changed while the
+      firmware still gives the same version and date.
+    - On Linux, a kernel module is loaded that is not among the modules
+      installed for the running kernel.
+    - Windows was restarted with its driver signature checks off.
+  * garrett hardware shows what could be read on this machine and whether
+    any of it changed since the agent's last reading.
+  * More command lines are recognised: a kernel module loaded from a
+    temporary or home folder, driver signature checks switched off, the
+    system's check of what may run switched off, and the firmware chip
+    written from the running system.
+
+ -- sentinels <noreply@sentinels.invalid>  Mon, 16 Nov 2026 23:00:00 +0000
+
 garrett (1.5.0) stable; urgency=medium
 
   * Privilege escalation is reported as it happens. On Linux: a root shell
