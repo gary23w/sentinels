@@ -188,14 +188,29 @@ fn build(state: &State, salt: &str, mode: &str, clean: bool, fallback_kill: bool
     // for the gateway is seen while it is doing it. On Linux the first packet of each arriving connection attempt
     // is read as well, by a thread that waits on the card itself.
     {
-        let watcher = watcher.clone();
+        let (watcher, directory) = (watcher.clone(), state.directory.clone());
         let _ = std::thread::Builder::new().name("garrett-gateway".into()).spawn(move || {
-            let mut watch = crate::lan::GatewayWatch::default();
+            let (mut watch, mut newer) = (crate::lan::GatewayWatch::default(), crate::lan::GatewayWatch::default());
+            let mut keyboards = crate::devices::KeyboardWatch::new(&directory);
             let pause = if cfg!(target_os = "macos") { 30 } else { 2 }; // there it is asked through two programs
+            let mut readings = 0u64;
             while !STOP.load(Ordering::SeqCst) {
-                if let Some(found) = crate::lan::read().and_then(|seen| watch.take(&seen)) {
+                let mut found: Vec<crate::lan::Found> = crate::lan::read().and_then(|seen| watch.take(&seen, now())).into_iter().collect();
+                // The newer kind of address is asked of the system's own tools: every half minute.
+                if readings % (30 / pause) == 0 {
+                    found.extend(crate::lan::read6().and_then(|seen| newer.take(&seen, now())));
+                }
+                readings += 1;
+                for found in found {
                     match watcher.lock() {
                         Ok(mut watcher) => watcher.network_found(&found, now()),
+                        Err(_) => return,
+                    }
+                }
+                // Keyboards: one this machine never had is told to the watcher the moment it is seen.
+                if crate::devices::keyboards().is_some_and(|present| keyboards.take(&present) > 0) {
+                    match watcher.lock() {
+                        Ok(mut watcher) => watcher.keyboard_arrived(now()),
                         Err(_) => return,
                     }
                 }
@@ -208,12 +223,29 @@ fn build(state: &State, salt: &str, mode: &str, clean: bool, fallback_kill: bool
             }
         });
     }
-    #[cfg(target_os = "linux")]
+    // macOS: the same first packets, through the system's packet device, on the card this machine sends out through.
+    #[cfg(target_os = "macos")]
     {
         let watcher = watcher.clone();
         let _ = std::thread::Builder::new().name("garrett-card".into()).spawn(move || {
+            std::thread::sleep(Duration::from_secs(20));
+            let Some(card) = crate::lan::way_out_card() else { return };
             let mut watch = crate::lan::ScanWatch::default();
-            let _ = crate::lan::listen(&STOP, |source, port| {
+            let _ = crate::card::listen(&STOP, &card, |packet| {
+                if let Some(found) = crate::lan::opening(packet).and_then(|(source, port)| watch.attempt(&source, port, now())) {
+                    if let Ok(mut watcher) = watcher.lock() {
+                        watcher.network_found(&found, now());
+                    }
+                }
+            });
+        });
+    }
+    #[cfg(target_os = "linux")]
+    for newer in [false, true] {
+        let watcher = watcher.clone();
+        let _ = std::thread::Builder::new().name("garrett-card".into()).spawn(move || {
+            let mut watch = crate::lan::ScanWatch::default();
+            let _ = crate::lan::listen(&STOP, newer, |source, port| {
                 if let Some(found) = watch.attempt(&source, port, now()) {
                     if let Ok(mut watcher) = watcher.lock() {
                         watcher.network_found(&found, now());

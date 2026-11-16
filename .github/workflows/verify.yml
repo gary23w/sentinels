@@ -123,6 +123,10 @@ jobs:
           (cd rust && cargo test --release --locked --test live --no-run)
           live=$(ls rust/target/release/deps/live-* | grep -v '\.d$' | head -1)
           sudo env GARRETT_LIVE_ADDRESS=1.0.0.1 "$live" --ignored --nocapture live_block
+      - name: The network card can be read for arriving connection attempts
+        run: |
+          live=$(ls rust/target/release/deps/live-* | grep -v '\.d$' | head -1)
+          sudo "$live" --ignored --nocapture live_card
       - name: The machine below the system can be read
         run: |
           (cd rust && cargo build --release --locked)

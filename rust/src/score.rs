@@ -29,6 +29,8 @@ pub const LOOKUP_HOSTS: &[&str] = &["api.ipify.org", "ifconfig.me", "icanhazip.c
 /// live in the program folders; a fake helpdesk has its victim start one from a download.
 pub const REMOTE_TOOLS: &[&str] = &["anydesk", "teamviewer", "teamviewerqs", "rustdesk", "screenconnect.clientservice", "screenconnect.windowsclient", "client32", "meshagent",
     "supremo", "ultraviewer_desktop", "dwagent", "tacticalrmm", "ateraagent", "getscreen", "rutserv"];
+/// The programs a person opens to type commands into, on Linux and macOS.
+pub const TERMINALS: &[&str] = &["gnome-terminal-server", "gnome-terminal", "konsole", "xterm", "xfce4-terminal", "kitty", "alacritty", "tilix", "terminator", "lxterminal", "qterminal", "terminal", "iterm2"];
 pub const TOR_NAMES: &[&str] = &["tor", "tor.exe"];
 pub const TOR_SOCKS_PORTS: &[u16] = &[9050, 9150];
 pub const TOR_RELAY_PORTS: &[u16] = &[9001, 9030];
@@ -317,6 +319,8 @@ pub struct View {
     pub jumped: bool,
     /// It is a root shell that a system program which never becomes one turned into directly.
     pub handed: bool,
+    /// A keyboard this machine had never seen was plugged in seconds before it started.
+    pub new_keyboard: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -433,6 +437,11 @@ pub fn score_process(view: &View, now: f64, policy: &HashMap<String, i64>, shape
     };
     if odd_parent {
         add(&mut signals, "helper_with_child", 5, "lineage", &format!("Started by {}, a system helper that has no reason to start it: the mark of a privilege escalation.", view.parent_name));
+    }
+    // A command window opened from where a person types, seconds after a keyboard this machine had never seen.
+    let typed_into = if system == "windows" { is_script_host(name) && parent == "explorer.exe" } else { is_shell(name) && has(TERMINALS, &parent) };
+    if view.new_keyboard && typed_into {
+        add(&mut signals, "keyboard_injection", 5, "behaviour", "A keyboard this machine had never seen was plugged in, and seconds later a command window was opened: how a device that types by itself works.");
     }
     if view.handed {
         add(&mut signals, "privilege_jump", 6, "privilege", "A system program that gives root only after asking turned straight into a root shell: the mark of that program having been tampered with.");

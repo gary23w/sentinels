@@ -406,3 +406,34 @@ fn a_browser_nobody_can_see_a_helpdesk_tool_from_a_download_and_an_address_looku
     let (level, signals) = judged(&editor);
     assert!(signals.contains(&"script_from_document".to_string()) && level == "SUSPECT", "{signals:?}");
 }
+
+#[test]
+fn a_command_window_seconds_after_a_keyboard_never_seen_before_is_reported_and_nothing_else_is() {
+    let typed = |view: View| judged(&View { new_keyboard: true, ..view });
+    let (level, signals) = typed(windows("powershell.exe", "explorer.exe", "powershell.exe"));
+    assert_eq!((level.as_str(), signals.as_slice()), ("SUSPECT", &["keyboard_injection".to_string()][..]));
+    assert!(typed(linux("bash", "/usr/bin/bash", "gnome-terminal-server", "bash")).1.contains(&"keyboard_injection".to_string()));
+    // The same windows without a new keyboard, and what starts elsewhere while one is plugged in.
+    assert_eq!(judged(&windows("powershell.exe", "explorer.exe", "powershell.exe")).0, "CLEAR");
+    assert!(typed(windows("notepad.exe", "explorer.exe", "notepad.exe")).1.is_empty());
+    assert!(typed(windows("cmd.exe", "svchost.exe", "cmd.exe /c backup.cmd")).1.is_empty());
+    assert!(typed(linux("bash", "/usr/bin/bash", "cron", "bash -c /usr/local/bin/job")).1.is_empty());
+
+    // Through the watcher: the keyboard arrives, a command window opens within seconds, and it is one case.
+    let explorer = Proc { pid: 500, ppid: 1, name: "bash".into(), path: "/usr/bin/bash".into(), started: 5 };
+    let mut watcher = Watcher::new(Machine { procs: vec![explorer] }, Some(Recorded::default()), &"a".repeat(64), Mode::Kill, "");
+    watcher.own.insert(1_000_000_000);
+    assert!(look(&mut watcher, T).is_empty());
+    let shell = Snap { proc: Proc { pid: 600, ppid: 500, name: "bash".into(), path: "/usr/bin/bash".into(), started: 9 }, cmdline: "bash".into(), parent: "gnome-terminal-server".into(), jumped: false, handed: false };
+    watcher.on_exec(&shell, T + 1.0);
+    assert!(look(&mut watcher, T + 1.0).is_empty(), "a terminal opened on an ordinary day");
+    watcher.keyboard_arrived(T + 100.0);
+    watcher.on_exec(&shell, T + 103.0);
+    let cases = look(&mut watcher, T + 103.0);
+    assert_eq!(cases.len(), 1, "{cases:?}");
+    assert_eq!(cases[0]["signals"][0]["id"], "keyboard_injection");
+    assert!(watcher.hands.as_ref().unwrap().touched.is_empty(), "reported, not ended");
+    let later = Snap { proc: Proc { pid: 700, ..shell.proc.clone() }, parent: "konsole".into(), ..shell.clone() };
+    watcher.on_exec(&later, T + 200.0);
+    assert!(look(&mut watcher, T + 200.0).is_empty(), "long after the keyboard arrived");
+}

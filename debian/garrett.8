@@ -225,22 +225,28 @@ security chip, an old board) is simply not judged on it;
 shows what could be read. Nothing is ever changed or undone down there: each
 report is a case for you to judge.
 .SH AT THE NETWORK CARD
-Two things happen on the wire that no program on this machine starts:
+Things happen on the wire, and at the sockets of the machine, that no program
+on it starts:
 .IP \(bu 2
 Another machine on the network starts answering in place of the gateway, so
 that what this machine sends out passes through it. garrett reads the system's
-table of neighbours every two seconds (every thirty on a Mac) and reports the
-moment the gateway's hardware address becomes one that already belongs to
-another machine on the network. A new router is learned without a word.
+table of neighbours every two seconds (every thirty on a Mac, and every thirty
+for IPv6 everywhere) and reports the moment the gateway's hardware address
+becomes that of a machine that was already on the network, or starts going
+back and forth between two, which is what happens while the true gateway and
+an impostor both keep answering. A new router is learned without a word.
 .IP \(bu 2
-On Linux, a machine on the network tries port after port here. garrett reads
-the first packet of each arriving connection attempt at the network card: who
-sent it and which port it asked for, never what follows. Thirty different
-ports from one neighbour in a minute are reported, once an hour for each
-neighbour. Scans from the open internet are not reported.
+On Linux and macOS, a machine on the network tries port after port here.
+garrett reads the first packet of each arriving connection attempt at the
+network card: who sent it and which port it asked for, never what follows.
+Thirty different ports from one neighbour in a minute are reported, once an
+hour for each neighbour. Scans from the open internet are not reported.
+.IP \(bu 2
+On Linux and Windows, a keyboard this machine has never had is plugged in and
+a command window opens within seconds: how a device that types by itself
+works. Only the names of the keyboards are read, never a key.
 .PP
-Both are reported and nothing is done about them: what is wrong is on another
-machine. Addresses on the newer kind of network (IPv6) are not read yet.
+All of these are reported and nothing is done about them.
 .SH UPDATES
 The running agent asks the project's site a few times a day whether a newer
 version is out, and installs it. It installs nothing unless the site's list of

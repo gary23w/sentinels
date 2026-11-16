@@ -30,7 +30,7 @@ pub const SIGNALS: &[(&str, i64, &str)] = &[
     ("hidden_browser", 5, "behaviour"), ("remote_control_tool", 3, "behaviour"), ("address_lookup_host", 1, "destinations"),
     ("boot_protection_off", 6, "hardware"), ("boot_entry_added", 5, "hardware"), ("firmware_downgraded", 5, "hardware"), ("firmware_changed_unannounced", 6, "hardware"),
     ("kernel_module_loose", 5, "hardware"), ("driver_checks_off", 6, "hardware"), ("boot_code_changed", 6, "hardware"),
-    ("gateway_impersonated", 6, "network"), ("port_scan", 5, "network"),
+    ("gateway_impersonated", 6, "network"), ("port_scan", 5, "network"), ("keyboard_injection", 5, "behaviour"),
     ("system_tool_misuse", 4, "behaviour"),
     ("discovery_command", 2, "behaviour"), ("threat_executed", 3, "behaviour"), ("antivirus_detection", 5, "antivirus"), ("tor_routing", 3, "destinations"),
     ("learned_attack_shape", 2, "learned"), ("fleet_indicator", 3, "destinations"), ("metadata_access_from_web", 2, "behaviour"),

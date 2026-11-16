@@ -49,6 +49,7 @@ pub fn view_from(value: &Value) -> View {
         siege: value["siege"].as_bool().unwrap_or(false),
         jumped: value["jumped"].as_bool().unwrap_or(false),
         handed: value["handed"].as_bool().unwrap_or(false),
+        new_keyboard: value["new_keyboard"].as_bool().unwrap_or(false),
     }
 }
 

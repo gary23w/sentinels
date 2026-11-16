@@ -41,6 +41,8 @@ pub(crate) struct More {
     pub extra: Vec<Value>,
     /// Privilege escalations said at the moment they were seen, by case, and when.
     pub escalations: HashMap<String, f64>,
+    /// When a keyboard this machine had never seen was last plugged in.
+    pub keyboard_at: f64,
     pub seen: (usize, usize),
     pub process_feed: bool,
     pub clean_up: bool,
@@ -593,6 +595,12 @@ impl<S: Sensor, H: Hands> Watcher<S, H> {
         }
     }
 
+    /// A keyboard this machine had never seen was plugged in just now. Nothing is said about that alone: people
+    /// buy keyboards. A command window that opens in the next seconds is judged with it in mind.
+    pub fn keyboard_arrived(&mut self, now: f64) {
+        self.more.keyboard_at = now;
+    }
+
     // ------------------------------------------------------------ at the network card: the gateway, and a scan
 
     /// Something was found on the wire that no program here started. Reported with the next look; what is wrong
@@ -616,9 +624,9 @@ impl<S: Sensor, H: Hands> Watcher<S, H> {
     pub(crate) fn escalation_case(&mut self, snap: &crate::linux::Snap, now: f64) {
         let proc = &snap.proc;
         let view = View { name: proc.name.clone(), path: proc.path.clone(), parent_name: snap.parent.clone(), system: self.sensor.system().to_string(),
-            cmdline: Some(snap.cmdline.clone()), jumped: snap.jumped, handed: snap.handed, ..View::default() };
+            cmdline: Some(snap.cmdline.clone()), jumped: snap.jumped, handed: snap.handed, new_keyboard: self.more.keyboard_at > 0.0 && now - self.more.keyboard_at <= 20.0, ..View::default() };
         let outcome = score_process(&view, now, &self.policy, &self.shapes, &self.system_root);
-        let marked = outcome.signals.iter().any(|signal| signal.points > 0 && (signal.id == "privilege_jump" || signal.id == "helper_with_child"));
+        let marked = outcome.signals.iter().any(|signal| signal.points > 0 && (signal.id == "privilege_jump" || signal.id == "helper_with_child" || signal.id == "keyboard_injection"));
         if !marked || (outcome.level != "SUSPECT" && outcome.level != "HOSTILE") {
             return;
         }

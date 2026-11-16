@@ -11,6 +11,7 @@
 //!   cargo test --release --test live -- --ignored live_block
 //!   cargo test --release --test live -- --ignored live_jump     (Linux, as root, with capsh, python3 and cc)
 //!   cargo test --release --test live -- --ignored live_system_shell   (Windows, with GARRETT_LIVE_PID)
+//!   cargo test --release --test live -- --ignored live_card       (macOS, as root)
 
 const KEY: &str = "0123456789abcdef0123456789abcdef";
 
@@ -138,4 +139,28 @@ fn live_system_shell() {
     let own = garrett::win::snapshot(ordinary.id()).expect("the ordinary shell is running");
     let _ = ordinary.wait();
     assert!(!own.jumped, "an ordinary shell was taken for an escalation");
+}
+
+/// The network card this Mac sends out through can be opened for the first packets of arriving connection
+/// attempts, the kernel takes the filter, and reading it for a few seconds ends cleanly when told to stop. Whatever
+/// arrives in that time is a packet that opens a connection, or nothing is handed over at all.
+#[cfg(target_os = "macos")]
+#[test]
+#[ignore]
+fn live_card() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    let card = garrett::lan::way_out_card().expect("this machine has a way out");
+    println!("reading at {card}");
+    static STOP: AtomicBool = AtomicBool::new(false);
+    std::thread::spawn(|| {
+        std::thread::sleep(std::time::Duration::from_secs(4));
+        STOP.store(true, Ordering::SeqCst);
+    });
+    let (mut handed, mut openings) = (0u32, 0u32);
+    garrett::card::listen(&STOP, &card, |packet| {
+        handed += 1;
+        openings += u32::from(garrett::lan::opening(packet).is_some());
+    }).expect("the card could not be opened");
+    println!("{handed} packet(s) handed over, {openings} of them the first of a connection attempt");
+    assert_eq!(handed, openings, "something other than an opening packet came through the filter");
 }

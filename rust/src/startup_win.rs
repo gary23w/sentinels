@@ -110,6 +110,11 @@ pub(crate) fn machine_text(sub: &str, name: &str) -> Option<String> {
     read(&key, name).filter(|(kind, _)| *kind == 1 || *kind == 2).map(|(_, data)| letters(&data).trim().chars().filter(|letter| !letter.is_control()).take(200).collect::<String>()).filter(|found| !found.is_empty())
 }
 
+/// The names of the keys under a key of the machine's own part of the registry.
+pub(crate) fn machine_subkeys(sub: &str) -> Option<Vec<String>> {
+    Some(subkeys(open(MACHINE, sub)?.0, 2000))
+}
+
 /// A number value of the machine's own part of the registry.
 pub(crate) fn machine_number(sub: &str, name: &str) -> Option<u32> {
     number(&open(MACHINE, sub)?, name)

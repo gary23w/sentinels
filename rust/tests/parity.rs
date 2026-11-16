@@ -42,6 +42,7 @@ fn view_from(value: &Value) -> View {
         siege: value["siege"].as_bool().unwrap(),
         jumped: false,
         handed: false,
+        new_keyboard: false,
     }
 }
 

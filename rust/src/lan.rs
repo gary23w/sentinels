@@ -73,9 +73,56 @@ pub fn read_listing(neighbours: &str, route: &str) -> Option<Neighbours> {
     Some(Neighbours { gateway, table })
 }
 
+/// The same for the newer kind of address (IPv6), from what the system's own tools print: a list of neighbours
+/// and the route out. Every system words these differently; what they share is that a line of the first holds an
+/// address and a hardware address, and the second names the way out after "via", "gateway:" or "::/0".
+pub fn read_listing6(neighbours: &str, route: &str) -> Option<Neighbours> {
+    let address = |word: &str| word.split('%').next().and_then(|plain| plain.parse::<std::net::Ipv6Addr>().ok()).filter(|found| !found.is_multicast() && !found.is_unspecified() && !found.is_loopback());
+    let words: Vec<&str> = route.split_whitespace().collect();
+    let gateway = words.windows(2).find_map(|pair| (pair[0] == "via" || pair[0] == "gateway:" || pair[0] == "::/0").then(|| address(pair[1])).flatten())?.to_string();
+    let mut table = BTreeMap::new();
+    for line in neighbours.lines().take(2048) {
+        let words: Vec<&str> = line.split_whitespace().collect();
+        if let (Some(found), Some(hardware)) = (words.first().and_then(|word| address(word)), words.iter().skip(1).find_map(|word| hardware_address(word))) {
+            table.insert(found.to_string(), hardware);
+        }
+    }
+    Some(Neighbours { gateway, table })
+}
+
+/// This machine's neighbours and way out for the newer kind of address, asked of the system's own tools.
+#[cfg(any(windows, target_os = "macos", target_os = "linux"))]
+pub fn read6() -> Option<Neighbours> {
+    let run = |arguments: &[&str]| crate::tool::run(arguments, None, std::time::Duration::from_secs(10)).unwrap_or_default();
+    #[cfg(target_os = "linux")]
+    let (neighbours, route) = (run(&["ip", "-6", "neigh", "show"]), run(&["ip", "-6", "route", "show", "default"]));
+    #[cfg(target_os = "macos")]
+    let (neighbours, route) = (run(&["/usr/sbin/ndp", "-an"]), run(&["/sbin/route", "-n", "get", "-inet6", "default"]));
+    #[cfg(windows)]
+    let (neighbours, route) = (run(&["netsh.exe", "interface", "ipv6", "show", "neighbors"]), run(&["route.exe", "print", "-6"]));
+    read_listing6(&neighbours, &route)
+}
+
+#[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
+pub fn read6() -> Option<Neighbours> {
+    None
+}
+
 #[cfg(target_os = "linux")]
 pub fn read() -> Option<Neighbours> {
     read_linux(Path::new("/"))
+}
+
+/// The network card this machine sends out through, from what `route -n get default` prints.
+pub fn card_of(route: &str) -> Option<String> {
+    route.lines().find_map(|line| line.trim().strip_prefix("interface:")).map(|found| found.trim().to_string())
+        .filter(|found| !found.is_empty() && found.len() <= 15 && found.bytes().all(|byte| byte.is_ascii_alphanumeric()))
+}
+
+/// The network card this machine sends out through.
+#[cfg(target_os = "macos")]
+pub fn way_out_card() -> Option<String> {
+    card_of(&crate::tool::run(&["/sbin/route", "-n", "get", "default"], None, std::time::Duration::from_secs(10)).unwrap_or_default())
 }
 
 #[cfg(target_os = "macos")]
@@ -158,35 +205,57 @@ pub struct Found {
 pub struct GatewayWatch {
     known: HashMap<String, String>,
     said: BTreeSet<String>,
+    /// The neighbours of the reading before this one.
+    before: BTreeMap<String, String>,
+    /// When each gateway's hardware address last changed, newest last.
+    changed: HashMap<String, Vec<f64>>,
 }
 
 impl GatewayWatch {
-    /// Take a reading. A gateway that simply has a new hardware address (a new router) is learned again without
-    /// a word. One whose address is now the hardware address of another machine on the network is reported,
-    /// once, and its true address is kept, so nothing more is said when the network is put right.
-    pub fn take(&mut self, seen: &Neighbours) -> Option<Found> {
+    /// Take a reading at this moment. A gateway that simply has a new hardware address (a new router) is learned
+    /// again without a word. Two things are reported, once each: its address becoming the hardware address of a
+    /// machine that was already on the network, and its address going back and forth, which is what the table
+    /// does while the true gateway and an impostor both keep answering. The true address is kept, so nothing
+    /// more is said when the network is put right.
+    pub fn take(&mut self, seen: &Neighbours, at: f64) -> Option<Found> {
+        let earlier = std::mem::replace(&mut self.before, seen.table.clone());
         let now = seen.table.get(&seen.gateway)?;
-        let Some(before) = self.known.get(&seen.gateway) else {
+        let last = earlier.get(&seen.gateway).cloned();
+        let Some(known) = self.known.get(&seen.gateway).cloned() else {
             self.known.insert(seen.gateway.clone(), now.clone());
             return None;
         };
-        if before == now {
+        if last.as_ref().is_some_and(|last| last != now) {
+            let changes = self.changed.entry(seen.gateway.clone()).or_default();
+            changes.retain(|then| at - then <= 300.0);
+            changes.push(at);
+        }
+        let flapping = self.changed.get(&seen.gateway).is_some_and(|changes| changes.len() >= 3);
+        // A machine that was on the network a moment ago under this hardware address, as itself.
+        let other = if &known == now { None } else { seen.table.iter().find(|(address, hardware)| *address != &seen.gateway && *hardware == now && earlier.get(*address) == Some(*hardware)).map(|(address, _)| address.clone()) };
+        if other.is_none() && !flapping {
+            if &known != now && self.changed.get(&seen.gateway).is_none_or(|changes| changes.len() <= 1) {
+                self.known.insert(seen.gateway.clone(), now.clone()); // one change, and it stays: a new router
+            }
             return None;
         }
-        // Another address that answers from this hardware address, and did not share the gateway's old one.
-        let other = seen.table.iter().find(|(address, hardware)| *address != &seen.gateway && *hardware == now).map(|(address, _)| address.clone());
-        let Some(other) = other else {
-            self.known.insert(seen.gateway.clone(), now.clone());
-            return None;
+        // Said once for each machine that takes the gateway's place, and once for a gateway that goes back and forth.
+        let mark = match &other {
+            Some(_) => format!("{}|{now}", seen.gateway),
+            None => format!("{}|back and forth", seen.gateway),
         };
-        if !self.said.insert(format!("{}|{now}", seen.gateway)) {
+        if !self.said.insert(mark) {
             return None;
         }
         if self.said.len() > 256 {
             self.said.clear();
         }
-        Some(Found { signal: "gateway_impersonated", points: 6, address: other.clone(),
-            evidence: format!("The gateway {} now answers from the hardware address of {other}, another machine on this network: what this machine sends out may be passing through it.", seen.gateway) })
+        Some(match other {
+            Some(other) => Found { signal: "gateway_impersonated", points: 6, address: other.clone(),
+                evidence: format!("The gateway {} now answers from the hardware address of {other}, another machine on this network: what this machine sends out may be passing through it.", seen.gateway) },
+            None => Found { signal: "gateway_impersonated", points: 6, address: seen.gateway.clone(),
+                evidence: format!("The gateway {} keeps changing between two hardware addresses: a second machine is answering in its place, and what this machine sends out may be passing through it.", seen.gateway) },
+        })
     }
 }
 
@@ -204,7 +273,9 @@ impl ScanWatch {
     /// One connection attempt that arrived: who sent it and the port it asked for. Returns a finding when this
     /// neighbour has tried enough different ports in the last minute, at most once an hour for each neighbour.
     pub fn attempt(&mut self, source: &str, port: u16, now: f64) -> Option<Found> {
-        if !crate::net::neighbour(source) {
+        // A neighbour: a private address, or one that only works on this very network.
+        let on_this_network = source.parse::<std::net::Ipv6Addr>().is_ok_and(|address| (address.segments()[0] & 0xffc0) == 0xfe80);
+        if !crate::net::neighbour(source) && !on_this_network {
             return None; // the open internet, or this machine itself
         }
         if self.tried.len() >= 4096 {
@@ -229,8 +300,17 @@ impl ScanWatch {
     }
 }
 
-/// (source address, destination port) of an IPv4 packet that opens a TCP connection. `None` for anything else.
+/// (source address, destination port) of a packet that opens a TCP connection. `None` for anything else.
 pub fn opening(packet: &[u8]) -> Option<(String, u16)> {
+    if packet.first()? >> 4 == 6 {
+        // The newer kind: a header of forty bytes, with what follows it named in its seventh byte.
+        if packet.len() < 54 || packet[6] != 6 || packet[53] & 0x12 != 0x02 {
+            return None;
+        }
+        let mut source = [0u8; 16];
+        source.copy_from_slice(&packet[8..24]);
+        return Some((std::net::Ipv6Addr::from(source).to_string(), u16::from_be_bytes([packet[42], packet[43]])));
+    }
     let header = (*packet.first()? & 0x0f) as usize * 4;
     if packet[0] >> 4 != 4 || header < 20 || packet.len() < header + 14 || packet[9] != 6 || u16::from_be_bytes([packet[6], packet[7]]) & 0x1fff != 0 {
         return None;
@@ -245,7 +325,7 @@ pub fn opening(packet: &[u8]) -> Option<(String, u16)> {
 /// sender and port to `seen` until `stop` says so. The kernel is given a filter, so nothing else ever reaches this
 /// program, and only the first sixty-four bytes of those that do. Needs root. Returns at once where it cannot open.
 #[cfg(target_os = "linux")]
-pub fn listen(stop: &std::sync::atomic::AtomicBool, mut seen: impl FnMut(String, u16)) -> std::io::Result<()> {
+pub fn listen(stop: &std::sync::atomic::AtomicBool, newer: bool, mut seen: impl FnMut(String, u16)) -> std::io::Result<()> {
     use std::sync::atomic::Ordering;
     #[repr(C)]
     struct Step {
@@ -259,7 +339,8 @@ pub fn listen(stop: &std::sync::atomic::AtomicBool, mut seen: impl FnMut(String,
         length: u16,
         steps: *const Step,
     }
-    let handle = unsafe { libc::socket(libc::AF_PACKET, libc::SOCK_DGRAM | libc::SOCK_CLOEXEC, (libc::ETH_P_IP as u16).to_be() as i32) };
+    let kind = if newer { libc::ETH_P_IPV6 } else { libc::ETH_P_IP };
+    let handle = unsafe { libc::socket(libc::AF_PACKET, libc::SOCK_DGRAM | libc::SOCK_CLOEXEC, (kind as u16).to_be() as i32) };
     if handle < 0 {
         return Err(std::io::Error::last_os_error());
     }
@@ -276,7 +357,17 @@ pub fn listen(stop: &std::sync::atomic::AtomicBool, mut seen: impl FnMut(String,
         Step { code: 0x06, yes: 0, no: 0, value: 64 },
         Step { code: 0x06, yes: 0, no: 0, value: 0 },
     ];
-    let program = Program { length: steps.len() as u16, steps: steps.as_ptr() };
+    // The newer kind of packet: TCP straight after its fixed header, with "open" set and "answer" not set.
+    let newer_steps = [
+        Step { code: 0x30, yes: 0, no: 0, value: 6 },
+        Step { code: 0x15, yes: 0, no: 4, value: 6 },
+        Step { code: 0x30, yes: 0, no: 0, value: 53 },
+        Step { code: 0x54, yes: 0, no: 0, value: 0x12 },
+        Step { code: 0x15, yes: 0, no: 1, value: 0x02 },
+        Step { code: 0x06, yes: 0, no: 0, value: 96 },
+        Step { code: 0x06, yes: 0, no: 0, value: 0 },
+    ];
+    let program = if newer { Program { length: newer_steps.len() as u16, steps: newer_steps.as_ptr() } } else { Program { length: steps.len() as u16, steps: steps.as_ptr() } };
     let wait = libc::timeval { tv_sec: 1, tv_usec: 0 };
     let set = unsafe {
         libc::setsockopt(handle, libc::SOL_SOCKET, libc::SO_ATTACH_FILTER, &program as *const Program as *const libc::c_void, std::mem::size_of::<Program>() as libc::socklen_t) == 0
