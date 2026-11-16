@@ -29,7 +29,8 @@ if [ -d /run/systemd/system ]; then
 elif command -v rc-update >/dev/null 2>&1 && [ -d /etc/init.d ]; then
   install -m 0755 "$HERE/garrett.openrc" /etc/init.d/garrett
   rc-update add garrett default >/dev/null 2>&1 || true
-  rc-service garrett restart
+  rc-service garrett stop >/dev/null 2>&1 || true
+  rc-service garrett start
   echo "garrett is running. Check: rc-service garrett status"
 else
   echo "garrett is installed. This machine has neither systemd nor OpenRC: start it from your own supervisor with:  garrett auto && garrett run"

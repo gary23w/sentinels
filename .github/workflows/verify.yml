@@ -776,7 +776,7 @@ jobs:
           python3 -B packaging/build-release.py site --agents agents > /dev/null
           docker run --rm --privileged -v "$PWD/site:/site:ro" alpine:3.20 sh -ec '
             apk add --no-cache openrc > /dev/null
-            mkdir -p /run/openrc && touch /run/openrc/softlevel
+            rc-status -a > /dev/null 2>&1; mkdir -p /run/openrc && touch /run/openrc/softlevel   # what a started machine has
             mkdir -p /etc/garrett && printf "MODE=report\nUPDATE=off\nSHIELD=off\n" > /etc/garrett/garrett.conf
             tar -xzf /site/garrett-linux-x86_64.tar.gz -C /tmp
             sh /tmp/garrett/install.sh
@@ -784,10 +784,10 @@ jobs:
             rc-service garrett status
             garrett version
             garrett status
-            pgrep -f garrett-agent > /dev/null
+            pgrep -f "[g]arrett-agent" > /dev/null
             grep -q "watching this machine by itself (mode: report)" /var/log/garrett.log
             sh /tmp/garrett/install.sh --remove
             sleep 2
-            if pgrep -f garrett-agent > /dev/null; then echo "the agent is still running after removal"; exit 1; fi
+            if pgrep -f "[g]arrett-agent" > /dev/null; then echo "the agent is still running after removal"; exit 1; fi
             for left in /usr/lib/garrett /usr/bin/garrett /etc/init.d/garrett /var/lib/garrett; do if [ -e "$left" ]; then echo "left behind: $left"; exit 1; fi; done
           '
