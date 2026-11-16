@@ -1,6 +1,12 @@
+[![Agent Garrett shields computers from the AI apocalypse](assets/agent-garrett-ai-apocalypse.png)](https://agent.garrettstimpson.ca/apocalypse)
+
 # sentinels
 
+**Want to power your Sentinels with AI? We can do that for you.** [Get hosted intrusion detection through Agent Garrett](https://agent.garrettstimpson.ca/apocalypse): one place to see cases from your computers, unlimited AI case reviews, plain-language reports and AI-assisted response. The open-source agent and self-hosted service are below.
+
 A guard for your servers and workstations that ends a break-in while it is still starting.
+
+**Flat $9.99/month in CAD or USD, based on your location. Sentinel AI is a standalone subscription.**
 
 [![verify](https://github.com/gary23w/sentinels/actions/workflows/verify.yml/badge.svg)](https://github.com/gary23w/sentinels/actions/workflows/verify.yml)
 [![release](https://img.shields.io/github/v/release/gary23w/sentinels)](https://github.com/gary23w/sentinels/releases)
@@ -54,7 +60,7 @@ One machine on its own is fine. If you have several, turn one of them into your 
 curl -fsSL https://gary23w.github.io/sentinels/service.sh | sudo sh
 ```
 
-It prints the command that joins your other machines. From then on, what one machine learns from an attack protects the rest, and every case shows up in one place. The service runs on your hardware and your cases stay there. For managed hosting, email [info@garrettstimpson.ca](mailto:info@garrettstimpson.ca?subject=Sentinels%20managed%20hosting).
+It prints the command that joins your other machines. From then on, what one machine learns from an attack protects the rest, and every case shows up in one place. The service runs on your hardware and your cases stay there. For a hosted Sentinel AI service, [meet Agent Garrett](https://agent.garrettstimpson.ca/apocalypse).
 
 ## How hard it hits
 
