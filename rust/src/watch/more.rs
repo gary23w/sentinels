@@ -928,7 +928,18 @@ impl<S: Sensor, H: Hands> Watcher<S, H> {
     // ------------------------------------------------------------ what the service tells this agent
 
     pub fn set_trusted(&mut self, keys: &Value) {
+        #[cfg_attr(not(unix), allow(unused_variables))]
+        let before = std::mem::take(&mut self.trusted);
         self.trusted = keys.as_array().map(|list| list.iter().filter_map(Value::as_str).filter(|key| is_key(key)).map(str::to_string).collect()).unwrap_or_default();
+        // A case the owner has just called theirs: what was cleaned up under it is theirs too, and is never cleaned
+        // up again under another case (the same file and startup lines put back by an installer, say).
+        #[cfg(unix)]
+        if let Some(directory) = self.more.directory.clone().filter(|_| self.sensor.system() != "windows") {
+            let cleaner = crate::clean::Cleaner::new(self.sensor.system(), &directory, None, false);
+            for key in self.trusted.iter().filter(|key| !before.contains(*key)) {
+                cleaner.allow(key);
+            }
+        }
     }
 
     /// {signal id: whole points between -2 and 2}. Anything else from the service is ignored.

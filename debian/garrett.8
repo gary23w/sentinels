@@ -70,7 +70,13 @@ List the latest cases on this machine. On an enrolled machine they are on its
 service as well, and judged there.
 .TP
 .BI trust " case"
-This program is mine: leave it alone from now on.
+This program is mine: leave it alone from now on. What was cleaned up under
+the case stays where it was put
+.RB ( restore
+puts it back), and is never cleaned up again: not the same program file, and
+not the same startup lines. On an enrolled machine this is done on the service,
+and the machine hears of it with its next report; whatever it cleaned up before
+then is said on the service, so it can be put back.
 .TP
 .BI stop " case" "\fR, \fP" release " case"
 Decide a program the agent paused: end it, or let it continue.

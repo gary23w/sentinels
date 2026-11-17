@@ -18,6 +18,8 @@ use std::path::{Path, PathBuf};
 
 pub const DISABLED_MARK: &str = "# garrett-disabled ";
 pub const ALLOWED_FILE: &str = "sentinel-startup-allowed.json";
+/// Program files the owner said are theirs: {path: SHA-256 of the file}. Never taken away while they are that file.
+pub const OWNED_FILE: &str = "sentinel-files-allowed.json";
 pub const STARTUP_FILE: &str = "sentinel-startup.json";
 pub const MAX_ENTRY_BYTES: u64 = 262_144;
 const LINUX_ZONES: &[&str] = &["tmp", "var/tmp", "dev/shm", "run/user", "home", "root", "var/www", "srv"];
@@ -74,6 +76,41 @@ fn quiet(arguments: &[&str]) {
     let _ = crate::tool::run(arguments, None, std::time::Duration::from_secs(60));
 }
 
+/// The mark of one line, with the blanks around it taken off.
+fn line_mark(stripped: &[u8]) -> String {
+    Sha256::digest(stripped).iter().take(8).map(|byte| format!("{byte:02x}")).collect()
+}
+
+/// The SHA-256 of a file, read in pieces.
+fn digest_of(path: &Path) -> Option<String> {
+    use std::io::Read;
+    let mut file = std::fs::File::open(path).ok()?;
+    let (mut hasher, mut buffer) = (Sha256::new(), vec![0u8; 65536]);
+    loop {
+        let count = file.read(&mut buffer).ok()?;
+        if count == 0 {
+            break;
+        }
+        hasher.update(&buffer[..count]);
+    }
+    Some(hasher.finalize().iter().map(|byte| format!("{byte:02x}")).collect())
+}
+
+/// A file kept in quarantine, which is locked there: read, and locked again.
+fn read_kept(kept: &str) -> std::io::Result<Vec<u8>> {
+    if let Ok(body) = std::fs::read(kept) {
+        return Ok(body);
+    }
+    std::fs::set_permissions(kept, std::fs::Permissions::from_mode(0o600))?;
+    let body = std::fs::read(kept);
+    let _ = std::fs::set_permissions(kept, std::fs::Permissions::from_mode(0));
+    body
+}
+
+fn read_map(path: &Path) -> Map<String, Value> {
+    std::fs::read(path).ok().and_then(|raw| serde_json::from_slice::<Value>(&raw).ok()).and_then(|value| value.as_object().cloned()).unwrap_or_default()
+}
+
 /// The marks of a startup file's lines: one per line that is not blank and not a comment, in the file's order.
 /// A mark is never the line itself.
 pub fn marks(raw: &[u8]) -> Vec<(String, Vec<u8>)> {
@@ -83,7 +120,7 @@ pub fn marks(raw: &[u8]) -> Vec<(String, Vec<u8>)> {
         if stripped.is_empty() || stripped.starts_with(b"#") {
             continue;
         }
-        let mark: String = Sha256::digest(stripped).iter().take(8).map(|byte| format!("{byte:02x}")).collect();
+        let mark = line_mark(stripped);
         match found.iter_mut().find(|(known, _)| *known == mark) {
             Some(entry) => entry.1 = stripped.to_vec(),
             None => found.push((mark, stripped.to_vec())),
@@ -134,6 +171,7 @@ impl Cleaner {
         let own: Vec<String> = [Some(text(&self.directory)), exe.as_ref().and_then(|path| path.parent()).map(text), exe.as_ref().map(|path| text(path))]
             .into_iter().flatten().filter(|item| !item.is_empty()).map(|item| absolute(&item)).collect();
         let unique: BTreeSet<&String> = paths.iter().filter(|path| !path.is_empty()).collect();
+        let owned = read_map(&self.directory.join(OWNED_FILE));
         let mut found = Vec::new();
         for path in unique {
             let whole = absolute(path);
@@ -144,6 +182,10 @@ impl Cleaner {
                 continue;
             }
             if !plain_file(Path::new(path)) || (!self.prefix.is_empty() && !self.plain(path)) {
+                continue;
+            }
+            // The owner called this very file theirs (`trust`): it stays. Another file put in its place does not.
+            if owned.get(&whole).and_then(Value::as_str).is_some_and(|digest| digest_of(Path::new(path)).as_deref() == Some(digest)) {
                 continue;
             }
             found.push(path.clone());
@@ -200,15 +242,16 @@ impl Cleaner {
         Ok(json!({"do": "moved", "kind": kind, "where": path, "kept": text(&kept), "mode": status.mode() & 0o7777, "uid": status.uid(), "gid": status.gid()}))
     }
 
-    /// Comment out the lines that name a needle (or, when `exact`, the lines that are exactly one of them).
-    fn comment(&self, key: &str, path: &str, needles: &[Vec<u8>], kind: &str, exact: bool) -> std::io::Result<Option<Value>> {
+    /// Comment out the lines that name a needle (or, when `exact`, the lines that are exactly one of them), except
+    /// the lines whose marks are in `let_be`: the owner put those back or called them theirs.
+    fn comment(&self, key: &str, path: &str, needles: &[Vec<u8>], kind: &str, exact: bool, let_be: &BTreeSet<String>) -> std::io::Result<Option<Value>> {
         let raw = std::fs::read(path)?;
         let mark = format!("{DISABLED_MARK}{key}: ").into_bytes();
         let mut changed = 0;
         let lines: Vec<Vec<u8>> = raw.split(|byte| *byte == b'\n').map(|line| {
             let stripped = trimmed(line);
             let hit = if exact { needles.iter().any(|needle| needle.as_slice() == stripped) } else { needles.iter().any(|needle| contains(line, needle)) };
-            if !stripped.is_empty() && !stripped.starts_with(b"#") && hit {
+            if !stripped.is_empty() && !stripped.starts_with(b"#") && hit && (let_be.is_empty() || !let_be.contains(&line_mark(stripped))) {
                 changed += 1;
                 [mark.as_slice(), line].concat()
             } else {
@@ -279,6 +322,7 @@ impl Cleaner {
     fn clean_places(&self, key: &str, needles: &[Vec<u8>], steps: &mut Vec<Value>) {
         let real = self.root == Path::new("/");
         let mut reload = false;
+        let allowed = read_map(&self.directory.join(ALLOWED_FILE));
         for (kind, entry, whole) in self.places() {
             let readable = plain_file(&entry) && std::fs::metadata(&entry).map(|meta| meta.len() <= MAX_ENTRY_BYTES).unwrap_or(false);
             let Some(body) = readable.then(|| std::fs::read(&entry).ok()).flatten() else { continue };
@@ -286,6 +330,12 @@ impl Cleaner {
                 continue;
             }
             let where_ = text(&entry);
+            // Lines the owner put back (`restore`) or called theirs (`trust`) are left as they are. An entry whose
+            // every line that names the program is one of those is left whole.
+            let let_be: BTreeSet<String> = allowed.get(&where_).and_then(Value::as_array).map(|list| list.iter().filter_map(|item| item.as_str().map(str::to_string)).collect()).unwrap_or_default();
+            if !let_be.is_empty() && body.split(|byte| *byte == b'\n').map(trimmed).filter(|line| !line.is_empty() && !line.starts_with(b"#") && needles.iter().any(|needle| contains(line, needle))).all(|line| let_be.contains(&line_mark(line))) {
+                continue;
+            }
             let done = if whole {
                 if real && kind == "startup service" && entry.parent() == Some(&self.root.join("etc/systemd/system")) {
                     quiet(&["systemctl", "disable", "--now", &entry.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default()]);
@@ -295,7 +345,7 @@ impl Cleaner {
                 }
                 self.move_away(key, &where_, kind).map(Some)
             } else {
-                self.comment(key, &where_, needles, kind, false)
+                self.comment(key, &where_, needles, kind, false, &let_be)
             };
             match done {
                 Ok(Some(step)) => steps.push(step),
@@ -380,7 +430,7 @@ impl Cleaner {
             self.move_away(key, where_, kind).map(Some)
         } else {
             let wanted: Vec<Vec<u8>> = lines.iter().map(|line| trimmed(line).to_vec()).filter(|line| !line.is_empty()).collect();
-            self.comment(key, where_, &wanted, kind, true)
+            self.comment(key, where_, &wanted, kind, true, &BTreeSet::new())
         };
         match done {
             Ok(Some(step)) => steps.push(step),
@@ -495,17 +545,7 @@ impl Cleaner {
         if reload && self.system == "linux" && self.root == Path::new("/") {
             quiet(&["systemctl", "daemon-reload"]);
         }
-        if !allowed.is_empty() {
-            let file = self.directory.join(ALLOWED_FILE);
-            let mut old: Map<String, Value> = std::fs::read(&file).ok().and_then(|raw| serde_json::from_slice::<Value>(&raw).ok()).and_then(|value| value.as_object().cloned()).unwrap_or_default();
-            for (name, found) in allowed {
-                let mut all: BTreeSet<String> = old.get(&name).and_then(Value::as_array).map(|list| list.iter().filter_map(|item| item.as_str().map(str::to_string)).collect()).unwrap_or_default();
-                all.extend(found);
-                let kept: Vec<String> = all.into_iter().collect();
-                old.insert(name, json!(kept[kept.len().saturating_sub(2000)..]));
-            }
-            let _ = std::fs::write(&file, Value::Object(old).to_string());
-        }
+        self.let_be(allowed);
         if left.is_empty() {
             let _ = std::fs::remove_file(&path);
             let _ = std::fs::remove_dir_all(self.quarantine().join(key));
@@ -514,6 +554,74 @@ impl Cleaner {
             let _ = std::fs::write(&path, json!({"at": now.trunc() as i64, "steps": left}).to_string());
         }
         (back, steps.iter().filter(|step| step["do"] != "review" && step["do"] != "failed").count() - back)
+    }
+
+    /// Remember startup lines as the owner's, by their marks: the startup watch does not take them for news and
+    /// the cleaner leaves them as they are.
+    fn let_be(&self, allowed: Vec<(String, BTreeSet<String>)>) {
+        if allowed.is_empty() {
+            return;
+        }
+        let file = self.directory.join(ALLOWED_FILE);
+        let mut old = read_map(&file);
+        for (name, found) in allowed {
+            let mut all: BTreeSet<String> = old.get(&name).and_then(Value::as_array).map(|list| list.iter().filter_map(|item| item.as_str().map(str::to_string)).collect()).unwrap_or_default();
+            all.extend(found);
+            let kept: Vec<String> = all.into_iter().collect();
+            old.insert(name, json!(kept[kept.len().saturating_sub(2000)..]));
+        }
+        let _ = std::fs::write(&file, Value::Object(old).to_string());
+    }
+
+    /// The owner said the program under this case is theirs (`trust`). What was cleaned up under it stays where it
+    /// is (`restore` puts it back), and is never cleaned up again: its startup lines are remembered as the owner's,
+    /// as after a restore, and its program files as theirs for as long as they are the same file. Returns how many
+    /// things were remembered.
+    pub fn allow(&self, key: &str) -> usize {
+        if !is_key(key) {
+            return 0;
+        }
+        let path = self.records().join(format!("{key}.json"));
+        let Some(steps) = std::fs::read(&path).ok().and_then(|raw| serde_json::from_slice::<Value>(&raw).ok()).and_then(|value| value["steps"].as_array().cloned()) else { return 0 };
+        let mark = format!("{DISABLED_MARK}{key}: ").into_bytes();
+        let (mut allowed, mut files): (Vec<(String, BTreeSet<String>)>, Vec<(String, String)>) = (Vec::new(), Vec::new());
+        for step in &steps {
+            let where_ = step["where"].as_str().unwrap_or("").to_string();
+            let kept = step["kept"].as_str().unwrap_or("");
+            match (step["do"].as_str().unwrap_or(""), step["kind"] == "program file") {
+                ("moved", true) => {
+                    if let Some(digest) = read_kept(kept).ok().map(|body| Sha256::digest(&body).iter().map(|byte| format!("{byte:02x}")).collect::<String>()) {
+                        files.push((absolute(&where_), digest));
+                    }
+                }
+                ("moved", false) => {
+                    let Ok(mut body) = read_kept(kept) else { continue };
+                    body.truncate(MAX_ENTRY_BYTES as usize);
+                    allowed.push((where_, marks(&body).into_iter().map(|(mark, _)| mark).collect()));
+                }
+                ("commented", _) => {
+                    // Only the lines switched off under this case: the rest of the file is the owner's already.
+                    let Ok(mut body) = std::fs::read(&where_) else { continue };
+                    body.truncate(MAX_ENTRY_BYTES as usize);
+                    let lines: Vec<&[u8]> = body.split(|byte| *byte == b'\n').filter_map(|line| line.strip_prefix(mark.as_slice())).collect();
+                    allowed.push((where_, marks(&lines.join(&b'\n')).into_iter().map(|(mark, _)| mark).collect()));
+                }
+                _ => {}
+            }
+        }
+        let count = allowed.iter().filter(|(_, found)| !found.is_empty()).count() + files.len();
+        self.let_be(allowed.into_iter().filter(|(_, found)| !found.is_empty()).collect());
+        if !files.is_empty() {
+            let file = self.directory.join(OWNED_FILE);
+            let mut owned = read_map(&file);
+            for (name, digest) in files {
+                if owned.len() < 2000 || owned.contains_key(&name) {
+                    owned.insert(name, json!(digest));
+                }
+            }
+            let _ = std::fs::write(&file, Value::Object(owned).to_string());
+        }
+        count
     }
 
     /// Case keys that have something in quarantine or switched off.

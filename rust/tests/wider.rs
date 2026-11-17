@@ -545,3 +545,53 @@ fn what_is_done_to_a_wordpress_site_shows_in_its_own_log() {
     assert!(said("198.51.100.25").is_empty());
     let _ = std::fs::remove_dir_all(&base);
 }
+
+/// A dropped program, a scheduled job and a shell startup line, cleaned up under one case that the owner then
+/// calls theirs. The same three written again are left alone, under any case; another program put in the same
+/// place is not.
+#[cfg(unix)]
+#[test]
+fn what_was_cleaned_up_under_a_case_the_owner_trusts_is_never_cleaned_up_again() {
+    use garrett::clean::{Cleaner, StartupWatch};
+    let base = std::env::temp_dir().join(format!("garrett-trust-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    let (state, root) = (base.join("state"), base.to_string_lossy().into_owned());
+    let program = format!("{root}/tmp/lm/agent");
+    let (job, line) = (format!("*/5 * * * * root {program} 5\n"), format!("({program} 5 >/dev/null 2>&1 &)"));
+    let stage = |body: &[u8]| {
+        for folder in ["tmp/lm", "etc/cron.d", "root", "state"] {
+            std::fs::create_dir_all(base.join(folder)).unwrap();
+        }
+        std::fs::write(base.join("tmp/lm/agent"), body).unwrap();
+        std::fs::write(base.join("etc/cron.d/lm"), &job).unwrap();
+        std::fs::write(base.join("root/.bashrc"), format!("alias ll='ls -l'\n{line}\n")).unwrap();
+    };
+    let now = 1_800_000_000.0;
+    let said = |steps: &[Value]| -> Vec<String> { steps.iter().map(|step| format!("{} {}", step["action"].as_str().unwrap(), step["kind"].as_str().unwrap())).collect() };
+    let cleaner = Cleaner::new("linux", &state, Some(&base), false);
+    stage(b"\x7fELF the program");
+    let first = cleaner.clean(&"a".repeat(32), std::slice::from_ref(&program), &[], 0.0, now);
+    assert_eq!(said(&first), ["quarantined scheduled job", "disabled shell startup file", "quarantined program file"]);
+    assert!(!base.join("tmp/lm/agent").exists() && !base.join("etc/cron.d/lm").exists());
+
+    // The owner says it is theirs. What was put away stays put away (restore is for that), and is remembered.
+    assert_eq!(cleaner.allow(&"a".repeat(32)), 3);
+    assert!(!base.join("tmp/lm/agent").exists());
+    let mut watch = StartupWatch::new("linux", &state, Some(&base));
+    assert!(watch.poll().is_empty());
+
+    // The same program, job and line are written again: not news, and nothing is cleaned up, under any case.
+    std::thread::sleep(std::time::Duration::from_millis(20));
+    stage(b"\x7fELF the program");
+    assert_eq!(watch.poll(), Vec::new(), "the startup watch took the owner's own entries for news");
+    assert!(cleaner.clean(&"b".repeat(32), std::slice::from_ref(&program), &[], 0.0, now).is_empty());
+    assert!(base.join("tmp/lm/agent").exists() && base.join("etc/cron.d/lm").exists());
+    assert_eq!(std::fs::read_to_string(base.join("root/.bashrc")).unwrap(), format!("alias ll='ls -l'\n{line}\n"));
+
+    // Another program in the same place is not the owner's: it goes, and the owner's entries stay.
+    std::fs::write(base.join("tmp/lm/agent"), b"\x7fELF another program").unwrap();
+    assert_eq!(said(&cleaner.clean(&"c".repeat(32), std::slice::from_ref(&program), &[], 0.0, now)), ["quarantined program file"]);
+    assert!(!base.join("tmp/lm/agent").exists() && base.join("etc/cron.d/lm").exists());
+    let _ = std::process::Command::new("chmod").args(["-R", "u+rwx", &root]).status();
+    let _ = std::fs::remove_dir_all(&base);
+}

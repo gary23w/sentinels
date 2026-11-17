@@ -450,12 +450,15 @@ fn say_case(case: &Value) {
 }
 
 /// Keep a case in this machine's own list (cases.jsonl, what `garrett cases` reads), with or without a service.
-/// The same case at the same level with the same actions is kept once. Returns true when it was kept.
+/// A case is kept again only when its level changed or something was done about it just now: a program ended or
+/// paused, or something cleaned up. Each of those is news, the same program the tenth time included. Returns
+/// true when it was kept.
 fn keep_case(state: &State, said: &mut std::collections::HashMap<String, (String, String)>, case: &Value) -> bool {
     let key = case["key"].as_str().unwrap_or("").to_string();
     let acted: String = case["actions"].as_array().into_iter().flatten().filter_map(|action| action["action"].as_str()).collect();
+    let cleaned = case["cleanup"].as_array().is_some_and(|steps| !steps.is_empty());
     let mark = (case["level"].as_str().unwrap_or("").to_string(), acted);
-    if said.get(&key) == Some(&mark) {
+    if said.get(&key).is_some_and(|before| before.0 == mark.0) && mark.1.is_empty() && !cleaned {
         return false;
     }
     if said.len() > 5000 {

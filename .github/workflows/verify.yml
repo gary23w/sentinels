@@ -460,6 +460,36 @@ jobs:
           sleep 12
           same   # put back on purpose: not cleaned a second time
           sudo rust/target/release/garrett --state-dir /tmp/gs-state cases
+      # The same three things, cleaned up and then called the owner's with trust (nothing is put back). Written
+      # again, as an installer that runs again would, they are left alone.
+      - name: What was cleaned up under a case the owner trusts is left alone when it comes back
+        run: |
+          line='(/tmp/gl3/php-fpm8.3 5 >/dev/null 2>&1 &)'
+          job='*/5 * * * * root /tmp/gl3/php-fpm8.3 5'
+          sudo cp /root/.bashrc /tmp/bashrc.before
+          stage() {
+            sudo mkdir -p /tmp/gl3 && sudo cp "$(command -v sleep)" /tmp/gl3/php-fpm8.3
+            sudo sh -c '/tmp/gl3/php-fpm8.3 900 &'
+            printf '%s\n' "$line" | sudo tee -a /root/.bashrc > /dev/null
+            printf '%s\n' "$job" | sudo tee /etc/cron.d/gl-three > /dev/null
+          }
+          stage
+          for i in $(seq 1 25); do sudo test -e /tmp/gl3/php-fpm8.3 || break; sleep 1; done
+          sleep 3
+          if sudo test -e /tmp/gl3/php-fpm8.3; then echo "the first time, nothing was cleaned up"; sudo tail -8 /tmp/agent.log; exit 1; fi
+          for key in $(sudo sh -c "grep -l gl3 /tmp/gs-state/cleanup/*.json" | xargs -n1 basename | sed 's/.json//'); do sudo rust/target/release/garrett --state-dir /tmp/gs-state trust "$key"; done
+          sleep 8   # the agent reads the owner's verdicts every few seconds
+          sudo cp /tmp/bashrc.before /root/.bashrc
+          stage
+          sleep 15
+          sudo tail -8 /tmp/agent.log
+          if ! sudo test -e /tmp/gl3/php-fpm8.3; then echo "the program the owner trusted was taken away again"; exit 1; fi
+          if ! sudo test -e /etc/cron.d/gl-three; then echo "the scheduled job the owner trusted was switched off again"; exit 1; fi
+          if ! sudo grep -q '^(/tmp/gl3/php-fpm8.3' /root/.bashrc; then echo "the shell startup line the owner trusted was switched off again"; exit 1; fi
+          if ! pgrep -f '/tmp/gl3/[p]hp-fpm' > /dev/null; then echo "the program the owner trusted was ended again"; exit 1; fi
+          sudo pkill -f '/tmp/gl3/[p]hp-fpm' || true
+          sudo rm -rf /tmp/gl3 /etc/cron.d/gl-three
+          sudo cp /tmp/bashrc.before /root/.bashrc
       # A chain that is over in milliseconds, behind a program that is not named like a web server: the shell is
       # ended before it reaches the line that writes its startup entry; an entry written with no shell at all
       # leaves nothing to end, and is switched off as soon as it appears.

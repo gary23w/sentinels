@@ -184,6 +184,36 @@ test('operators teach the policy within its bounds, and trusted programs are sen
   assert.deepEqual(learnPolicy(Array(9).fill({ shape: ['advisory_indicator', 'dcsync_pattern'], verdict: 'dismissed' })).policy, {});
 });
 
+test('every clean-up is said, under an open case and under one the operator called theirs before the machine heard', async () => {
+  const sent = [], real = globalThis.fetch;
+  globalThis.fetch = async (url, init) => { sent.push(JSON.parse(init.body)); return new Response('{}'); };
+  try {
+    const s = service({ ALERT_WEBHOOK_URL: 'https://hooks.example/alert' }), device = await enrolled(s);
+    const cleanup = [{ action: 'ended', kind: 'another running copy', where: '1 program(s)' }, { action: 'quarantined', kind: 'program file', where: '/tmp/lm/agent' }, { action: 'disabled', kind: 'shell startup file', where: '/root/.bashrc' }];
+    const entry = item('a', ['runs_from_temp', 'fresh_file'], { name: '.bashrc', path: '/root/.bashrc', parent: '', cleanup });
+    await s.call('POST', '/v1/report', report([entry]), device.token); await s.settle();
+    assert.equal(sent.length, 1); assert.match(sent[0].text, /web-01: Sentinel cleaned up after something that .*What it left was put away on the machine/);
+    // The same entry is written again and put away again: the case is still open, and it is said again.
+    await s.call('POST', '/v1/report', report([entry]), device.token); await s.settle();
+    assert.equal(sent.length, 2);
+    // Seen again with nothing done about it: not said again.
+    await s.call('POST', '/v1/report', report([{ ...entry, cleanup: undefined }]), device.token); await s.settle();
+    assert.equal(sent.length, 2);
+    // The operator calls it theirs; the machine cleaned up once more before it heard. The verdict stands.
+    const found = (await s.call('GET', '/v1/cases', null, ADMIN)).body.cases[0];
+    await s.call('POST', '/v1/cases/' + found.id + '/action', { action: 'trust' }, ADMIN);
+    const answer = (await s.call('POST', '/v1/report', report([entry]), device.token)).body; await s.settle();
+    assert.deepEqual(answer.trusted, ['a'.repeat(32)]);
+    assert.equal(sent.length, 3);
+    assert.match(sent[2].text, /web-01: Sentinel acted on \.bashrc, which you marked as yours, before the machine heard it\. .*garrett restore a{32}$/);
+    const after = (await s.call('GET', '/v1/cases/' + found.id, null, ADMIN)).body;
+    assert.deepEqual({ state: after.state, cleanup: after.detail.after_trust.cleanup.length }, { state: 'trusted', cleanup: 3 });
+    // Once it has heard, the machine leaves it alone, and a report of it with nothing done says nothing.
+    await s.call('POST', '/v1/report', report([{ ...entry, cleanup: undefined }]), device.token); await s.settle();
+    assert.equal(sent.length, 3);
+  } finally { globalThis.fetch = real; }
+});
+
 test('the AI analyst is optional, pluggable and advisory', async () => {
   const detail = validateCase(item('a', ['shell_from_web_server', 'risky_command_line'], { name: 'dash', parent: 'php-fpm' }));
   const asked = analystRequest(detail, 'linux', { dismissed: 0, confirmed: 2 });

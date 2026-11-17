@@ -423,7 +423,21 @@ async function report(request, env, ctx) {
     if (!reported(item.level)) continue;
     if (!respond) item.actions = [];
     const old = await env.DB.prepare('SELECT id,state,severity,detail,analysis FROM cases WHERE device_id=? AND case_key=?').bind(device.id, item.key).first();
-    if (old?.state === 'trusted') continue;
+    // Something put away on the machine just now: a file quarantined, a startup entry switched off. Each time is news.
+    const cleaned = (item.cleanup || []).some(step => ['quarantined', 'disabled', 'ended'].includes(step.action));
+    if (old?.state === 'trusted') {
+      // The machine acted before it heard that the operator called this program theirs (it hears with this answer).
+      // The verdict stands; the operator is told what was done, so it can be put back.
+      if (cleaned || item.actions.some(action => action.action === 'stopped')) {
+        try {
+          const before = await unseal(old.detail, env.DATA_KEY);
+          before.after_trust = { at: stamp, actions: item.actions, cleanup: item.cleanup || [] };
+          await env.DB.prepare('UPDATE cases SET detail=?,last_seen_at=? WHERE id=?').bind(await seal(before, env.DATA_KEY), stamp, old.id).run();
+        } catch {}
+        ctx?.waitUntil(alert(env, { text: device.label + ': Sentinel acted on ' + item.name + ', which you marked as yours, before the machine heard it. It is left alone from now on. Put back what was put away with: garrett restore ' + item.key, title: 'Acted on before your verdict arrived: ' + item.name, level: item.level, severity: 'high', device: device.label, case_id: old.id, paused: false, stopped: item.actions.some(action => action.action === 'stopped'), signals: item.signals.filter(signal => signal.points > 0).map(signal => signal.id) }));
+      }
+      continue;
+    }
     if (!old && (await env.DB.prepare('SELECT COUNT(*) AS n FROM cases WHERE device_id=?').bind(device.id).first()).n >= MAX_CASES_PER_DEVICE) continue;
     // A later report of a program that is still paused keeps the record that it was paused.
     const freshPause = item.actions.some(action => action.action === 'paused');
@@ -452,9 +466,11 @@ async function report(request, env, ctx) {
       else if (today > DECISIONS_A_DAY) await env.DB.prepare("UPDATE cases SET response='hold' WHERE id=?").bind(id).run();
       else await decideCase(env, id, item, device.platform);
     }
-    if (!old || old.state !== 'open' || (old.severity !== 'high' && severity === 'high')) {
-      ctx?.waitUntil(alert(env, { text: device.label + ': Sentinel ' + (stopped ? 'stopped' : paused ? 'paused' : 'flagged') + ' something that ' + why(item) + '. ' + (stopped ? 'The program was ended on the machine. Review the case, and mark it as yours if it was.' : paused ? 'It is paused, not removed: decide whether to stop it or let it continue.' : 'Nothing was stopped.'), title, level: item.level, severity, device: device.label, case_id: id, paused, stopped, signals: item.signals.filter(signal => signal.points > 0).map(signal => signal.id) }));
-      if (hasModel(env) && !(freshPause && MODES[level] === 'decide')) ctx?.waitUntil(analyzeCase(env, id));
+    const news = !old || old.state !== 'open' || (old.severity !== 'high' && severity === 'high');
+    // A clean-up is said every time, even under a case that is still open: what came back and was put away again.
+    if (news || cleaned) {
+      ctx?.waitUntil(alert(env, { text: device.label + ': Sentinel ' + (stopped ? 'stopped' : paused ? 'paused' : cleaned ? 'cleaned up after' : 'flagged') + ' something that ' + why(item) + '. ' + (stopped ? 'The program was ended on the machine. Review the case, and mark it as yours if it was.' : paused ? 'It is paused, not removed: decide whether to stop it or let it continue.' : cleaned ? 'What it left was put away on the machine. Review the case, and mark it as yours if it was.' : 'Nothing was stopped.'), title, level: item.level, severity, device: device.label, case_id: id, paused, stopped, signals: item.signals.filter(signal => signal.points > 0).map(signal => signal.id) }));
+      if (news && hasModel(env) && !(freshPause && MODES[level] === 'decide')) ctx?.waitUntil(analyzeCase(env, id));
     }
   }
   own = own || await ownCases.all();
