@@ -12,6 +12,8 @@ Most security tools watch an attack happen and then send you an alert about it. 
 
 `garrett`, the sentinel in this repo, works the other way round. It sits on the machine, sees your web server start a shell that downloads a script, and ends that shell before the script runs. Then it tells you what it did and why.
 
+It also knows how an AI agent works once it gets in: commands at machine pace, retries with small changes, sub-agents repeating each other. When a web server or a document starts running commands at machine pace, garrett ends it. [How it spots one](https://gary23w.github.io/sentinels/ai-attacks.html).
+
 It is one program file. You don't need an account, a cloud console or a kernel module. It runs on Linux, macOS and Windows.
 
 ## Install
@@ -93,7 +95,7 @@ To remove it: `sudo apt purge garrett` on Debian and Ubuntu, `sudo sh install.sh
 
 ## License
 
-MIT. Found a hole in it? Open an issue. That is exactly the kind of thing I want to know about.
+MIT. Found a hole in it? Open an issue, or [report it privately](SECURITY.md) if it could hurt people before a fix is out. That is exactly the kind of thing I want to know about.
 
 ## Want to power your Sentinels with AI?
 
