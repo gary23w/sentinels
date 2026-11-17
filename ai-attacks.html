@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI-operated intrusions - sentinels</title>
+<meta name="description" content="What an intrusion run by an AI agent looks like on a server or computer, the marks it leaves, and how the garrett agent ends it without calling a model.">
+<link rel="canonical" href="https://gary23w.github.io/sentinels/ai-attacks.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="sentinels">
+<meta property="og:title" content="How garrett ends an intrusion that an AI agent runs">
+<meta property="og:description" content="Commands at machine pace, retries with small changes, parallel sub-agents repeating each other: the marks garrett looks for, and what it does when it finds them.">
+<meta property="og:url" content="https://gary23w.github.io/sentinels/ai-attacks.html">
+<meta property="og:image" content="https://gary23w.github.io/sentinels/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="sentinels: ends a break-in while it is still starting. One program file, one command to install, Linux, macOS and Windows, MIT licensed.">
+<meta name="twitter:card" content="summary_large_image">
+<style>
+:root { color-scheme: light; }
+* { box-sizing: border-box; }
+html { background: #f6f5f0; }
+body { max-width: 80ch; margin: 0 auto; padding: 1rem 1.25rem 3rem; color: #1c1c1b; font: 16px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+a { color: #165278; text-decoration: underline; text-underline-offset: 2px; }
+a:hover, a:focus-visible { color: #0b334c; }
+.masthead, .foot { display: flex; justify-content: space-between; gap: 1rem; font-size: .92rem; }
+.masthead { padding-bottom: .45rem; border-bottom: 1px solid #8a8a83; }
+nav { margin: 1rem 0 1.5rem; font-size: .88rem; }
+h1.name { font: inherit; margin: .5rem 0 .7rem 2ch; }
+h2 { margin: 1.65rem 0 .45rem; font-size: 1rem; line-height: inherit; letter-spacing: .02em; }
+h3 { margin: 1rem 0 .3rem 2ch; font-size: 1rem; line-height: inherit; }
+p, dl, pre, ul { margin: .5rem 0 .7rem 2ch; }
+ul { padding-left: 2ch; }
+li { margin: .25rem 0; }
+dt { font-weight: 700; margin-top: .6rem; }
+dd { margin: .1rem 0 .6rem 2ch; }
+pre { padding: .55rem 0; border-top: 1px solid #c4c4bd; border-bottom: 1px solid #c4c4bd; white-space: pre-wrap; overflow-wrap: anywhere; }
+code { font: inherit; }
+blockquote { margin: .4rem 0 .8rem 4ch; padding-left: 1.5ch; border-left: 2px solid #c4c4bd; color: #33332f; }
+.foot { margin-top: 2.4rem; padding-top: .4rem; border-top: 1px solid #8a8a83; }
+section { scroll-margin-top: 1rem; }
+@media (max-width: 38rem) { .masthead .middle { display: none; } body { font-size: 15px; } }
+</style>
+</head>
+<body id="top">
+<header class="masthead">
+  <strong>SENTINELS-AI(7)</strong><span class="middle">Miscellaneous Information</span><span>SENTINELS-AI(7)</span>
+</header>
+<nav aria-label="Site"><a href="./">sentinels(8)</a> / AI-operated intrusions</nav>
+<main>
+<section id="name">
+<h2>NAME</h2>
+<h1 class="name">sentinels-ai - how garrett spots and ends an intrusion that an AI agent runs</h1>
+</section>
+
+<section id="description">
+<h2>DESCRIPTION</h2>
+<p>An AI agent that breaks into a machine still has to get in and still has to run commands once it is there. It may get in through something that faces the network, such as a web application, or through a document or an email someone opens. Then it starts working.</p>
+<p>What gives it away is how it works. It runs commands faster than a person types, it retries a failed step with a small change, and its sub-agents repeat each other. <strong>garrett</strong> knows these marks. When commands start at machine pace where an intruder lands, its default mode ends the program on the machine itself, without asking a model.</p>
+</section>
+
+<section id="marks">
+<h2>THE MARKS IT LOOKS FOR</h2>
+<p>garrett counts them among the commands one program starts within three minutes. Each one comes with a reason in plain words, quoted here as the agent writes it (N and S are the counts it fills in):</p>
+<dl>
+  <dt>a command stream</dt>
+  <dd>Six or more different commands started one after another under the same program.
+    <blockquote>"N different commands were started one after another in S seconds under the same program, the pace of an automated operator."</blockquote></dd>
+  <dt>retries with small changes</dt>
+  <dd>Three or more commands that are each a near-copy of the command just before them.
+    <blockquote>"N commands in a row were near-copies of the one before, the way an automated operator retries a failed step with a small change."</blockquote></dd>
+  <dt>parallel sub-agents</dt>
+  <dd>The same command started again within three seconds, more than once, in the middle of varied work.
+    <blockquote>"The same command was started more than once at the same moment N time(s), the way parallel sub-agents repeat each other."</blockquote></dd>
+</dl>
+<p>These marks only count where an intruder lands: under a web server or another program that accepts network connections, or in a shell or script that a document, browser or mail program started. Commands you type yourself in a terminal or over SSH are not judged this way.</p>
+<p>A program outside the system folders that calls an AI model's API adds one point of evidence. That alone is never acted on.</p>
+</section>
+
+<section id="response">
+<h2>WHAT IT DOES ABOUT THEM</h2>
+<p>Some combinations have almost no honest use, so garrett acts on them at once instead of waiting for more evidence. These are among them, in the agent's own words:</p>
+<ul>
+  <li>a web server started a shell that is exploring the machine</li>
+  <li>a web server started a shell with a download-and-run or reverse-shell command</li>
+  <li>a web server is running a stream of commands at machine pace</li>
+  <li>a document or mail program is running a stream of commands at machine pace</li>
+</ul>
+<p>An intruder's very first check of who it is and what the machine is counts as exploring. When a web server started that shell, garrett does not need to see the stream that would follow.</p>
+<p>In the default <code>kill</code> mode it ends the program and everything it started, at once, and the default mode does not call a model to do it. Then it cleans up: a dropped file goes to quarantine, and a cron job, Run key or service that would bring it back is switched off.</p>
+<p>You choose how hard it hits. <code>pause</code> freezes the program and waits for you, <code>decide</code> freezes it and lets your own service's model decide, and <code>report</code> only tells you.</p>
+</section>
+
+<section id="questions">
+<h2>QUESTIONS</h2>
+<h3 id="cloud">Does it need a cloud account?</h3>
+<p>No. Installed by itself, garrett protects the machine it is on and keeps its cases there. To see several machines in one place, you run the Sentinel service on your own hardware, and the cases stay on it.</p>
+<h3 id="model">Does kill mode use AI?</h3>
+<p>No. The default <code>kill</code> mode decides on the machine and does not call a model. A model is used only if you configure a provider on your service, for case write-ups and for <code>decide</code> mode.</p>
+<h3 id="wrong">What happens when it gets it wrong?</h3>
+<p><code>garrett restore &lt;case&gt;</code> puts back everything it cleaned up: quarantined files and switched-off startup entries. <code>garrett trust &lt;case&gt;</code> tells it the program is yours. If you would rather watch first, install it in <code>report</code> mode and read the cases for a week.</p>
+<h3 id="systems">Which systems does it run on?</h3>
+<p>Linux (x86_64, ARM64 and ARMv7), macOS and Windows. Debian and Ubuntu can also install it from the project's signed apt repository.</p>
+<h3 id="free">What does it cost?</h3>
+<p>Nothing. The agent and the service are open source under the MIT license. If you would rather not run the service yourself, it can be <a href="https://github.com/gary23w/sentinels#want-to-power-your-sentinels-with-ai">hosted for you</a>.</p>
+</section>
+
+<section id="install">
+<h2>INSTALLATION</h2>
+<p>Linux and macOS:</p>
+<pre><code>curl -fsSL https://gary23w.github.io/sentinels/install.sh | sudo sh</code></pre>
+<p>Windows, from an elevated PowerShell:</p>
+<pre><code>irm https://gary23w.github.io/sentinels/install.ps1 | iex</code></pre>
+<p>To start with reports only:</p>
+<pre><code>curl -fsSL https://gary23w.github.io/sentinels/install.sh | sudo sh -s -- --mode report</code></pre>
+</section>
+
+<section id="see-also">
+<h2>SEE ALSO</h2>
+<p><a href="./">sentinels(8)</a>, <a href="manual.html">garrett(8) manual</a>. The marks and their wording are defined in <a href="https://github.com/gary23w/sentinels/blob/main/rust/src/score.rs">rust/src/score.rs</a>.</p>
+</section>
+</main>
+<footer class="foot"><span>Sentinels</span><a href="#top">Back to top</a></footer>
+</body>
+</html>
