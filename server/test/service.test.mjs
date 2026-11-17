@@ -118,6 +118,24 @@ test('kill is the default: the agent ends the program and the case records it; t
   assert.equal((await enrolled(service({ RESPONSE_MODE: 'nonsense' }))).mode, 'kill');
 });
 
+test('a machine its own configuration holds to less is treated as it runs, never as more than its enrolment allows', async () => {
+  const runs = responds => ({ mesh: { addresses: [], peers: [], coverage: { responds } } });
+  // Enrolled for kill, run in decide: what it froze is decided (here by the fallback, as no model is configured).
+  const s = service(), device = await enrolled(s);
+  const paused = item('a', ['shell_from_web_server', 'risky_command_line'], { name: 'dash', actions: [{ action: 'paused', programs: 1, reason: 'a web server started a shell' }] });
+  const answer = (await s.call('POST', '/v1/report', report([paused], runs('decide')), device.token)).body;
+  assert.deepEqual({ mode: answer.mode, commands: answer.commands }, { mode: 'decide', commands: [{ key: 'a'.repeat(32), action: 'stop' }] });
+  // Run in report: nothing it says it did is recorded as done, and nothing is sent to do.
+  const stopped = item('b', ['shell_from_web_server', 'risky_command_line'], { name: 'sh', actions: [{ action: 'stopped', programs: 1, reason: 'a web server started a shell' }] });
+  assert.deepEqual((await s.call('POST', '/v1/report', report([stopped], runs('report')), device.token)).body.commands, []);
+  const found = (await s.call('GET', '/v1/cases', null, ADMIN)).body.cases.find(one => one.title.startsWith('sh '));
+  assert.deepEqual({ title: found.title, stopped: found.stopped }, { title: 'sh looks suspicious', stopped: false });
+  // Asking for more than the service allowed changes nothing.
+  const held = service({ RESPONSE_MODE: 'pause' }), small = await enrolled(held);
+  assert.equal((await held.call('POST', '/v1/report', report([], runs('kill')), small.token)).body.mode, 'pause');
+  assert.equal((await held.call('POST', '/v1/report', report([]), small.token)).body.mode, 'pause');
+});
+
 test('in pause mode a program is stopped or released only by the operator', async () => {
   const s = service({ RESPONSE_MODE: 'pause' }), device = await enrolled(s);
   const paused = item('a', ['shell_from_web_server', 'risky_command_line'], { name: 'dash', actions: [{ action: 'paused', programs: 2, reason: 'a web server started a shell' }], chain: [{ name: 'php-fpm', path: '/usr/sbin/php-fpm' }] });

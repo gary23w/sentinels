@@ -199,7 +199,12 @@ fn command(arguments: &[String]) -> Result<i32, String> {
         }
         "status" => {
             match state.load()? {
-                Some(saved) => println!("Enrolled with {}. Mode: {}.", saved["server"].as_str().unwrap_or(""), saved["mode"].as_str().unwrap_or("report")),
+                Some(saved) => {
+                    // The launcher hands over the configuration's MODE: the agent runs in the lower of the two.
+                    let (given, asked) = (saved["mode"].as_str().unwrap_or("report"), mode(rest)?);
+                    let now = agent::lower_mode(given, &asked);
+                    println!("Enrolled with {}. Mode: {now}{}.", saved["server"].as_str().unwrap_or(""), if now != given { format!(" (this machine's configuration asks for {asked}; its service allows {given})") } else { String::new() });
+                }
                 None => println!("Not enrolled with a service: this machine is protected by itself when garrett runs."),
             }
             Ok(0)
@@ -474,7 +479,7 @@ fn let_go(state: &garrett::agent::State) -> usize {
 
 fn run(state: &garrett::agent::State, mode: &str, clean: bool) -> Result<i32, String> {
     match state.load()? {
-        Some(saved) => Ok(garrett::run::run(state, &saved, clean)),
+        Some(saved) => Ok(garrett::run::run(state, &saved, mode, clean)),
         None => Ok(garrett::run::run_alone(state, mode, clean)),
     }
 }

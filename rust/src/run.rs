@@ -527,12 +527,15 @@ fn service_addresses(server: &str) -> Vec<String> {
 }
 
 /// Sample, score on the machine, report SUSPECT and HOSTILE cases, and carry out the operator's decisions.
-/// Returns 2 when the service has removed this machine.
-pub fn run(state: &State, saved: &Value, clean: bool) -> i32 {
+/// `wanted` is the mode this machine's own configuration asks for: it runs in the lower of that and what the
+/// service allowed it at enrolment. Returns 2 when the service has removed this machine.
+pub fn run(state: &State, saved: &Value, wanted: &str, clean: bool) -> i32 {
     let text = |key: &str| saved[key].as_str().unwrap_or("").to_string();
     let (server, token, pin) = (text("server"), text("token"), text("pin"));
     let pin = (!pin.is_empty()).then_some(pin);
-    let mode = saved["mode"].as_str().unwrap_or("report").to_string();
+    let given = saved["mode"].as_str().unwrap_or("report");
+    let mode = agent::lower_mode(given, wanted).to_string();
+    println!("garrett: reporting to {server} (mode: {mode}{})", if mode != given { format!(", as this machine's configuration asks; its service allows {given}") } else { String::new() });
     listen_for_stop();
     let mut running = build(state, &text("salt"), &mode, clean, saved["fallback"] == "kill", saved["decide_after"].as_f64().unwrap_or(20.0), &service_addresses(&server));
     let clamp = |value: &Value, low: f64, high: f64, fallback: f64| value.as_f64().filter(|_| value.is_i64() || value.is_u64()).map(|number| number.clamp(low, high)).unwrap_or(fallback);

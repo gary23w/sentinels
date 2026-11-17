@@ -388,9 +388,11 @@ async function report(request, env, ctx) {
   if (new Set(cases.map(item => item.key)).size !== cases.length) fail(400, 'The report repeats a case.');
   if (input.results !== undefined && (!Array.isArray(input.results) || input.results.length > 16)) fail(400, 'Invalid result.');
   const results = (input.results || []).map(item => { if (!item || !/^[a-f0-9]{32}$/.test(item.key || '') || !['stopped', 'released'].includes(item.action) || !whole(item.programs, 0, 64) || !whole(item.gone ?? 0, 0, 64)) fail(400, 'Invalid result.'); return { ...item, cleanup: cleanupSteps(item.cleanup) }; });
-  const stamp = now(), respond = device.respond >= 1, watching = {};
-  for (const key of ['processes', 'connections', 'tracked']) watching[key] = whole(input.watching?.[key], 0, 1e6) ? input.watching[key] : 0;
   const mesh = meshOf(input.mesh);
+  // A machine may run in less than it was allowed at enrolment, because its own configuration says so; never in more.
+  const told = MODES.indexOf(mesh.coverage.responds), level = told >= 0 ? Math.min(device.respond, told) : device.respond;
+  const stamp = now(), respond = level >= 1, watching = {};
+  for (const key of ['processes', 'connections', 'tracked']) watching[key] = whole(input.watching?.[key], 0, 1e6) ? input.watching[key] : 0;
   const seen = env.DB.prepare('UPDATE devices SET last_seen_at=?,summary=?,addresses=?,peers=?,coverage=? WHERE id=?').bind(stamp, JSON.stringify(watching), JSON.stringify(mesh.addresses), JSON.stringify(mesh.peers), JSON.stringify(mesh.coverage), device.id);
   const ownCases = env.DB.prepare("SELECT case_key,state,response FROM cases WHERE device_id=? AND (state='trusted' OR response IS NOT NULL) LIMIT 320").bind(device.id);
   // A quiet report (nothing to save, nothing carried out) is the common one: its write and its read go to the database together.
@@ -401,7 +403,7 @@ async function report(request, env, ctx) {
   for (const result of respond ? results : []) {
     const row = await env.DB.prepare('SELECT id,detail,response,analysis FROM cases WHERE device_id=? AND case_key=?').bind(device.id, result.key).first();
     // In decide mode an agent that heard nothing in time ends the program by itself and says so.
-    const unanswered = row && !row.response && result.action === 'stopped' && MODES[device.respond] === 'decide';
+    const unanswered = row && !row.response && result.action === 'stopped' && MODES[level] === 'decide';
     if (!row || !(unanswered || row.response === 'stop' && result.action === 'stopped' || row.response === 'release' && result.action === 'released')) continue;
     const detail = await unseal(row.detail, env.DATA_KEY);
     let by = 'operator';
@@ -440,7 +442,7 @@ async function report(request, env, ctx) {
     invalidate(env);
     if (stopped) await promote(env, id, item, 'a program stopped on ' + device.label + ' called out to it', device.id);
     // decide mode: the program is frozen on the machine; the model (or the fallback) says what happens to it.
-    if (freshPause && MODES[device.respond] === 'decide') {
+    if (freshPause && MODES[level] === 'decide') {
       // The model is asked once about a case. One it judged in the last day that comes back is held for an operator,
       // and so are a machine's new cases past the day's limit, so a machine cannot have the model asked without end.
       let judged = false;
@@ -452,7 +454,7 @@ async function report(request, env, ctx) {
     }
     if (!old || old.state !== 'open' || (old.severity !== 'high' && severity === 'high')) {
       ctx?.waitUntil(alert(env, { text: device.label + ': Sentinel ' + (stopped ? 'stopped' : paused ? 'paused' : 'flagged') + ' something that ' + why(item) + '. ' + (stopped ? 'The program was ended on the machine. Review the case, and mark it as yours if it was.' : paused ? 'It is paused, not removed: decide whether to stop it or let it continue.' : 'Nothing was stopped.'), title, level: item.level, severity, device: device.label, case_id: id, paused, stopped, signals: item.signals.filter(signal => signal.points > 0).map(signal => signal.id) }));
-      if (hasModel(env) && !(freshPause && MODES[device.respond] === 'decide')) ctx?.waitUntil(analyzeCase(env, id));
+      if (hasModel(env) && !(freshPause && MODES[level] === 'decide')) ctx?.waitUntil(analyzeCase(env, id));
     }
   }
   own = own || await ownCases.all();
@@ -460,7 +462,7 @@ async function report(request, env, ctx) {
   // A machine that already holds the current shared state is not sent it again.
   const parts = input.have === state.revision ? {} : { ...sharedParts(state), fleet: { ...state.fleet, suspects: state.fleet.suspects.filter(address => !mine.has(address)) } };
   return json({ protocol: PROTOCOL, accepted: true, saved, trusted: own.results.filter(row => row.state === 'trusted').map(row => row.case_key), commands: respond ? own.results.filter(row => row.response).slice(0, 16).map(row => ({ key: row.case_key, action: row.response })) : [],
-    mode: MODES[device.respond] || 'report', revision: state.revision, interval: state.interval, pulse: state.pulse, state_key: await stateKey(env), ...parts, ...exitsFor(env, ctx, input.exits_have) });
+    mode: MODES[level] || 'report', revision: state.revision, interval: state.interval, pulse: state.pulse, state_key: await stateKey(env), ...parts, ...exitsFor(env, ctx, input.exits_have) });
 }
 
 async function caseView(env, row, full) {

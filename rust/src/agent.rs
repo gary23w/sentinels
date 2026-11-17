@@ -37,6 +37,16 @@ pub const PROTOCOL: &str = "sentinel-v1";
 pub const MODES: &[&str] = &["report", "pause", "decide", "kill"];
 const MAX_RESPONSE_BYTES: u64 = 256 * 1024;
 
+/// The lower of two modes: what the service allows this machine and what its own configuration asks for. Either
+/// may hold the machine to less, neither can raise it. A mode that is not understood counts as report.
+pub fn lower_mode<'a>(first: &'a str, second: &'a str) -> &'a str {
+    let rank = |mode: &str| MODES.iter().position(|known| *known == mode);
+    match (rank(first), rank(second)) {
+        (Some(one), Some(other)) => if one <= other { first } else { second },
+        _ => "report",
+    }
+}
+
 pub fn now() -> f64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|since| since.as_secs_f64()).unwrap_or(0.0)
 }

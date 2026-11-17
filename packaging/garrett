@@ -58,6 +58,11 @@ case "${1:-}" in
     restart
     echo "garrett is running and reporting to your service."
     ;;
+  status)
+    # The mode it runs in is the lower of the service's and this file's.
+    MODE=$(setting MODE)
+    exec "$AGENT" --state-dir "$STATE" status ${MODE:+--mode "$MODE"}
+    ;;
   forget)
     "$AGENT" --state-dir "$STATE" forget
     restart

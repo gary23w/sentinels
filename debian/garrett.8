@@ -60,7 +60,7 @@ enrolment key may be given in the environment variable
 instead of on the command line.
 .TP
 .B status
-Show which service this machine reports to, and its response mode.
+Show which service this machine reports to, and the response mode it runs in.
 .TP
 .B forget
 Stop the service and remove this machine's credential.
@@ -133,7 +133,13 @@ Freeze it and wait for an operator.
 .B report
 Only report.
 .PP
-The service may hold a machine to a lower mode than it asked for.
+The service may hold a machine to a lower mode than it asked for. So may the
+machine itself: an enrolled machine runs in the lower of the mode its service
+allowed it at enrolment and the one
+.B MODE=
+in its configuration file asks for. A higher
+.B MODE=
+than the service allowed changes nothing; enrol the machine again for that.
 .SH FILES
 .TP
 .I /etc/garrett/garrett.conf
