@@ -87,6 +87,35 @@ function titleFor(detail, paused, stopped) {
 // ---- the fleet mesh: what one machine learns protects the others
 const IP = /^[0-9a-fA-F:.]{3,45}$/;
 const privateAddress = address => /^(10\.|127\.|169\.254\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.|0\.|::1$|::$|f[cd][0-9a-f]{2}:|fe80:)/i.test(address);
+// The networks content delivery services publish as theirs: an address there answers for a great many sites at
+// once, so a program reaching one says nothing about the address, and refusing it would refuse every site behind
+// it. As each service published them on 2026-11-17: https://www.cloudflare.com/ips-v4,
+// https://www.cloudflare.com/ips-v6 and https://api.fastly.com/public-ip-list.
+const SHARED_NETWORKS = [
+  // Cloudflare
+  '173.245.48.0/20', '103.21.244.0/22', '103.22.200.0/22', '103.31.4.0/22', '141.101.64.0/18', '108.162.192.0/18', '190.93.240.0/20', '188.114.96.0/20',
+  '197.234.240.0/22', '198.41.128.0/17', '162.158.0.0/15', '104.16.0.0/13', '104.24.0.0/14', '172.64.0.0/13', '131.0.72.0/22',
+  '2400:cb00::/32', '2606:4700::/32', '2803:f800::/32', '2405:b500::/32', '2405:8100::/32', '2a06:98c0::/29', '2c0f:f248::/32',
+  // Fastly
+  '23.235.32.0/20', '43.249.72.0/22', '90.98.0.0/17', '90.98.128.0/18', '103.244.50.0/24', '103.245.222.0/23', '103.245.224.0/24', '104.156.80.0/20',
+  '140.248.64.0/18', '140.248.128.0/17', '146.75.0.0/17', '151.101.0.0/16', '157.52.64.0/18', '167.82.0.0/17', '167.82.128.0/20', '167.82.160.0/20',
+  '167.82.224.0/20', '172.111.64.0/18', '185.31.16.0/22', '199.27.72.0/21', '199.232.0.0/16',
+  '2a04:4e40::/32', '2a04:4e42::/31', '2a04:4e44::/32'
+];
+// An address as a number of its own family: { six, value }. null when it is not an address.
+function addressNumber(address) {
+  const four = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(address) || /^::ffff:(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/i.exec(address);
+  if (four) { const parts = four.slice(1).map(Number); return parts.every(part => part <= 255) ? { six: false, value: parts.reduce((sum, part) => (sum << 8n) | BigInt(part), 0n) } : null; }
+  const halves = address.split('::');
+  if (halves.length > 2) return null;
+  const head = halves[0] ? halves[0].split(':') : [], tail = halves.length === 2 && halves[1] ? halves[1].split(':') : [];
+  if (halves.length === 2 ? head.length + tail.length > 7 : head.length !== 8) return null;
+  const groups = [...head, ...Array(8 - head.length - tail.length).fill('0'), ...tail];
+  if (!groups.every(group => /^[0-9a-f]{1,4}$/i.test(group))) return null;
+  return { six: true, value: groups.reduce((sum, group) => (sum << 16n) | BigInt(parseInt(group, 16)), 0n) };
+}
+const SHARED = SHARED_NETWORKS.map(network => { const [base, size] = network.split('/'), start = addressNumber(base); return { ...start, drop: BigInt((start.six ? 128 : 32) - Number(size)) }; });
+export const sharedAddress = address => { const given = addressNumber(String(address)); return !!given && SHARED.some(network => network.six === given.six && given.value >> network.drop === network.value >> network.drop); };
 function meshOf(input) {
   const mesh = input && typeof input === 'object' ? input : {};
   const addresses = (Array.isArray(mesh.addresses) ? mesh.addresses : []).filter(address => typeof address === 'string' && IP.test(address)).slice(0, 8);
@@ -96,13 +125,16 @@ function meshOf(input) {
     if (/^[a-z_]{3,24}$/.test(key) && (typeof value === 'boolean' || whole(value, 0, 1e6) || text(value, 16))) coverage[key] = value;
   return { addresses, peers, coverage };
 }
-// An address a stopped or confirmed attack called out to is shared with every machine for a week. Addresses on
-// your own network and addresses the watchlist knows many sites share are left out.
+// An address a stopped or confirmed attack called out to is shared with every machine for a week. Left out:
+// addresses on your own network, and addresses many sites share: those the watchlist knows, those the machine
+// marked as currently answering for a watched host ("~" names, see the agent's score.rs), and those in the
+// networks content delivery services publish as theirs.
 // deviceId is given when the machine itself reported the stop: those additions are limited per machine per day.
 async function promote(env, caseId, detail, why, deviceId = null) {
   let room = deviceId ? DEVICE_SHARES_A_DAY - (await env.DB.prepare('SELECT COUNT(*) AS n FROM fleet_indicators f JOIN cases c ON c.id=f.case_id WHERE c.device_id=? AND f.added_at>?').bind(deviceId, now() - 86400).first()).n : Infinity;
   for (const remote of detail?.remotes || []) {
     if (remote.direction !== 'out' || !IP.test(remote.address) || privateAddress(remote.address) || Object.hasOwn(watchCache.map, remote.address)) continue;
+    if ((remote.names || []).some(name => String(name).startsWith('~')) || sharedAddress(remote.address)) continue;
     if (room <= 0 || deviceId && (await env.DB.prepare('SELECT COUNT(*) AS n FROM fleet_indicators WHERE expires_at>?').bind(now()).first()).n >= FLEET_MAX) break;
     room--;
     await env.DB.prepare('INSERT INTO fleet_indicators(address,reason,case_id,added_at,expires_at) VALUES(?,?,?,?,?) ON CONFLICT(address) DO UPDATE SET reason=excluded.reason,case_id=excluded.case_id,expires_at=excluded.expires_at')

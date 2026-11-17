@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import worker, { PROTOCOL } from '../src/service.mjs';
+import worker, { PROTOCOL, sharedAddress } from '../src/service.mjs';
 import { SIGNALS } from '../src/signals.mjs';
 import { environment } from './d1.mjs';
 
@@ -86,4 +86,23 @@ test('what one machine may add to the shared addresses by itself is limited; an 
   const third = (await s.call('GET', '/v1/cases', null, ADMIN)).body.cases.find(item => item.title.includes('stopped'));
   await s.call('POST', '/v1/cases/' + third.id + '/action', { action: 'confirm' }, ADMIN);
   assert.ok(await shared() >= 8);
+});
+
+test("only an attack's own address is shared, never one that answers for many sites at once", async () => {
+  // A fresh program that calls its own server and, around it, addresses that serve a great many sites.
+  const crowd = [['104.16.3.1', []], ['104.24.0.9', []], ['151.101.1.69', []], ['2606:4700::6810:84e5', []], ['198.51.100.7', ['~pastebin.com']], ['172.67.1.1', ['~transfer.sh']]]
+    .map(([address, names]) => ({ address, port: 443, names, direction: 'out' }));
+  const caller = (letter, actions) => ({ ...implant(letter, actions), remotes: [{ address: ATTACKER, port: 443, names: [], direction: 'out' }, ...crowd] });
+  // Confirmed by an operator.
+  const s = service({ RESPONSE_MODE: 'report' }), web = await s.enrol('web-01'), db = await s.enrol('db-01');
+  await s.call('POST', '/v1/report', report('linux', [caller('a')]), web.token);
+  await s.call('POST', '/v1/cases/' + (await s.call('GET', '/v1/cases', null, ADMIN)).body.cases[0].id + '/action', { action: 'confirm' }, ADMIN);
+  assert.deepEqual(Object.keys((await s.call('POST', '/v1/report', report('linux', []), db.token)).body.fleet.indicators), [ATTACKER]);
+  // Stopped by the machine itself.
+  const t = service(), one = await t.enrol('web-01'), two = await t.enrol('db-01');
+  await t.call('POST', '/v1/report', report('linux', [caller('b', [{ action: 'stopped', programs: 1, reason: 'hostile' }])]), one.token);
+  assert.deepEqual(Object.keys((await t.call('POST', '/v1/report', report('linux', []), two.token)).body.fleet.indicators), [ATTACKER]);
+  // The networks, at their edges, in both families.
+  for (const address of ['104.16.0.0', '104.23.255.255', '104.27.255.255', '172.71.0.1', '2a04:4e43::1', '::ffff:151.101.0.1', '2400:cb00:2048:1::c629:d7a2']) assert.ok(sharedAddress(address), address);
+  for (const address of ['104.15.255.255', '104.28.0.1', '172.72.0.1', '2a04:4e45::1', '2606:4701::1', ATTACKER, 'nonsense', '1:2:3', '::ffff:999.1.1.1']) assert.ok(!sharedAddress(address), address);
 });
