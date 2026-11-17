@@ -275,6 +275,10 @@ jobs:
           for i in $(seq 1 40); do sudo garrett-service cases | grep -q "php-fpm8.3" && break; sleep 1; done
           sudo garrett-service cases | grep -o '"title":"[^"]*"' | head -3
           sudo garrett-service cases | grep -q "php-fpm8.3"
+          # The machine itself says where its cases are, and shows the ones it saw.
+          sudo garrett cases | tee /tmp/cases.txt
+          grep -q "This machine reports to https://127.0.0.1:8443" /tmp/cases.txt
+          grep -q "stopped" /tmp/cases.txt
       # The service allowed kill. MODE=report in the machine's own configuration holds it to less.
       - name: MODE= in the configuration holds an enrolled machine to less than its service allows
         run: |

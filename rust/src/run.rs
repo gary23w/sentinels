@@ -449,6 +449,31 @@ fn say_case(case: &Value) {
     }
 }
 
+/// Keep a case in this machine's own list (cases.jsonl, what `garrett cases` reads), with or without a service.
+/// The same case at the same level with the same actions is kept once. Returns true when it was kept.
+fn keep_case(state: &State, said: &mut std::collections::HashMap<String, (String, String)>, case: &Value) -> bool {
+    let key = case["key"].as_str().unwrap_or("").to_string();
+    let acted: String = case["actions"].as_array().into_iter().flatten().filter_map(|action| action["action"].as_str()).collect();
+    let mark = (case["level"].as_str().unwrap_or("").to_string(), acted);
+    if said.get(&key) == Some(&mark) {
+        return false;
+    }
+    if said.len() > 5000 {
+        said.clear();
+    }
+    said.insert(key, mark);
+    let log = state.directory.join("cases.jsonl");
+    let (line, _) = local_line(case);
+    if std::fs::metadata(&log).map(|meta| meta.len() > 5 * 1024 * 1024).unwrap_or(false) {
+        let _ = std::fs::rename(&log, state.directory.join("cases.old.jsonl"));
+    }
+    if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(&log) {
+        use std::io::Write;
+        let _ = writeln!(file, "{line}");
+    }
+    true
+}
+
 fn say_settling(running: &Running) {
     let left = running.watcher.lock().map(|watcher| watcher.settling(now()).0).unwrap_or(0.0);
     if left > 0.0 {
@@ -465,7 +490,7 @@ pub fn run_alone(state: &State, mode: &str, clean: bool) -> i32 {
     };
     listen_for_stop();
     let mut running = build(state, &salt, if mode == "kill" { "kill" } else if mode == "report" { "report" } else { "pause" }, clean, false, 20.0, &[]);
-    let (log, trusted_file, decisions) = (state.directory.join("cases.jsonl"), state.directory.join("trusted.json"), state.directory.join("decisions.json"));
+    let (trusted_file, decisions) = (state.directory.join("trusted.json"), state.directory.join("decisions.json"));
     let mut said: std::collections::HashMap<String, (String, String)> = std::collections::HashMap::new();
     println!("garrett: watching this machine by itself (mode: {mode}). Join a fleet any time: garrett enroll --server <address> --key <key>");
     say_settling(&running);
@@ -488,20 +513,8 @@ pub fn run_alone(state: &State, mode: &str, clean: bool) -> i32 {
             }
         }
         for case in &cases {
-            let key = case["key"].as_str().unwrap_or("").to_string();
-            let acted: String = case["actions"].as_array().into_iter().flatten().filter_map(|action| action["action"].as_str()).collect();
-            let mark = (case["level"].as_str().unwrap_or("").to_string(), acted);
-            if said.get(&key) == Some(&mark) {
+            if !keep_case(state, &mut said, case) {
                 continue;
-            }
-            said.insert(key, mark);
-            let (line, _) = local_line(case);
-            if std::fs::metadata(&log).map(|meta| meta.len() > 5 * 1024 * 1024).unwrap_or(false) {
-                let _ = std::fs::rename(&log, state.directory.join("cases.old.jsonl"));
-            }
-            if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(&log) {
-                use std::io::Write;
-                let _ = writeln!(file, "{line}");
             }
             say_case(case);
             if let Ok(mut watcher) = running.watcher.lock() {
@@ -545,6 +558,7 @@ pub fn run(state: &State, saved: &Value, wanted: &str, clean: bool) -> i32 {
     let mut next_pulse = now() + pulse * jitter(0.5, 1.5);
     let mut pending: Vec<Value> = Vec::new();
     let mut results: Vec<Value> = Vec::new();
+    let mut said: std::collections::HashMap<String, (String, String)> = std::collections::HashMap::new();
     // Which signals the service knows: it says so with the shared state. Until it does, only the first set.
     let mut signal_set = 1u64;
 
@@ -592,6 +606,7 @@ pub fn run(state: &State, saved: &Value, wanted: &str, clean: bool) -> i32 {
             }
         }
         for case in running.look() {
+            keep_case(state, &mut said, &case); // here too, so `garrett cases` shows what this machine saw
             let Some(case) = agent::known_to(case, signal_set) else { continue };
             if case["actions"].as_array().is_some_and(|list| !list.is_empty()) {
                 send_after = 0.0; // something was paused or stopped: say so now, not at the next window

@@ -210,7 +210,20 @@ fn command(arguments: &[String]) -> Result<i32, String> {
             Ok(0)
         }
         "cases" => {
-            for line in agent::local_cases(&state, 30) {
+            let lines = agent::local_cases(&state, 30);
+            if lines.is_empty() && std::fs::read_dir(&state.directory).is_err_and(|error| error.kind() == std::io::ErrorKind::PermissionDenied) {
+                let how = if cfg!(windows) { "run garrett cases from an elevated prompt." } else { "sudo garrett cases" };
+                return Err(format!("Only {} can read the cases on this machine: {how}", if cfg!(windows) { "an administrator" } else { "root" }));
+            }
+            match state.load().ok().flatten() {
+                Some(saved) => {
+                    println!("This machine reports to {}: its cases are judged there (trust, confirm, stop, release).", saved["server"].as_str().unwrap_or(""));
+                    println!("{}", if lines.is_empty() { "None has been kept on this machine yet." } else { "The latest ones seen on this machine:" });
+                }
+                None if lines.is_empty() => println!("No cases on this machine yet."),
+                None => {}
+            }
+            for line in lines {
                 let words = |key: &str, between: &str| line[key].as_array().map(|list| list.iter().filter_map(Value::as_str).collect::<Vec<_>>().join(between)).unwrap_or_default();
                 let acted = words("actions", ",");
                 let held = match line["held"].as_str() { Some("learning") => "flagged, left running while learning", Some(why) if !why.is_empty() => "flagged, left running for you to judge", _ => "flagged" };
@@ -447,6 +460,10 @@ fn command(arguments: &[String]) -> Result<i32, String> {
 /// The owner judged a case on a machine that keeps its own cases: remember it and say what was learned.
 fn judged(state: &garrett::agent::State, key: &str, mine: bool, how: &str) {
     use garrett::agent;
+    // An enrolled machine also keeps its cases here now, but it learns from its service, not from these.
+    if state.load().ok().flatten().is_some() {
+        return;
+    }
     let Some(case) = agent::local_cases(state, 5000).into_iter().rev().find(|line| line["key"] == key) else { return };
     if let Ok(said) = garrett::learn::remember(&state.directory, &case, mine, how, agent::now()) {
         for line in said {
