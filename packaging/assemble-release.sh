@@ -35,6 +35,8 @@ for name in $NAMES garrett-linux-x86_64.tar.gz garrett-linux-aarch64.tar.gz garr
 for name in install.sh install.ps1 service.sh service.ps1; do sed 's/\r$//' "$HERE/packaging/$name" > "$OUT/site/$name"; done
 # The site's front page, and the manual as a page.
 sed "s/@VERSION@/$VERSION/g" "$HERE/packaging/site/index.html" > "$OUT/site/index.html"
+# The site's other pages and the files that help it be found, as they are.
+for name in "$HERE"/packaging/site/*; do case "${name##*/}" in index.html|manual.html) ;; *) cp "$name" "$OUT/site/";; esac; done
 { sed -n '1,/@MANUAL@/p' "$HERE/packaging/site/manual.html" | sed '$d'; mandoc -T html -O fragment "$HERE/debian/garrett.8"; sed -n '/@MANUAL@/,$p' "$HERE/packaging/site/manual.html" | sed '1d'; } > "$OUT/site/manual.html"
 : > "$OUT/site/.nojekyll"
 rm -rf "$OUT/agents"
