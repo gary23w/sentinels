@@ -166,6 +166,13 @@ itself on first start.
 .TP
 .I /var/lib/garrett/
 This machine's credential and what the agent remembers about it.
+.PP
+Purging the package removes these, and the apt source and signing key the
+installer added,
+.I /etc/apt/sources.list.d/garrett.list
+and
+.IR /usr/share/keyrings/garrett.gpg ;
+the key stays while another apt source still names it.
 .SH LEARNING
 A fresh install settles in for a day
 .RB ( LEARN_HOURS ).

@@ -7,4 +7,9 @@ set -e
 if [ "$1" = remove ] || [ "$1" = purge ]; then
   if command -v nft >/dev/null 2>&1; then nft delete table inet garrett 2>/dev/null || true; fi
 fi
-if [ "$1" = purge ]; then rm -rf /var/lib/garrett /etc/garrett; fi
+if [ "$1" = purge ]; then
+  rm -rf /var/lib/garrett /etc/garrett
+  # The apt source install.sh added, and its signing key unless another source still names it.
+  if grep -qs "signed-by=/usr/share/keyrings/garrett.gpg" /etc/apt/sources.list.d/garrett.list; then rm -f /etc/apt/sources.list.d/garrett.list; fi
+  if ! grep -rqs "/usr/share/keyrings/garrett.gpg" /etc/apt/sources.list /etc/apt/sources.list.d; then rm -f /usr/share/keyrings/garrett.gpg; fi
+fi

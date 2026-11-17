@@ -12,6 +12,7 @@
 #   update-*                    an installed agent brings itself up to a newer version, and refuses one that is
 #                               not signed or does not match its signed list
 #   tests                       the service's own tests
+#   package                     the package's removal script, run in a container that has apt
 #
 # Run it from the Actions tab (Run workflow) or:  gh workflow run verify.yml
 name: verify
@@ -91,7 +92,7 @@ jobs:
       - name: Removal leaves nothing
         run: |
           sudo apt-get purge -y garrett >/dev/null
-          for p in /usr/lib/garrett /usr/bin/garrett /var/lib/garrett /etc/garrett; do if [ -e "$p" ]; then echo "left behind: $p"; exit 1; fi; done
+          for p in /usr/lib/garrett /usr/bin/garrett /var/lib/garrett /etc/garrett /etc/apt/sources.list.d/garrett.list /usr/share/keyrings/garrett.gpg; do if [ -e "$p" ]; then echo "left behind: $p"; exit 1; fi; done
 
   macos:
     if: github.event_name == 'workflow_dispatch'
@@ -366,6 +367,32 @@ jobs:
           if (Get-ScheduledTask -TaskName garrett-service -ErrorAction SilentlyContinue) { throw 'the task is still there' }
           if (Get-NetFirewallRule -DisplayName 'garrett-service' -ErrorAction SilentlyContinue) { throw 'the firewall rule is still there' }
           foreach ($folder in "$env:ProgramFiles\garrett-service", "$env:ProgramData\garrett-service") { if (Test-Path $folder) { throw "left behind: $folder" } }
+
+  # The package's removal script, run where it runs, on a system with apt: purging takes what the installer added.
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Purging takes the apt source and its key, and leaves a key another source still names
+        run: |
+          docker run --rm -v "$PWD/debian:/d:ro" ubuntu:24.04 sh -ec '
+            ours() {
+              mkdir -p /usr/share/keyrings /etc/garrett /var/lib/garrett
+              echo "deb [signed-by=/usr/share/keyrings/garrett.gpg] https://example.invalid stable main" > /etc/apt/sources.list.d/garrett.list
+              echo key > /usr/share/keyrings/garrett.gpg
+            }
+            ours
+            sh /d/postrm remove
+            test -e /etc/apt/sources.list.d/garrett.list && test -e /usr/share/keyrings/garrett.gpg   # remove keeps configuration
+            sh /d/postrm purge
+            for left in /etc/apt/sources.list.d/garrett.list /usr/share/keyrings/garrett.gpg /etc/garrett /var/lib/garrett; do if [ -e "$left" ]; then echo "left behind: $left"; exit 1; fi; done
+            ours
+            printf "Types: deb\nURIs: https://mirror.example.invalid\nSuites: stable\nComponents: main\nSigned-By: /usr/share/keyrings/garrett.gpg\n" > /etc/apt/sources.list.d/mirror.sources
+            sh /d/postrm purge
+            test ! -e /etc/apt/sources.list.d/garrett.list
+            test -e /usr/share/keyrings/garrett.gpg   # still named by another source
+            echo "purge removed the apt source and kept a key still in use"
+          '
 
   # The agent's decisions are recorded as fixtures (rust/tests/fixtures): every one must come out the same.
   rust:
