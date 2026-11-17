@@ -29,7 +29,7 @@ pub const SIGNALS: &[(&str, i64, &str)] = &[
     ("program_from_attachment", 3, "lineage"), ("remote_session_shell", 3, "lineage"), ("helper_with_child", 5, "lineage"), ("privilege_jump", 6, "privilege"), ("signin_key_added", 5, "behaviour"),
     ("hidden_browser", 5, "behaviour"), ("remote_control_tool", 3, "behaviour"), ("address_lookup_host", 1, "destinations"),
     ("boot_protection_off", 6, "hardware"), ("boot_entry_added", 5, "hardware"), ("firmware_downgraded", 5, "hardware"), ("firmware_changed_unannounced", 6, "hardware"),
-    ("kernel_module_loose", 5, "hardware"), ("driver_checks_off", 6, "hardware"), ("boot_code_changed", 6, "hardware"),
+    ("kernel_module_loose", 5, "hardware"), ("driver_checks_off", 6, "hardware"), ("boot_code_changed", 6, "hardware"), ("boot_selection_changed", 5, "hardware"), ("boot_entry_removed", 5, "hardware"),
     ("gateway_impersonated", 6, "network"), ("port_scan", 5, "network"), ("keyboard_injection", 5, "behaviour"),
     ("script_from_download", 5, "lineage"), ("lateral_sweep", 5, "pattern"),
     ("system_tool_misuse", 4, "behaviour"),

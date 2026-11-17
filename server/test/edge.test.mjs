@@ -164,12 +164,20 @@ test('a script served from an uploads folder, a smuggled object and an overflow 
 test('the service says which signals it knows and takes the later ones', async () => {
   const { validateCase } = await import('../src/service.mjs');
   const { SIGNAL_SET, SIGNALS } = await import('../src/signals.mjs');
-  assert.equal(SIGNAL_SET, 6);
+  assert.equal(SIGNAL_SET, 9);
   for (const [id, points] of [['helper_with_child', 5], ['privilege_jump', 6]]) {
     assert.ok(SIGNALS[id]);
     const taken = validateCase({ key: 'a'.repeat(32), name: 'sh', path: '/usr/bin/dash', parent: 'bash', signals: [{ id, points, category: 'x', evidence: 'e' }], remotes: [], categories: [], level: 'SUSPECT', score: points, observed_at: 1794832407, first_seen: 1794832407 });
     assert.equal(taken.signals[0].id, id);
   }
+  const bootChange = validateCase({ key: 'c'.repeat(32), name: 'firmware boot order', path: '', parent: '',
+    signals: [{ id: 'boot_selection_changed', points: 5, category: 'hardware', evidence: 'The firmware boot order changed.' }],
+    remotes: [], categories: ['hardware'], level: 'SUSPECT', score: 5, observed_at: 1794832407, first_seen: 1794832407 });
+  assert.equal(bootChange.signals[0].id, 'boot_selection_changed');
+  const removedEntry = validateCase({ key: 'd'.repeat(32), name: 'boot entry Boot0003', path: '', parent: '',
+    signals: [{ id: 'boot_entry_removed', points: 5, category: 'hardware', evidence: 'The boot entry disappeared.' }],
+    remotes: [], categories: ['hardware'], level: 'SUSPECT', score: 5, observed_at: 1794832407, first_seen: 1794832407 });
+  assert.equal(removedEntry.signals[0].id, 'boot_entry_removed');
 });
 
 test('what is done to a WordPress site is marked at the edge too', () => {

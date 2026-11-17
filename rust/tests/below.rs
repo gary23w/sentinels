@@ -1,7 +1,7 @@
 //! Below the operating system, on made-up machines: what is read from a Linux machine's own files, and which
 //! changes between two readings are reported.
 
-use garrett::hardware::{changes, day_number, describe, firmware_entries, read_linux, Facts, HardwareWatch};
+use garrett::hardware::{changes, day_number, describe, firmware_entries, read_linux, read_linux_part, Facts, HardwareWatch};
 use garrett::score::risky_commands;
 use std::path::Path;
 
@@ -118,7 +118,7 @@ fn each_change_an_update_does_not_explain_is_reported_and_an_update_is_not() {
     assert_eq!(signals(&after(&|root| write(root, &format!("sys/firmware/efi/efivars/SecureBoot-{GLOBAL}"), &[6, 0, 0, 0, 0]))), ["boot_protection_off"]);
     assert_eq!(signals(&after(&|root| write(root, &format!("sys/firmware/efi/efivars/Boot0003-{GLOBAL}"), &entry("Windows Boot Manager", "\\EFI\\Microsoft\\Boot\\grubx64.efi")))), ["boot_entry_added"]);
     assert_eq!(signals(&after(&|root| write(root, &format!("sys/firmware/efi/efivars/Boot0000-{GLOBAL}"), &entry("ubuntu", "\\EFI\\ubuntu\\other.efi")))), ["boot_entry_added"], "the same name, another file");
-    assert!(signals(&after(&|root| write(root, &format!("sys/firmware/efi/efivars/Boot0001-{GLOBAL}"), &entry("Linux-Firmware-Updater", "\\EFI\\ubuntu\\fwupdx64.efi")))).is_empty(), "the entry a firmware update makes for itself");
+    assert_eq!(signals(&after(&|root| write(root, &format!("sys/firmware/efi/efivars/Boot0001-{GLOBAL}"), &entry("Linux-Firmware-Updater", "\\EFI\\ubuntu\\fwupdx64.efi")))), ["boot_entry_added"], "the entry's label alone cannot explain a change");
     assert_eq!(signals(&after(&|root| write(root, "sys/class/dmi/id/bios_date", b"06/01/2023\n"))), ["firmware_downgraded"]);
     assert_eq!(signals(&after(&|root| write(root, "sys/class/tpm/tpm0/pcr-sha256/0", b"FFFF\n"))), ["firmware_changed_unannounced"]);
     assert_eq!(signals(&after(&|root| write(root, "proc/modules", b"nvme 1 1 - Live 0x0\nzfs 1 1 - Live 0x0\nhideme 16384 0 - Live 0x0 (OE)\n"))), ["kernel_module_loose"]);
@@ -137,6 +137,104 @@ fn each_change_an_update_does_not_explain_is_reported_and_an_update_is_not() {
     later.insert("driver_checks".into(), "off".into());
     assert_eq!(changes(&windows, &later, 0.0, T).into_iter().map(|change| change.signal).collect::<Vec<_>>(), ["driver_checks_off"]);
     let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn a_periodic_read_without_package_metadata_still_reports_a_boot_entry_change() {
+    let (root, state) = (fresh("partial-root"), fresh("partial-state"));
+    machine(&root);
+    assert!(read_linux(&root).contains_key("loader_updates"));
+    assert!(HardwareWatch::new(&state).take(read_linux(&root), T).is_empty());
+
+    write(&root, &format!("sys/firmware/efi/efivars/Boot0000-{GLOBAL}"), &entry("ubuntu", "\\EFI\\ubuntu\\different.efi"));
+    let sample = read_linux_part(&root, false);
+    assert!(!sample.contains_key("loader_updates"));
+    let mut watch = HardwareWatch::new(&state);
+    let found = watch.take(sample.clone(), T + 300.0);
+    assert!(watch.take(sample, T + 600.0).is_empty(), "the same change is reported once");
+
+    let _ = std::fs::remove_dir_all(&root);
+    let _ = std::fs::remove_dir_all(&state);
+    assert_eq!(found.into_iter().map(|change| change.signal).collect::<Vec<_>>(), ["boot_entry_added"]);
+}
+
+#[test]
+fn a_missing_boot_signature_is_reported_after_a_successful_disk_read() {
+    let root = fresh("signature");
+    machine(&root);
+    let before = read_linux(&root);
+    let mut without_signature = disk(b"boot code", b"the core of the boot loader");
+    without_signature[510..512].fill(0);
+    write(&root, "dev/sda", &without_signature);
+    let lost = changes(&before, &read_linux(&root), 0.0, T);
+    std::fs::remove_file(root.join("dev/sda")).unwrap();
+    let unavailable = changes(&before, &read_linux(&root), 0.0, T);
+    let _ = std::fs::remove_dir_all(&root);
+
+    assert_eq!(lost.into_iter().map(|change| change.signal).collect::<Vec<_>>(), ["boot_code_changed"]);
+    assert!(unavailable.is_empty(), "an unreadable disk is not evidence of a damaged boot sector");
+}
+
+#[test]
+fn removed_efi_file_and_firmware_entry_are_reported_once_when_the_inventory_is_read() {
+    let (root, state) = (fresh("removed-boot-root"), fresh("removed-boot-state"));
+    machine(&root);
+    let before = read_linux(&root);
+    let mut watch = HardwareWatch::new(&state);
+    assert!(watch.take(before.clone(), T).is_empty());
+
+    std::fs::remove_file(root.join("boot/efi/EFI/ubuntu/grubx64.efi")).unwrap();
+    std::fs::remove_file(root.join(format!("sys/firmware/efi/efivars/Boot0000-{GLOBAL}"))).unwrap();
+    let after = read_linux(&root);
+    let found: Vec<&str> = watch.take(after.clone(), T + 1.0).iter().map(|change| change.signal).collect();
+    assert_eq!(found, ["boot_code_changed", "boot_entry_removed"]);
+    assert!(watch.take(after, T + 2.0).is_empty(), "a removal is reported once");
+
+    // An unavailable ESP or variable store does not prove that its contents were removed.
+    let unavailable = fresh("unavailable-boot");
+    machine(&unavailable);
+    let previous = read_linux(&unavailable);
+    std::fs::rename(unavailable.join("boot/efi/EFI"), unavailable.join("boot/efi/EFI-hidden")).unwrap();
+    std::fs::remove_dir_all(unavailable.join("sys/firmware/efi/efivars")).unwrap();
+    assert!(changes(&previous, &read_linux(&unavailable), 0.0, T).is_empty());
+
+    let _ = std::fs::remove_dir_all(&root);
+    let _ = std::fs::remove_dir_all(&state);
+    let _ = std::fs::remove_dir_all(&unavailable);
+}
+
+#[test]
+fn firmware_boot_order_and_one_time_selection_are_reported() {
+    let root = fresh("selection");
+    machine(&root);
+    let order = format!("sys/firmware/efi/efivars/BootOrder-{GLOBAL}");
+    let next = format!("sys/firmware/efi/efivars/BootNext-{GLOBAL}");
+    write(&root, &order, &[7, 0, 0, 0, 0, 0, 1, 0]);
+    let before = read_linux(&root);
+    let signals = |facts: &Facts, updated: f64| changes(&before, facts, updated, T).into_iter().map(|change| change.signal).collect::<Vec<_>>();
+
+    write(&root, &order, &[7, 0, 0, 0, 1, 0, 0, 0]);
+    let reordered = signals(&read_linux_part(&root, false), T - 60.0);
+    write(&root, &order, &[7, 0, 0, 0, 0, 0, 1, 0]);
+    write(&root, &next, &[7, 0, 0, 0, 1, 0]);
+    let with_next = read_linux_part(&root, false);
+    let redirected = signals(&with_next, 0.0);
+    std::fs::remove_file(root.join(next)).unwrap();
+    let cleared = changes(&with_next, &read_linux_part(&root, false), 0.0, T);
+    let _ = std::fs::remove_dir_all(&root);
+
+    assert_eq!(reordered, ["boot_selection_changed"], "the boot order still matters when a package was updated");
+    assert_eq!(redirected, ["boot_selection_changed"]);
+    assert!(cleared.is_empty(), "the firmware normally clears its one-time selection");
+
+    let mut watcher = garrett::watch::Watcher::new(Machine, Some(Still), &"a".repeat(64), garrett::watch::Mode::Kill, "");
+    watcher.hardware_changed(&changes(&before, &with_next, 0.0, T), T);
+    let cases = watcher.tick_with(T + 1.0, &[]);
+    assert_eq!(cases.len(), 1, "{cases:?}");
+    assert_eq!(cases[0]["signals"][0]["id"], "boot_selection_changed");
+    assert!(cases[0].get("actions").is_none());
+    assert!(garrett::agent::known_to(cases[0].clone(), 7).is_none());
+    assert_eq!(garrett::agent::known_to(cases[0].clone(), 8), Some(cases[0].clone()));
 }
 
 #[test]
@@ -312,4 +410,42 @@ fn the_partitions_windows_boot_entries_start_from_are_found_in_its_listing() {
     use garrett::hardware::firmware_partitions;
     let listing = "identifier              {bootmgr}\r\ndevice                  partition=\\Device\\HarddiskVolume1\r\npath                    \\EFI\\Microsoft\\Boot\\bootmgfw.efi\r\n\r\nidentifier              {x}\r\ndevice                  partition=\\Device\\HarddiskVolume1\r\n\r\ndevice                  partition=C:\r\ndevice                  partition=\\Device\\Else\\..\\x\r\n";
     assert_eq!(firmware_partitions(listing), ["\\Device\\HarddiskVolume1"]);
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos", windows))]
+#[test]
+#[ignore = "uses the native read-only boot inventory"]
+fn native_boot_inventory_and_simulated_change() {
+    let observed = garrett::hardware::read(true);
+    for line in describe(&observed) {
+        println!("{line}");
+    }
+    assert!(observed.get("firmware").is_some_and(|version| !version.is_empty()), "firmware identity could not be read");
+    let (mut before, mut after) = (observed.clone(), observed);
+    let expected = if cfg!(target_os = "linux") {
+        let sector = after.keys().find(|name| name.starts_with("boot_sector:")).expect("a disk boot sector could not be read").clone();
+        before.insert(sector, "fixture baseline".into());
+        "boot_code_changed"
+    } else {
+        let (key, signal) = if cfg!(windows) { ("driver_checks", "driver_checks_off") } else { ("boot_protection", "boot_protection_off") };
+        assert!(after.get(key).is_some_and(|value| matches!(value.as_str(), "on" | "off")), "could not read {key}");
+        before.insert(key.into(), "on".into());
+        after.insert(key.into(), "off".into());
+        signal
+    };
+    let state = fresh("native-state");
+    assert!(HardwareWatch::new(&state).take(before, T).is_empty());
+    let mut watch = HardwareWatch::new(&state);
+    let detected = watch.take(after.clone(), T + 1.0);
+    assert!(watch.take(after, T + 2.0).is_empty());
+    let _ = std::fs::remove_dir_all(&state);
+
+    let mut watcher = garrett::watch::Watcher::new(Machine, Some(Still), &"a".repeat(64), garrett::watch::Mode::Kill, "");
+    watcher.hardware_changed(&detected, T + 1.0);
+    let cases = watcher.tick_with(T + 2.0, &[]);
+    assert_eq!(cases.len(), 1, "{cases:?}");
+    assert_eq!(cases[0]["signals"][0]["id"], expected);
+    assert_eq!(cases[0]["categories"][0], "hardware");
+    assert!(cases[0].get("actions").is_none() && cases[0].get("cleanup").is_none());
+    println!("Synthetic change recorded once as {expected}");
 }

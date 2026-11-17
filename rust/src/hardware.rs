@@ -5,7 +5,7 @@
 //! say so when one changes in a way an update does not explain:
 //!
 //!   - Secure Boot (on a Mac, System Integrity Protection) was on and is now off;
-//!   - the firmware was given a new boot entry, or one was changed: where a boot kit puts itself;
+//!   - the firmware's boot entries or boot selection changed;
 //!   - the firmware is older than it was: an old, exploitable one was put back;
 //!   - the security chip's measurement of the firmware changed while the firmware says it is the same version:
 //!     its code was altered without an update;
@@ -57,6 +57,7 @@ pub fn day_number(date: &str) -> Option<u32> {
 }
 
 const GLOBAL: &str = "8be4df61-93ca-11d2-aa0d-00e098032b8c";
+const NO_BOOT_SIGNATURE: &str = "signature absent";
 
 /// What one firmware boot entry is called, and a mark of everything it says.
 fn boot_entry(data: &[u8]) -> Option<String> {
@@ -72,10 +73,15 @@ fn boot_entry(data: &[u8]) -> Option<String> {
 /// space between that sector and the first partition, where GRUB keeps its core on a BIOS machine. The disk's
 /// own number and its table of partitions are left out, so repartitioning is not taken for a change of code.
 fn disk_start(name: &str, data: &[u8], facts: &mut Facts) {
-    if data.len() < 1024 || data[510..512] != [0x55, 0xaa] {
-        return; // not a disk anything starts from
+    if data.len() < 1024 {
+        return; // no reliable reading
     }
-    facts.insert(format!("boot_sector:{name}"), mark(&data[..440]));
+    let sector = format!("boot_sector:{name}");
+    if data[510..512] != [0x55, 0xaa] {
+        facts.insert(sector, NO_BOOT_SIGNATURE.into());
+        return;
+    }
+    facts.insert(sector, mark(&data[..440]));
     if &data[512..520] == b"EFI PART" {
         return; // the new layout keeps its table of partitions there
     }
@@ -112,9 +118,13 @@ fn loader_files(folder: &Path, prefix: &str, depth: usize, facts: &mut Facts) {
             if depth > 0 {
                 loader_files(&entry, &format!("{prefix}/{name}"), depth - 1, facts);
             }
-        } else if (name.ends_with(".efi") || name == "core.img" || name == "boot.img") && facts.keys().filter(|key| key.starts_with("boot_file:")).count() < 64 {
-            if let Some(body) = std::fs::metadata(&entry).ok().filter(|meta| meta.len() <= 67_108_864).and_then(|_| std::fs::read(&entry).ok()) {
-                facts.insert(format!("boot_file:{prefix}/{name}"), mark(&body));
+        } else if name.ends_with(".efi") || name == "core.img" || name == "boot.img" {
+            let place = format!("{prefix}/{name}");
+            facts.insert(format!("boot_file_seen:{place}"), "yes".into());
+            if facts.keys().filter(|key| key.starts_with("boot_file:")).count() < 64 {
+                if let Some(body) = std::fs::metadata(&entry).ok().filter(|meta| meta.len() <= 67_108_864).and_then(|_| std::fs::read(&entry).ok()) {
+                    facts.insert(format!("boot_file:{place}"), mark(&body));
+                }
             }
         }
     }
@@ -171,7 +181,9 @@ fn boot_code_linux(root: &Path, facts: &mut Facts) {
     for (parent, folder, prefix) in [("boot/efi", "EFI", "efi"), ("efi", "EFI", "efi"), ("boot", "EFI", "efi"), ("boot/grub", "i386-pc", "grub"), ("boot/grub2", "i386-pc", "grub")] {
         // The folder must carry exactly this name: where names differ only by their capitals, one place is not read twice.
         let parent = root.join(parent);
-        if std::fs::read_dir(&parent).is_ok_and(|mut entries| entries.any(|entry| entry.is_ok_and(|entry| entry.file_name() == folder))) {
+        if std::fs::read_dir(&parent).is_ok_and(|mut entries| entries.any(|entry| entry.is_ok_and(|entry| entry.file_name() == folder)))
+            && std::fs::read_dir(parent.join(folder)).is_ok() {
+            facts.insert(format!("boot_file_scan:{prefix}"), "ok".into());
             loader_files(&parent.join(folder), prefix, 3, facts);
         }
     }
@@ -186,12 +198,33 @@ fn below_linux(root: &Path, facts: &mut Facts) {
         if let Ok(data) = std::fs::read(variables.join(format!("SecureBoot-{GLOBAL}"))) {
             facts.insert("boot_protection".into(), if data.get(4) == Some(&1) { "on" } else { "off" }.into());
         }
-        let mut names: Vec<String> = std::fs::read_dir(&variables).map(|entries| entries.flatten().map(|entry| entry.file_name().to_string_lossy().into_owned()).collect()).unwrap_or_default();
+        let (mut names, listed): (Vec<String>, bool) = match std::fs::read_dir(&variables) {
+            Ok(entries) => (entries.flatten().map(|entry| entry.file_name().to_string_lossy().into_owned()).collect(), true),
+            Err(_) => (Vec::new(), false),
+        };
         names.sort();
         for name in names.iter().filter(|name| name.len() == 9 + GLOBAL.len() && name.starts_with("Boot") && name.ends_with(GLOBAL) && name[4..8].bytes().all(|byte| byte.is_ascii_hexdigit())).take(64) {
             if let Some(entry) = std::fs::read(variables.join(name)).ok().and_then(|data| boot_entry(&data)) {
                 facts.insert(format!("entry:{}", &name[..8]), entry);
             }
+        }
+        // Skip the variable's attributes. Order is significant, and the next boot choice is one entry number.
+        if let Ok(order) = std::fs::read(variables.join(format!("BootOrder-{GLOBAL}"))) {
+            if let Some(indices) = order.get(4..).filter(|indices| !indices.is_empty() && indices.len() % 2 == 0) {
+                facts.insert("boot_order".into(), mark(indices));
+                if listed {
+                    facts.insert("boot_entry_scan".into(), "ok".into());
+                }
+            }
+        }
+        match std::fs::read(variables.join(format!("BootNext-{GLOBAL}"))) {
+            Ok(next) if next.len() == 6 => {
+                facts.insert("boot_next".into(), format!("{:04X}", u16::from_le_bytes([next[4], next[5]])));
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound && facts.contains_key("boot_order") => {
+                facts.insert("boot_next".into(), "none".into());
+            }
+            _ => {}
         }
     }
     let identity = root.join("sys/class/dmi/id");
@@ -369,6 +402,13 @@ pub fn read(_disks: bool) -> Facts {
 /// For this long after a boot loader update, what the update goes on to change at the next start is its doing.
 pub const UPDATE_SECONDS: f64 = 86400.0;
 
+fn loader_update_observed(before: &Facts, now: &Facts) -> bool {
+    match (before.get("loader_updates"), now.get("loader_updates")) {
+        (Some(old), Some(new)) => !old.is_empty() && !new.is_empty() && old != new,
+        _ => false,
+    }
+}
+
 /// What changed between two readings that an update does not explain. `updated` is when a boot loader update was
 /// last seen to have been installed (0 for never); `at` is now.
 pub fn changes(before: &Facts, now: &Facts, updated: f64, at: f64) -> Vec<Change> {
@@ -376,7 +416,8 @@ pub fn changes(before: &Facts, now: &Facts, updated: f64, at: f64) -> Vec<Change
     let was = |name: &str| before.get(name).map(String::as_str).unwrap_or("");
     let is = |name: &str| now.get(name).map(String::as_str).unwrap_or("");
     // A boot loader update rewrites the loader's files, sometimes the boot sector, and the firmware's own entries.
-    let by_update = (!was("loader_updates").is_empty() && was("loader_updates") != is("loader_updates")) || (updated > 0.0 && at - updated < UPDATE_SECONDS);
+    let by_update = loader_update_observed(before, now)
+        || (updated > 0.0 && (0.0..UPDATE_SECONDS).contains(&(at - updated)));
     if !by_update {
         let had_files = before.keys().any(|name| name.starts_with("boot_file:"));
         for (name, value) in now.iter().filter(|(name, _)| name.starts_with("boot_sector:") || name.starts_with("boot_gap:") || name.starts_with("boot_file:")) {
@@ -393,10 +434,27 @@ pub fn changes(before: &Facts, now: &Facts, updated: f64, at: f64) -> Vec<Change
                 "boot_gap" => format!("the space behind the boot sector of {place}, where a boot loader keeps its core"),
                 _ => format!("the boot loader file {place}"),
             };
-            found.push(Change { signal: "boot_code_changed", points: 6, subject: what.chars().take(80).collect(),
-                evidence: format!("The code this machine starts from changed ({what}), and no boot loader update was installed that would explain it.") });
+            let evidence = if kind == "boot_sector" && value == NO_BOOT_SIGNATURE {
+                format!("The boot signature in {what} disappeared after a successful read, and no boot loader update explains it.")
+            } else {
+                format!("The code this machine starts from changed ({what}), and no boot loader update was installed that would explain it.")
+            };
+            found.push(Change { signal: "boot_code_changed", points: 6, subject: what.chars().take(80).collect(), evidence });
             if found.len() >= 4 {
                 break;
+            }
+        }
+        for name in before.keys().filter(|name| name.starts_with("boot_file:")) {
+            let Some(place) = name.strip_prefix("boot_file:") else { continue };
+            let Some((family, _)) = place.split_once('/') else { continue };
+            if now.contains_key(&format!("boot_file_scan:{family}")) && !now.contains_key(name)
+                && !now.contains_key(&format!("boot_file_seen:{place}")) {
+                let what = format!("the boot loader file {place}");
+                found.push(Change { signal: "boot_code_changed", points: 6, subject: what.chars().take(80).collect(),
+                    evidence: format!("A readable boot folder no longer contains {what}, and no boot loader update was installed that would explain it.") });
+                if found.len() >= 4 {
+                    break;
+                }
             }
         }
     }
@@ -404,18 +462,35 @@ pub fn changes(before: &Facts, now: &Facts, updated: f64, at: f64) -> Vec<Change
         found.push(Change { signal: "boot_protection_off", points: 6, subject: "boot protection".into(),
             evidence: "Secure Boot (on a Mac, System Integrity Protection) was on when this agent last looked and is now off.".into() });
     }
+    if !was("boot_order").is_empty() && !is("boot_order").is_empty() && was("boot_order") != is("boot_order") {
+        found.push(Change { signal: "boot_selection_changed", points: 5, subject: "firmware boot order".into(),
+            evidence: "The firmware's boot priority order changed.".into() });
+    }
+    if !was("boot_next").is_empty() && !is("boot_next").is_empty() && is("boot_next") != "none" && was("boot_next") != is("boot_next") {
+        found.push(Change { signal: "boot_selection_changed", points: 5, subject: "one-time boot selection".into(),
+            evidence: "The firmware was given a different entry to start on the next boot.".into() });
+    }
     if !by_update && before.keys().any(|name| name.starts_with("entry:")) {
         for (name, entry) in now.iter().filter(|(name, _)| name.starts_with("entry:")) {
             let said = entry.split('|').next().unwrap_or("");
-            let low = entry.to_lowercase();
-            if before.get(name) == Some(entry) || low.contains("firmware-updater") || low.contains("fwupd") {
-                continue; // unchanged, or the entry a firmware update makes for itself
+            if before.get(name) == Some(entry) {
+                continue;
             }
             let what = if before.contains_key(name) { "changed" } else { "added" };
             found.push(Change { signal: "boot_entry_added", points: 5, subject: format!("boot entry {}", &name[6..]),
-                evidence: format!("The firmware's list of what to start was {what}: {said}. A boot kit puts itself there.") });
+                evidence: format!("The firmware's list of what to start was {what}: {said}.") });
             if found.len() >= 6 {
                 break;
+            }
+        }
+        if now.contains_key("boot_entry_scan") {
+            for (name, entry) in before.iter().filter(|(name, _)| name.starts_with("entry:") && !now.contains_key(*name)) {
+                let said = entry.split('|').next().unwrap_or("");
+                found.push(Change { signal: "boot_entry_removed", points: 5, subject: format!("boot entry {}", &name[6..]),
+                    evidence: format!("The firmware's readable boot list no longer includes {said}.") });
+                if found.len() >= 6 {
+                    break;
+                }
             }
         }
     }
@@ -461,18 +536,26 @@ impl HardwareWatch {
         let updated = self.known.as_ref().and_then(|before| before.get("loader_update_seen")).and_then(|seen| seen.parse::<f64>().ok()).unwrap_or(0.0);
         let found = self.known.as_ref().map(|before| changes(before, &facts, updated, at)).unwrap_or_default();
         let mut kept = self.known.clone().unwrap_or_default();
-        if kept.get("loader_updates").is_some_and(|old| facts.get("loader_updates").is_some_and(|new| new != old)) {
+        if loader_update_observed(&kept, &facts) {
             kept.insert("loader_update_seen".into(), format!("{at:.0}")); // an update was installed since the last reading
         }
-        for kind in ["boot_file:", "boot_sector:", "boot_gap:"] {
+        for family in ["efi", "grub"] {
+            if facts.contains_key(&format!("boot_file_scan:{family}")) {
+                kept.retain(|name, _| {
+                    !name.starts_with(&format!("boot_file:{family}/")) || facts.contains_key(name)
+                        || facts.contains_key(&name.replacen("boot_file:", "boot_file_seen:", 1))
+                });
+            }
+        }
+        for kind in ["boot_sector:", "boot_gap:"] {
             if facts.keys().any(|name| name.starts_with(kind)) {
                 kept.retain(|name, _| !name.starts_with(kind) || facts.contains_key(name)); // a file or a disk that is gone
             }
         }
-        if facts.keys().any(|name| name.starts_with("entry:")) {
+        if facts.contains_key("boot_entry_scan") {
             kept.retain(|name, _| !name.starts_with("entry:") || facts.contains_key(name)); // a boot entry that is gone
         }
-        kept.extend(facts);
+        kept.extend(facts.into_iter().filter(|(name, _)| !name.starts_with("boot_file_seen:")));
         if self.known.as_ref() != Some(&kept) || !self.path.exists() {
             let temporary = self.path.with_extension("tmp");
             if std::fs::write(&temporary, serde_json::to_string(&kept).unwrap_or_default()).is_ok() {
