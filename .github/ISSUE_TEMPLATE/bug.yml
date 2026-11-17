@@ -1,0 +1,40 @@
+name: Something does not work
+description: Installing, updating, a command, the service or anything else that does not do what the manual says.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For a security hole that could be used against machines running garrett, please [report it privately](https://github.com/gary23w/sentinels/security/advisories/new) instead.
+        Please remove host names, user names, addresses and anything else private from what you paste here.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: What `garrett version` prints.
+      placeholder: garrett 1.7.0
+    validations:
+      required: true
+  - type: dropdown
+    id: system
+    attributes:
+      label: System
+      options:
+        - Linux
+        - macOS
+        - Windows
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Output
+      description: Any messages or command output.
+      render: text

@@ -1,0 +1,51 @@
+name: garrett stopped something of mine
+description: garrett ended, paused or cleaned up a program that is yours.
+labels: ["false positive"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Sorry about that. `garrett restore <case>` puts back what was cleaned up, and `garrett trust <case>` tells garrett the program is yours.
+        Please remove host names, user names, addresses and anything else private from what you paste here.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: What `garrett version` prints.
+      placeholder: garrett 1.7.0
+    validations:
+      required: true
+  - type: dropdown
+    id: system
+    attributes:
+      label: System
+      options:
+        - Linux
+        - macOS
+        - Windows
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Response mode
+      options:
+        - kill (the default)
+        - pause
+        - decide
+        - report
+    validations:
+      required: true
+  - type: textarea
+    id: program
+    attributes:
+      label: The program
+      description: What it is, what started it and what it was doing.
+    validations:
+      required: true
+  - type: textarea
+    id: case
+    attributes:
+      label: The case
+      description: The case's reasons from `garrett cases`, or from your service.
+      render: text

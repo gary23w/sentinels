@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a security hole privately
+    url: https://github.com/gary23w/sentinels/security/advisories/new
+    about: For a hole that could be used against machines running garrett before a fix is out.
+  - name: Read the manual
+    url: https://gary23w.github.io/sentinels/manual.html
+    about: Every command, the configuration file and what garrett watches.
