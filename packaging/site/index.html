@@ -4,11 +4,38 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>sentinels(8) - host intrusion response</title>
-<meta name="description" content="Sentinels host intrusion detection and response. Install the garrett agent on Linux, macOS or Windows; run the fleet service yourself or request managed hosting.">
+<meta name="description" content="Open-source host intrusion detection and response for Linux, macOS and Windows. One command installs garrett, which ends a break-in while it is still starting.">
+<link rel="canonical" href="https://gary23w.github.io/sentinels/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="sentinels">
 <meta property="og:title" content="sentinels(8) - host intrusion response">
-<meta property="og:description" content="Install and operate the garrett host intrusion sentinel.">
+<meta property="og:description" content="garrett ends a break-in while it is still starting, cleans up after it and tells you why in plain sentences. One program file for Linux, macOS and Windows. MIT licensed.">
 <meta property="og:url" content="https://gary23w.github.io/sentinels/">
-<meta name="twitter:card" content="summary">
+<meta property="og:image" content="https://gary23w.github.io/sentinels/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="sentinels: ends a break-in while it is still starting. One program file, one command to install, Linux, macOS and Windows, MIT licensed.">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "sentinels",
+  "alternateName": "garrett",
+  "description": "Host intrusion detection and response. The garrett agent ends a break-in while it is still starting, cleans up after it and explains why.",
+  "applicationCategory": "SecurityApplication",
+  "operatingSystem": "Linux, macOS, Windows",
+  "softwareVersion": "@VERSION@",
+  "license": "https://opensource.org/licenses/MIT",
+  "isAccessibleForFree": true,
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "url": "https://gary23w.github.io/sentinels/",
+  "installUrl": "https://gary23w.github.io/sentinels/install.sh",
+  "downloadUrl": "https://github.com/gary23w/sentinels/releases",
+  "image": "https://gary23w.github.io/sentinels/og.png",
+  "sameAs": "https://github.com/gary23w/sentinels"
+}
+</script>
 <style>
 :root { color-scheme: light; }
 * { box-sizing: border-box; }
@@ -18,7 +45,7 @@ a { color: #165278; text-decoration: underline; text-underline-offset: 2px; }
 a:hover, a:focus-visible { color: #0b334c; }
 .masthead, .foot { display: flex; justify-content: space-between; gap: 1rem; font-size: .92rem; }
 .masthead { padding-bottom: .45rem; border-bottom: 1px solid #8a8a83; }
-.masthead h1 { font: inherit; font-weight: 700; margin: 0; }
+h1.name { font: inherit; margin: .5rem 0 .7rem 2ch; }
 .jump { display: flex; flex-wrap: wrap; gap: .25rem 1rem; margin: 1rem 0 1.5rem; font-size: .88rem; }
 h2 { margin: 1.65rem 0 .45rem; font-size: 1rem; line-height: inherit; letter-spacing: .02em; }
 p, dl, pre { margin: .5rem 0 .7rem 2ch; }
@@ -34,7 +61,7 @@ section { scroll-margin-top: 1rem; }
 </head>
 <body id="top">
 <header class="masthead">
-  <h1>SENTINELS(8)</h1><span class="middle">System Administration</span><span>SENTINELS(8)</span>
+  <strong>SENTINELS(8)</strong><span class="middle">System Administration</span><span>SENTINELS(8)</span>
 </header>
 <nav class="jump" aria-label="Sections">
   <a href="#name">NAME</a><a href="#description">DESCRIPTION</a><a href="#benchmarks">BENCHMARKS</a><a href="#installation">INSTALLATION</a><a href="#fleet">FLEET</a><a href="#see-also">SEE ALSO</a><a href="https://github.com/gary23w/sentinels">Star the Repo</a>
@@ -42,7 +69,7 @@ section { scroll-margin-top: 1rem; }
 <main>
 <section id="name">
 <h2>NAME</h2>
-<p><strong>sentinels</strong> - host intrusion detection and response</p>
+<h1 class="name"><strong>sentinels</strong> - host intrusion detection and response</h1>
 </section>
 
 <section id="synopsis">
@@ -59,6 +86,7 @@ garrett update [--check]</code></pre>
 <p><strong>garrett</strong> watches running programs and their connections on the host. It scores activity locally and can pause or end a program it judges hostile. A web server starting a shell that downloads a script is one behavior it looks for.</p>
 <p>A case records the signals and the action taken. The agent can quarantine dropped files and disable a cron job, Run key or service used for persistence. <code>garrett restore &lt;case&gt;</code> reverses cleanup after a mistaken stop.</p>
 <p>The local agent is one program file and needs no account or kernel module.</p>
+<p>An intrusion that an AI agent runs leaves marks of its own, such as commands started at machine pace. See <a href="ai-attacks.html">how garrett ends one</a>.</p>
 </section>
 
 <section id="benchmarks">
@@ -117,7 +145,7 @@ sudo apt update &amp;&amp; sudo apt install garrett</code></pre>
 
 <section id="see-also">
 <h2>SEE ALSO</h2>
-<p><a href="manual.html">garrett(8) manual</a>, <a href="https://github.com/gary23w/sentinels">source and README</a>, <a href="https://github.com/gary23w/sentinels/releases">releases</a>.</p>
+<p><a href="manual.html">garrett(8) manual</a>, <a href="ai-attacks.html">AI-operated intrusions</a>, <a href="https://github.com/gary23w/sentinels">source and README</a>, <a href="https://github.com/gary23w/sentinels/releases">releases</a>.</p>
 <p class="note">The default mode can end a program it judges hostile. Read the manual before installing on a production host.</p>
 </section>
 </main>
