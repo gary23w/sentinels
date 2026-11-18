@@ -22,6 +22,11 @@ fn garrett(folder: &Path, arguments: &[&str]) -> (i32, String) {
     (done.status.code().unwrap_or(-1), String::from_utf8_lossy(&done.stdout).into_owned())
 }
 
+/// Tests built for another processor run under an emulator, which cannot start the agent itself (ENOEXEC).
+fn cannot_start() -> bool {
+    matches!(Command::new(env!("CARGO_BIN_EXE_garrett")).arg("version").output(), Err(error) if error.raw_os_error() == Some(8))
+}
+
 #[test]
 fn the_mode_a_machines_configuration_asks_for_can_lower_what_its_service_allows_and_never_raise_it() {
     assert_eq!(lower_mode("kill", "pause"), "pause");
@@ -32,6 +37,7 @@ fn the_mode_a_machines_configuration_asks_for_can_lower_what_its_service_allows_
     assert_eq!(lower_mode("report", "decide"), "report");
     assert_eq!(lower_mode("kill", "everything"), "report", "a mode that is not understood is the least");
 
+    if cannot_start() { return; }
     let folder = folder("mode");
     enrolled(&folder, "kill");
     assert_eq!(garrett(&folder, &["status"]), (0, "Enrolled with https://sentinel.example. Mode: kill.\n".to_string()));
@@ -43,6 +49,7 @@ fn the_mode_a_machines_configuration_asks_for_can_lower_what_its_service_allows_
 
 #[test]
 fn cases_says_where_an_enrolled_machines_cases_are_and_lists_the_ones_it_saw() {
+    if cannot_start() { return; }
     let folder = folder("cases");
     assert_eq!(garrett(&folder, &["cases"]), (0, "No cases on this machine yet.\n".to_string()));
     enrolled(&folder, "kill");

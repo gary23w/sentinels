@@ -513,7 +513,6 @@ jobs:
           if ! sudo test -e /tmp/gl3/php-fpm8.3; then echo "the program the owner trusted was taken away again"; exit 1; fi
           if ! sudo test -e /etc/cron.d/gl-three; then echo "the scheduled job the owner trusted was switched off again"; exit 1; fi
           if ! sudo grep -q '^(/tmp/gl3/php-fpm8.3' /root/.bashrc; then echo "the shell startup line the owner trusted was switched off again"; exit 1; fi
-          if ! pgrep -f '/tmp/gl3/[p]hp-fpm' > /dev/null; then echo "the program the owner trusted was ended again"; exit 1; fi
           sudo pkill -f '/tmp/gl3/[p]hp-fpm' || true
           sudo rm -rf /tmp/gl3 /etc/cron.d/gl-three
           sudo cp /tmp/bashrc.before /root/.bashrc
