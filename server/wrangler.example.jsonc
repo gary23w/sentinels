@@ -60,6 +60,6 @@
   // Optional: a separate token for whatever forwards your cloud audit records to POST /v1/cloud-events
   // (the operator token also works):
   //   npx wrangler secret put INGEST_TOKEN
-  // Optional: a webhook that receives a JSON alert for each new case (Slack-style "text" field included):
+  // Optional: an HTTPS webhook that receives a JSON alert for each new case (Slack-style "text" field included):
   //   npx wrangler secret put ALERT_WEBHOOK_URL
 }

@@ -57,7 +57,7 @@ test('enrolment needs the key, device credentials are stored as digests, and ope
 
 test('a case is scored here, stored encrypted, alerted with service-written text, and survives a restart of the report', async () => {
   const sent = [], real = globalThis.fetch;
-  globalThis.fetch = async (url, init) => { sent.push({ url, body: JSON.parse(init.body) }); return new Response('{}'); };
+  globalThis.fetch = async (url, init) => { assert.equal(init.redirect, 'error'); sent.push({ url, body: JSON.parse(init.body) }); return new Response('{}'); };
   try {
     const s = service({ ALERT_WEBHOOK_URL: 'https://hooks.example/alert' }), device = await enrolled(s);
     const sentCase = item('a', ['shell_from_web_server', 'risky_command_line'], { name: 'dash', parent: 'php-fpm', level: 'CLEAR', score: 0 });
@@ -73,6 +73,18 @@ test('a case is scored here, stored encrypted, alerted with service-written text
     assert.equal(listed.body.cases.length, 1); assert.equal(listed.body.cases[0].title, 'dash looks suspicious');
     const full = await s.call('GET', '/v1/cases/' + row.id, null, ADMIN);
     assert.equal(full.body.detail.score, 6); assert.equal(full.body.detail.signals[0].category, 'lineage');
+  } finally { globalThis.fetch = real; }
+});
+
+test('case alerts are not sent over HTTP', async () => {
+  const real = globalThis.fetch;
+  let sent = 0;
+  globalThis.fetch = async () => { sent++; return new Response('{}'); };
+  try {
+    const s = service({ ALERT_WEBHOOK_URL: 'http://hooks.example/alert' }), device = await enrolled(s);
+    await s.call('POST', '/v1/report', report([item('a', ['shell_from_web_server', 'risky_command_line'])]), device.token);
+    await s.settle();
+    assert.equal(sent, 0);
   } finally { globalThis.fetch = real; }
 });
 

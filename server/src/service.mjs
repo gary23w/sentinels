@@ -206,7 +206,11 @@ export async function housekeeping(env, ctx) {
 async function audit(env, actor, action, detail = '') { await env.DB.prepare('INSERT INTO audit(at,actor,action,detail) VALUES(?,?,?,?)').bind(now(), actor, action, String(detail).slice(0, 300)).run(); }
 async function alert(env, payload) {
   if (!env.ALERT_WEBHOOK_URL) return;
-  try { await fetch(env.ALERT_WEBHOOK_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }); } catch {}
+  try {
+    const url = new URL(env.ALERT_WEBHOOK_URL);
+    if (url.protocol !== 'https:' || !url.hostname || url.username || url.password || url.hash) return;
+    await fetch(url.href, { method: 'POST', redirect: 'error', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+  } catch {}
 }
 async function analyzeCase(env, id) {
   const row = await env.DB.prepare('SELECT c.detail,d.platform FROM cases c JOIN devices d ON d.id=c.device_id WHERE c.id=?').bind(id).first();
