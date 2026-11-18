@@ -1,6 +1,6 @@
 [package]
 name = "garrett-installer"
-version = "1.9.1"
+version = "1.9.2"
 edition = "2021"
 license = "MIT"
 description = "One file that installs the Sentinel service, its decision model and the agent on this machine: the files are carried inside it, nothing is downloaded."

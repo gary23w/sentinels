@@ -1,3 +1,27 @@
+garrett (1.9.2) stable; urgency=medium
+
+  * garrett comes from more package managers. Beside the apt repository,
+    the site carries a pacman repository for Arch Linux and an rpm
+    repository for Fedora, RHEL and openSUSE, both signed with the same
+    key as the apt one, and a Scoop manifest for Windows
+    (scoop install https://gary23w.github.io/sentinels/garrett.json).
+    Homebrew installs it on macOS and Linux from the project's tap
+    (brew install gary23w/sentinels/garrett); the line it prints puts
+    garrett in a root-owned folder and starts it.
+  * Each release has a Windows Installer package, garrett-windows.msi. It
+    installs silently (msiexec /i garrett-windows.msi /qn) for Intune,
+    Group Policy and package managers, appears in Apps and Features, and
+    runs the same installer as the Windows bundle. An upgrade keeps the
+    agent's cases, what it learned and its enrolment; removing it takes
+    garrett off the machine.
+  * Removing the pacman or rpm package takes garrett's cases, credential
+    and configuration with it, as install.sh --remove does; an upgrade
+    keeps them. Scoop keeps them through an update too.
+  * The Linux bundles carry the manual page.
+  * Otherwise as 1.9.1.
+
+ -- sentinels <noreply@sentinels.invalid>  Wed, 18 Nov 2026 22:02:36 +0000
+
 garrett (1.9.1) stable; urgency=medium
 
   * The release files carry only the CPU build of onnxruntime. On the
