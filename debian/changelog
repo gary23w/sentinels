@@ -1,3 +1,26 @@
+garrett (1.8.2) stable; urgency=medium
+
+  * The service can remember its operators' verdicts and show a new case
+    the nearest ones. It is off unless asked for: MEMORY=neuron-db in the
+    service's configuration file, or --memory neuron-db when installing
+    (on Windows, -Memory neuron-db, or GARRETT_MEMORY for the one-line
+    installer). The memory is neuron-db, packed into the service bundles
+    as it is published. Each verdict is kept as its shape (the verdict,
+    the platform, the signal ids) and sealed in the service's database;
+    forgetting what was learned forgets it too.
+    - The analyst and the decision model are given each remembered verdict
+      with how it relates to the case: its platform, its signals, how
+      often it was given, and whether it covers the case. A verdict covers
+      a case only on the same platform, with exactly the same signals,
+      given at least twice and never the other way.
+    - A stop the decision model ordered is not remembered as an
+      operator's verdict.
+    - It runs where the service runs on Node.js (serve.mjs, local.mjs),
+      not on the Cloudflare deployment.
+  * The agent is unchanged.
+
+ -- sentinels <noreply@sentinels.invalid>  Wed, 18 Nov 2026 16:10:00 +0000
+
 garrett (1.8.1) stable; urgency=medium
 
   * Installing and running, made harder to tamper with.
