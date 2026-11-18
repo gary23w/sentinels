@@ -1,18 +1,18 @@
 Package: garrett
 Architecture: amd64
-Version: 1.8.2
+Version: 1.9.1
 Priority: optional
 Section: admin
 Maintainer: sentinels <noreply@sentinels.invalid>
-Installed-Size: 5186
+Installed-Size: 5187
 Depends: iproute2
 Recommends: nftables
-Filename: pool/main/garrett_1.8.2_amd64.deb
-Size: 1885052
-MD5sum: 6a2d4bb457e7d4407fbd2e7c0399b966
-SHA1: db1acd1d79e55a4dd000f46e6e6e118772f95063
-SHA256: f07ff5c94fb5964fb1bd2fcf457c6a9b875613bd7f669826922154bf4e19fdda
-SHA512: accd4d6c7779688bf537764969c94e3215c222fc3fb213d394896af25604dd0bade8e2d81257788392a71569489c41ab45ed7e082a42027abb423b855814b878
+Filename: pool/main/garrett_1.9.1_amd64.deb
+Size: 1886344
+MD5sum: 01aae02b3a3ae7dff45a95cd5032a981
+SHA1: ced483581207e5de6d1276834f686da6f83b40ae
+SHA256: 3b9a19eb54c4a574ae8df20c64505dd90b6fa6ff7bcd17a9e982dd54929e8fc9
+SHA512: 1a73b0e86fc0b0e602b45210bcaac7d417ca587bbc087c1c174662a2cfe4274a142f12f2f22bde9565ec7667d7ba1e62cc2ba43a2f342475ed81a68305641d6f
 Homepage: https://github.com/gary23w/sentinels
 Description: host intrusion sentinel that stops what it catches
  garrett watches this machine's running programs and their connections,
