@@ -247,8 +247,9 @@ jobs:
             test -f /usr/lib/systemd/system/garrett.service
             # The image leaves manual pages out of what it extracts; the package lists it all the same.
             pacman -Ql garrett | grep -q " /usr/share/man/man8/garrett.8$"
+            mkdir -p /var/lib/garrett /etc/garrett && : > /var/lib/garrett/agent.json && : > /etc/garrett/garrett.conf
             pacman -R --noconfirm garrett
-            for left in /usr/lib/garrett /usr/bin/garrett /usr/lib/systemd/system/garrett.service; do if [ -e "$left" ]; then echo "left behind: $left"; exit 1; fi; done'
+            for left in /usr/lib/garrett /usr/bin/garrett /usr/lib/systemd/system/garrett.service /var/lib/garrett /etc/garrett; do if [ -e "$left" ]; then echo "left behind: $left"; exit 1; fi; done'
       - name: dnf and zypper install and remove garrett from its repository
         run: |
           V=$(sed -n 's/^version = "\(.*\)"/\1/p' rust/Cargo.toml | head -1)
@@ -259,8 +260,9 @@ jobs:
               dnf install -y -q garrett
               test "$(garrett version)" = "garrett '"$V"'"
               rpm -V garrett
+              mkdir -p /var/lib/garrett /etc/garrett && : > /var/lib/garrett/agent.json && : > /etc/garrett/garrett.conf
               dnf remove -y -q garrett
-              for left in /usr/lib/garrett /usr/bin/garrett; do if [ -e "$left" ]; then echo "left behind: $left"; exit 1; fi; done'
+              for left in /usr/lib/garrett /usr/bin/garrett /var/lib/garrett /etc/garrett; do if [ -e "$left" ]; then echo "left behind: $left"; exit 1; fi; done'
           done
           echo "== opensuse/tumbleweed"
           docker run --rm -v "$PWD/release:/r:ro" opensuse/tumbleweed sh -ec '
@@ -268,7 +270,7 @@ jobs:
             zypper --non-interactive --quiet install garrett
             test "$(garrett version)" = "garrett '"$V"'"
             zypper --non-interactive --quiet remove garrett
-            test ! -e /usr/lib/garrett'
+            test ! -e /usr/lib/garrett && test ! -e /var/lib/garrett'
       - name: Nothing in it says where it was built
         run: |
           if grep -rIl -e "/home/runner" -e "runneradmin" -e "/Users/runner" release; then echo "a build folder is named in a published file"; exit 1; fi

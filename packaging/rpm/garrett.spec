@@ -74,4 +74,7 @@ if [ "$1" -ge 1 ]; then
 else
   # The one firewall table garrett owns goes with it.
   if command -v nft >/dev/null 2>&1; then nft delete table inet garrett 2>/dev/null || :; fi
+  # So does what it kept, as with the bundle's install.sh --remove: its cases, its enrolment credential, and the
+  # configuration file that may hold an enrolment key.
+  rm -rf /var/lib/garrett /etc/garrett
 fi
