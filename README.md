@@ -16,27 +16,68 @@ It also knows how an AI agent works once it gets in: commands at machine pace, r
 
 It is one program file. You don't need an account, a cloud console or a kernel module. It runs on Linux, macOS and Windows.
 
-## Install
+## Setup
 
-Linux and macOS:
+One line per machine. No account, no sign-up, nothing to configure.
+
+### One computer
+
+Linux or macOS, in a terminal:
 
 ```sh
 curl -fsSL https://gary23w.github.io/sentinels/install.sh | sudo sh
 ```
 
-Windows, from an elevated PowerShell:
+Windows, in PowerShell opened with "Run as administrator":
 
 ```powershell
 irm https://gary23w.github.io/sentinels/install.ps1 | iex
 ```
 
-That is the whole setup. The machine is protected from that moment, and garrett keeps itself up to date from here on.
+Done. The machine is protected from that moment, garrett starts again at every boot, and it keeps itself up to date.
 
-To see what it has caught:
+### All your computers and servers
+
+**1. Pick one machine to be the hub.** Run this on it.
+
+Linux:
 
 ```sh
-garrett cases
+curl -fsSL https://gary23w.github.io/sentinels/service.sh | sudo sh
 ```
+
+Windows, in PowerShell opened with "Run as administrator":
+
+```powershell
+irm https://gary23w.github.io/sentinels/service.ps1 | iex
+```
+
+**2. Copy the line it prints.** There is one for Linux and macOS and one for Windows. It is the install line from above with your hub's address and key added.
+
+**3. Run that line on every other machine.** By hand, or with whatever already runs commands on your machines: ssh, Ansible, Intune, your MDM. It is the same line everywhere and it asks no questions.
+
+Every machine now protects itself and reports to your hub, and what one machine learns from an attack protects the rest. Keep the line private: anyone who has it can add a machine. To print it again: `sudo garrett-service join` (on a Windows hub, `"C:\Program Files\garrett-service\garrett-service.cmd" join`).
+
+On Kubernetes, `deploy/kubernetes-daemonset.yaml` puts garrett on every node: build the image, fill in your hub's address and key, and `kubectl apply` it.
+
+### Check that it worked
+
+| On | Run |
+|---|---|
+| Linux | `garrett status` |
+| macOS | `sudo "/Library/Application Support/Garrett/garrett" status` |
+| Windows | `"C:\Program Files\garrett\garrett.cmd" status` |
+| A Linux hub | `sudo garrett-service devices` lists every machine that reports to it |
+| A Windows hub | `"C:\Program Files\garrett-service\garrett-service.cmd" devices` does the same |
+
+Put `cases` in place of `status` to see what garrett has caught.
+
+### If you are an AI agent doing the install
+
+- Run the lines above as they are, as root or as an administrator. They take no input and stop with an error if anything fails.
+- Each installer checks what it downloads against a SHA-256 written into the script, and installs nothing that does not match. Do not work around a failed check.
+- Do not print, log or commit the join line or the hub's key. Pass them straight to the machine that needs them.
+- Confirm with the status command above before reporting success.
 
 ## What you get
 
@@ -52,19 +93,9 @@ It stays current. New versions are signed with a key that is kept off GitHub, an
 
 ## Protect a whole fleet
 
-One machine on its own is fine. If you have several, turn one of them into your own service:
+One machine on its own is fine. If you have several, the hub from [Setup](#setup) is your own service.
 
-```sh
-curl -fsSL https://gary23w.github.io/sentinels/service.sh | sudo sh
-```
-
-On Windows, from an elevated PowerShell:
-
-```powershell
-irm https://gary23w.github.io/sentinels/service.ps1 | iex
-```
-
-That line fetches one file from the release, checks it, and runs it. Inside it are the service, its decision model and the agent for that machine, so nothing else is downloaded. The service and the agent are set up as daemons that start at every boot. It prints the command that joins your other machines. From then on, what one machine learns from an attack protects the rest, and every case shows up in one place. The service runs on your hardware and your cases stay there.
+Its install line fetches one file from the release, checks it, and runs it. Inside it are the service, its decision model and the agent for that machine, so nothing else is downloaded. The service and the agent are set up as daemons that start at every boot. It prints the command that joins your other machines. From then on, what one machine learns from an attack protects the rest, and every case shows up in one place. The service runs on your hardware and your cases stay there.
 
 The decision model is [crivo-sentinel-v1](https://huggingface.co/gary23w/crivo-sentinel-v1). When a machine freezes a hostile program, the model says whether to stop it, release it or hold it for you. It runs inside the service's own process, on the CPU; nothing leaves your machine. Add `--model off` (`$env:GARRETT_MODEL = 'off'` on Windows) to do without it.
 
