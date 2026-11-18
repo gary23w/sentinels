@@ -16,6 +16,8 @@
 #                                                 cross-compiling (the tests run under an emulated processor)
 #   garrett-macos                                 one file for Apple silicon and Intel
 #   garrett-windows.exe                           64-bit Windows, with no runtime to install
+#   garrett-installer-*                           the stub of the one-file service installers (packaging/installer), one for
+#                                                 Linux x86_64, Linux aarch64 and Windows; assemble-release.sh fills them
 #
 # The folders of the build machines are not kept in the program files: they are written as `home` and `garrett`.
 name: release
@@ -30,8 +32,8 @@ jobs:
     strategy:
       matrix:
         include:
-          - { runner: ubuntu-24.04, target: x86_64-unknown-linux-musl, name: garrett-linux-x86_64 }
-          - { runner: ubuntu-24.04-arm, target: aarch64-unknown-linux-musl, name: garrett-linux-aarch64 }
+          - { runner: ubuntu-24.04, target: x86_64-unknown-linux-musl, name: garrett-linux-x86_64, installer: garrett-installer-linux-x86_64 }
+          - { runner: ubuntu-24.04-arm, target: aarch64-unknown-linux-musl, name: garrett-linux-aarch64, installer: garrett-installer-linux-aarch64 }
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -48,10 +50,18 @@ jobs:
           cp target/${{ matrix.target }}/release/garrett ../${{ matrix.name }}
           file ../${{ matrix.name }}
           ../${{ matrix.name }} version
+          # The stub of the one-file service installer, for the same processor.
+          cd ../packaging/installer && cargo build --release --locked --target ${{ matrix.target }}
+          cp target/${{ matrix.target }}/release/garrett-installer ../../${{ matrix.installer }}
+          ../../${{ matrix.installer }} --version
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.name }}
           path: ${{ matrix.name }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.installer }}
+          path: ${{ matrix.installer }}
   linux-armv7:
     runs-on: ubuntu-24.04
     steps:
@@ -110,10 +120,18 @@ jobs:
           cd rust && cargo build --release --locked
           cp target/release/garrett.exe ../garrett-windows.exe
           ../garrett-windows.exe version
+          # The stub of the one-file service installer.
+          cd ../packaging/installer && cargo build --release --locked
+          cp target/release/garrett-installer.exe ../../garrett-installer-windows.exe
+          ../../garrett-installer-windows.exe --version
       - uses: actions/upload-artifact@v4
         with:
           name: garrett-windows.exe
           path: garrett-windows.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: garrett-installer-windows.exe
+          path: garrett-installer-windows.exe
 
   # Pack what was built: Debian packages, the apt repository, the bundles, the update list, the site.
   assemble:

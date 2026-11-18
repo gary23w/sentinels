@@ -14,3 +14,6 @@ node_modules/
 wrangler.jsonc
 agent.json
 *.sqlite
+
+# The decision model is its own repository: https://huggingface.co/gary23w/crivo-sentinel-v1 (clone it here as model/)
+model/

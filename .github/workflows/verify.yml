@@ -4,7 +4,8 @@
 #                               harmless stand-in for an attack; check that it is ended and recorded; check fleet
 #                               blocking; remove it and check nothing is left. These three run only when the
 #                               workflow is started by hand, which is done after every release
-#   service-linux, -windows     the one-line service install, and a machine joining it
+#   service-linux, -windows     the one-line service install from the one-file installer built here (service, model
+#                               runtime, agent); the agent it installed reports to it
 #   rust, rust-agent-*          the agent built from this commit: its recorded decisions, then the real thing
 #                               running on each system
 #   small-devices               the agent built for 32-bit ARM with its tests run under an emulated processor, and
@@ -266,38 +267,47 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GARRETT_BASE: http://127.0.0.1:8765
+      GARRETT_RELEASE: http://127.0.0.1:8765
     steps:
       - uses: actions/checkout@v4
-      - name: Build the bundles and serve them
+      - name: Build the one-file installer and serve it
         run: |
           (cd rust && cargo build --release --locked)
-          mkdir -p agents && cp rust/target/release/garrett agents/garrett-linux-x86_64
+          mkdir -p agents installers node model && cp rust/target/release/garrett agents/garrett-linux-x86_64
+          rustup target add x86_64-unknown-linux-musl
+          (cd packaging/installer && cargo build --release --locked --target x86_64-unknown-linux-musl)
+          cp packaging/installer/target/x86_64-unknown-linux-musl/release/garrett-installer installers/garrett-installer-linux-x86_64
+          # The Node.js runtime the installer carries, checked against its published digest.
+          curl -fsSL https://nodejs.org/dist/v24.22.3/node-v24.22.3-linux-x64.tar.gz -o node.tar.gz
+          echo "061ec3e3062115705b56b51fa9cc330ab50d34b6969387d4e4b1a50c6809acc2  node.tar.gz" | sha256sum -c --quiet
+          tar -xzf node.tar.gz node-v24.22.3-linux-x64/bin/node && mv node-v24.22.3-linux-x64/bin/node node/node-linux-x64
+          # The decision model, from its repository; the installer is built without it when that is not reachable.
+          for name in model.onnx tokenizer.json tokenizer_config.json config.json; do curl -fsSL "https://huggingface.co/gary23w/crivo-sentinel-v1/resolve/main/$name" -o "model/$name" || { rm -f model/*; echo "no model: the service is tested without it"; break; }; done
           (cd server && npm install --omit=dev --no-audit --no-fund >/dev/null)
-          python3 -B packaging/build-release.py site --agents agents >/dev/null
+          python3 -B packaging/build-release.py site --agents agents --installers installers --node node --model model
           cp packaging/install.sh site/
-          # The one-line installer carries the hash of the bundle it installs: give it this build's, as a release does.
-          pin=$(sed -n 's/  garrett-service\.tar\.gz$//p' site/SHA256SUMS)
-          sed "s/^SERVICE_SHA='[0-9a-f]*'\$/SERVICE_SHA='$pin'/" packaging/service.sh > site/service.sh
-          grep -q "^SERVICE_SHA='$pin'\$" site/service.sh
+          # The one-line installer carries the hash of the file it runs: give it this build's, as a release does.
+          pin=$(sed -n 's/  garrett-sentinels-linux-x86_64$//p' site/SHA256SUMS)
+          sed "s/^SENTINELS_SHA_x86_64='[0-9a-f]*'\$/SENTINELS_SHA_x86_64='$pin'/" packaging/service.sh > site/service.sh
+          grep -q "^SENTINELS_SHA_x86_64='$pin'\$" site/service.sh
           (cd site && nohup python3 -m http.server 8765 --bind 127.0.0.1 >/dev/null 2>&1 &)
           sleep 1
-      - name: One line makes this machine a Sentinel service
+      - name: One line makes this machine a Sentinel service, with the model inside it and the agent beside it
         run: |
-          curl -fsSL "$GARRETT_BASE/service.sh" | sudo GARRETT_BASE="$GARRETT_BASE" sh -s -- --address 127.0.0.1 --memory neuron-db | sed -E 's/[a-f0-9]{64}/<hidden>/g'
+          curl -fsSL "$GARRETT_BASE/service.sh" | sudo GARRETT_BASE="$GARRETT_BASE" GARRETT_RELEASE="$GARRETT_RELEASE" sh -s -- --address 127.0.0.1 --memory neuron-db | sed -E 's/[a-f0-9]{64}/<hidden>/g'
           systemctl is-active garrett-service
-          # The optional memory came in the bundle and the service started with it.
+          systemctl is-enabled garrett-service
+          # The optional memory came in the installer and the service started with it.
           sudo grep -q '^MEMORY=neuron-db$' /etc/garrett-service/service.conf
           sudo journalctl -u garrett-service --no-pager | grep -q "remembering verdicts with neuron-db"
+          # So did the decision model, when the build had it.
+          if [ -f model/model.onnx ]; then sudo journalctl -u garrett-service --no-pager | grep -q "deciding with crivo-sentinel-v1 in this process"; fi
           test "$(stat -c %U "/proc/$(systemctl show -p MainPID --value garrett-service)")" = garrett-service
-      - name: A machine joins with the printed key and its case reaches the service
+          test -z "$(ls -d /tmp/garrett-sentinels-* 2>/dev/null)"
+      - name: The agent the installer put on this machine reports to it, and its case reaches the service
         run: |
-          KEY=$(sudo garrett-service join | sed -n 's/.*--key \([a-f0-9.]*\).*/\1/p' | head -1)
-          echo "::add-mask::$KEY"
-          mkdir -p /tmp/gt && tar -xzf site/garrett-linux-x86_64.tar.gz -C /tmp/gt
-          sudo mkdir -p /etc/garrett
-          printf 'SERVER=https://127.0.0.1:8443\nENROLL_KEY=%s\n' "$KEY" | sudo tee /etc/garrett/garrett.conf >/dev/null
-          sudo sh /tmp/gt/garrett/install.sh
           sleep 10
+          systemctl is-active garrett
           garrett status
           sudo garrett-service devices | grep -q '"enrolled":1'
           mkdir -p /tmp/gv && cp "$(command -v bash)" /tmp/gv/php-fpm8.3
@@ -333,28 +343,36 @@ jobs:
           if said=$(sudo /usr/lib/garrett/garrett-agent --state-dir /tmp/other enroll --server https://127.0.0.1:8443 --key "$KEY.$WRONG" 2>&1); then echo "a wrong pin was accepted"; exit 1; fi
           echo "$said"
           echo "$said" | grep -q "did not present the certificate"
-      - name: Removal leaves nothing
+      - name: Removal leaves nothing, the agent included
         run: |
-          sudo sh /tmp/gt/garrett/install.sh --remove
-          curl -fsSL "$GARRETT_BASE/service.sh" | sudo GARRETT_BASE="$GARRETT_BASE" sh -s -- --remove
-          for p in /usr/lib/garrett-service /etc/garrett-service /var/lib/garrett-service /usr/bin/garrett-service /etc/systemd/system/garrett-service.service; do if [ -e "$p" ]; then echo "left behind: $p"; exit 1; fi; done
+          curl -fsSL "$GARRETT_BASE/service.sh" | sudo GARRETT_BASE="$GARRETT_BASE" GARRETT_RELEASE="$GARRETT_RELEASE" sh -s -- --remove
+          for p in /usr/lib/garrett-service /etc/garrett-service /var/lib/garrett-service /usr/bin/garrett-service /etc/systemd/system/garrett-service.service /usr/lib/garrett /usr/bin/garrett /etc/systemd/system/garrett.service /etc/garrett /var/lib/garrett; do if [ -e "$p" ]; then echo "left behind: $p"; exit 1; fi; done
 
   service-windows:
     runs-on: windows-latest
     env:
       GARRETT_BASE: https://127.0.0.1:8765
+      GARRETT_RELEASE: https://127.0.0.1:8765
     steps:
       - uses: actions/checkout@v4
-      - name: Build the bundles and serve them
+      - name: Build the one-file installer and the bundles
         shell: pwsh
         run: |
           Push-Location rust; cargo build --release --locked; if ($LASTEXITCODE -ne 0) { throw 'the agent did not build' }; Pop-Location
-          New-Item -ItemType Directory -Force agents | Out-Null; Copy-Item rust/target/release/garrett.exe agents/garrett-windows.exe
+          New-Item -ItemType Directory -Force agents, installers, node, model | Out-Null; Copy-Item rust/target/release/garrett.exe agents/garrett-windows.exe
+          Push-Location packaging/installer; cargo build --release --locked; if ($LASTEXITCODE -ne 0) { throw 'the installer stub did not build' }; Pop-Location
+          Copy-Item packaging/installer/target/release/garrett-installer.exe installers/garrett-installer-windows.exe
+          # The Node.js runtime the installer carries, checked against its published digest.
+          Invoke-WebRequest -UseBasicParsing -Uri https://nodejs.org/dist/v24.22.3/win-x64/node.exe -OutFile node/node-win-x64.exe
+          if ((Get-FileHash -Algorithm SHA256 node/node-win-x64.exe).Hash.ToLower() -ne '86fc4785327db5f5c7558dc6156c543b433c313e813a222e088086222ab4afa6') { throw 'node.exe does not match its digest' }
+          # The decision model, from its repository; the installer is built without it when that is not reachable.
+          try { foreach ($name in 'model.onnx', 'tokenizer.json', 'tokenizer_config.json', 'config.json') { Invoke-WebRequest -UseBasicParsing -Uri "https://huggingface.co/gary23w/crivo-sentinel-v1/resolve/main/$name" -OutFile "model/$name" } }
+          catch { Remove-Item -Force model/*; 'no model: the service is tested without it' }
           Push-Location server; npm install --omit=dev --no-audit --no-fund | Out-Null; if ($LASTEXITCODE -ne 0) { throw 'npm install failed' }; Pop-Location
-          python -B packaging/build-release.py site --agents agents | Out-Null
-          # The one-line installers carry the hash of the bundle they install: give them this build's, as a release does.
+          python -B packaging/build-release.py site --agents agents --installers installers --node node --model model
+          # The one-line installers carry the hash of what they install: give them this build's, as a release does.
           $sums = @{}; Get-Content site/SHA256SUMS | ForEach-Object { $hash, $name = $_ -split '  ', 2; $sums[$name] = $hash }
-          foreach ($pin in @('install.ps1', 'pinnedWindowsZip', 'garrett-windows.zip'), @('service.ps1', 'pinnedServiceZip', 'garrett-service-windows.zip')) {
+          foreach ($pin in @('install.ps1', 'pinnedWindowsZip', 'garrett-windows.zip'), @('service.ps1', 'pinnedInstaller', 'garrett-sentinels-windows.exe')) {
             $text = [IO.File]::ReadAllText("$PWD/packaging/$($pin[0])") -replace "(?m)^\`$$($pin[1]) = '[0-9a-f]{64}'", "`$$($pin[1]) = '$($sums[$pin[2]])'"
             if ($text -notmatch [regex]::Escape("`$$($pin[1]) = '$($sums[$pin[2]])'")) { throw "no pin was set in $($pin[0])" }
             [IO.File]::WriteAllText("$PWD/site/$($pin[0])", $text)
@@ -388,19 +406,17 @@ jobs:
           irm "$env:GARRETT_BASE/service.ps1" | iex | ForEach-Object { $_ -replace '[a-f0-9]{64}', '<hidden>' }
           if (-not (Select-String -Path "$env:ProgramData\garrett-service\service.conf" -Pattern '^MEMORY=neuron-db$' -Quiet)) { throw 'the memory setting was not written' }
           if (-not (Test-Path "$env:ProgramFiles\garrett-service\node_modules\@gary23w\neuron-db\neuron_core.wasm")) { throw 'neuron-db was not installed with the service' }
+          # So was the decision model, when the build had it.
+          if ((Test-Path model\model.onnx) -and -not (Select-String -Path "$env:ProgramData\garrett-service\service.conf" -Pattern '^MODEL_DIR=' -Quiet)) { throw 'the model was not set up with the service' }
           $task = Get-ScheduledTask -TaskName garrett-service
           "state: $($task.State) | runs as: $($task.Principal.UserId)"
           if ($task.State -ne 'Running' -or $task.Principal.UserId -notlike '*LOCAL SERVICE') { throw 'the task is not running as expected' }
           if (-not (Get-NetFirewallRule -DisplayName 'garrett-service' -ErrorAction SilentlyContinue)) { throw 'no firewall rule' }
-      - name: A machine joins with the printed key and its case reaches the service
+          if (-not (Get-ScheduledTask -TaskName garrett -ErrorAction SilentlyContinue)) { throw 'the agent was not installed with the service' }
+      - name: The agent the installer put on this machine reports to it, and its case reaches the service
         shell: powershell
         run: |
           $manage = "$env:ProgramFiles\garrett-service\garrett-service.cmd"
-          $line = (& $manage join) | Where-Object { $_ -match "GARRETT_KEY='([a-f0-9.]+)'" } | Select-Object -First 1
-          $null = $line -match "GARRETT_KEY='([a-f0-9.]+)'"; $key = $Matches[1]
-          "::add-mask::$key"
-          $env:GARRETT_SERVER = 'https://127.0.0.1:8443'; $env:GARRETT_KEY = $key
-          irm "$env:GARRETT_BASE/install.ps1" | iex
           Start-Sleep -Seconds 10
           & "$env:ProgramFiles\garrett\garrett.cmd" status
           $devices = (& $manage devices) -join ''
@@ -415,18 +431,15 @@ jobs:
           foreach ($i in 1..90) { Start-Sleep -Seconds 1; if (((& $manage cases) -join '') -match 'powershell\.exe') { $seen = $true; "the case reached the service after about $i seconds"; break } }
           Stop-Process -Id $parent.Id -Force -ErrorAction SilentlyContinue
           if (-not $seen) { throw 'no case reached the service' }
-      - name: Removal leaves nothing
+      - name: Removal leaves nothing, the agent included
         shell: powershell
         run: |
-          Invoke-WebRequest -UseBasicParsing -Uri "$env:GARRETT_BASE/garrett-windows.zip" -OutFile garrett-windows.zip
-          Expand-Archive garrett-windows.zip -DestinationPath .
-          & .\garrett\deploy\uninstall-windows.ps1
           & "$env:ProgramFiles\garrett-service\garrett-service.cmd" remove
           if ($LASTEXITCODE -ne 0) { throw 'the remove command reported an error' }
           Start-Sleep -Seconds 8
-          if (Get-ScheduledTask -TaskName garrett-service -ErrorAction SilentlyContinue) { throw 'the task is still there' }
+          foreach ($name in 'garrett-service', 'garrett') { if (Get-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue) { throw "the task $name is still there" } }
           if (Get-NetFirewallRule -DisplayName 'garrett-service' -ErrorAction SilentlyContinue) { throw 'the firewall rule is still there' }
-          foreach ($folder in "$env:ProgramFiles\garrett-service", "$env:ProgramData\garrett-service") { if (Test-Path $folder) { throw "left behind: $folder" } }
+          foreach ($folder in "$env:ProgramFiles\garrett-service", "$env:ProgramData\garrett-service", "$env:ProgramFiles\garrett") { if (Test-Path $folder) { throw "left behind: $folder" } }
 
   # The package's removal script, run where it runs, on a system with apt: purging takes what the installer added.
   package:

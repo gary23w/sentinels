@@ -53,6 +53,8 @@
     //   decision  a decision model (recommended): sent the case and one question, answers a probability for each answer
     //   chat      a chat model: sent messages, answers in text
     //   custom    your own analyst: sent the case and the instructions
+    // The self-hosted service comes with a decision model, https://huggingface.co/gary23w/crivo-sentinel-v1; serve it
+    // anywhere this Worker can reach over HTTPS and set "decision" with its address below.
     "AI_PROVIDER": "none",
     // Sent as "model" when set. Needed when the model is the AI binding above.
     "AI_MODEL": "",

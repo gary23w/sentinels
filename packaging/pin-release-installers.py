@@ -36,8 +36,8 @@ def pinned(source, assignments, separator):
 
 
 windows = pinned("packaging/install.ps1", {"$pinnedWindowsZip": "garrett-windows.zip"}, " = ")
-service_windows = pinned("packaging/service.ps1", {"$pinnedServiceZip": "garrett-service-windows.zip"}, " = ")
-service_unix = pinned("packaging/service.sh", {"SERVICE_SHA": "garrett-service.tar.gz"}, "=")
+service_windows = pinned("packaging/service.ps1", {"$pinnedInstaller": "garrett-sentinels-windows.exe"}, " = ")
+service_unix = pinned("packaging/service.sh", {"SENTINELS_SHA_x86_64": "garrett-sentinels-linux-x86_64", "SENTINELS_SHA_aarch64": "garrett-sentinels-linux-aarch64"}, "=")
 unix = pinned("packaging/install.sh", {
     "LINUX_X86_SHA": "garrett-linux-x86_64.tar.gz",
     "LINUX_ARM64_SHA": "garrett-linux-aarch64.tar.gz",
@@ -54,9 +54,17 @@ unix, count = re.subn(r"(?m)^RELEASE_VERSION='[0-9]+(?:\.[0-9]+){1,3}'$",
                       lambda _: "RELEASE_VERSION='" + version[1] + "'", unix)
 if count != 1:
     raise SystemExit("The installer has no single release version pin.")
+service_unix, count = re.subn(r"(?m)^RELEASE_VERSION='[0-9]+(?:\.[0-9]+){1,3}'$",
+                              lambda _: "RELEASE_VERSION='" + version[1] + "'", service_unix)
+if count != 1:
+    raise SystemExit("The service installer has no single release version pin.")
+service_windows, count = re.subn(r"(?m)^\$releaseVersion = '[0-9]+(?:\.[0-9]+){1,3}'$",
+                                 lambda _: "$releaseVersion = '" + version[1] + "'", service_windows)
+if count != 1:
+    raise SystemExit("The Windows service installer has no single release version pin.")
 
 (site / "install.ps1").write_bytes(windows.encode("utf-8"))
 (site / "install.sh").write_bytes(unix.encode("utf-8"))
 (site / "service.ps1").write_bytes(service_windows.encode("utf-8"))
 (site / "service.sh").write_bytes(service_unix.encode("utf-8"))
-print("Pinned agent and service release bundles in first-install scripts.")
+print("Pinned the agent bundles and the one-file service installers in the first-install scripts.")

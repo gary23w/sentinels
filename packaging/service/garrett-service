@@ -4,12 +4,13 @@
 #   sudo garrett-service join       the commands that join other machines to this service
 #   sudo garrett-service devices    the machines that report here
 #   sudo garrett-service cases      the open cases
+#   sudo garrett-service setup      a few questions: which model decides (the one that comes with it, or your own), how much it may
 #   sudo garrett-service token      the operator token, for the API described in the README
-#   garrett-service status          whether it is running
+#   garrett-service status          whether it is running, and which model decides
 set -eu
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
 export PATH
-ETC=/etc/garrett-service
+LIB=/usr/lib/garrett-service; ETC=/etc/garrett-service
 BASE=${GARRETT_BASE:-https://gary23w.github.io/sentinels}
 setting() { sed -n "s/^$1=//p" "$ETC/service.conf" | tail -n 1; }
 need_root() { [ -r "$ETC/service.conf" ] || { echo "Run this as root (put sudo before it)." >&2; exit 1; }; }
@@ -36,8 +37,25 @@ case "${1:-}" in
     ;;
   devices) need_root; api /v1/devices; echo ;;
   cases) need_root; api "/v1/cases?state=open"; echo ;;
+  setup)
+    need_root
+    # The Node.js the service runs on, as its unit names it.
+    NODE=$(sed -n 's/^ExecStart=\([^ ]*\) .*/\1/p' /etc/systemd/system/garrett-service.service)
+    [ -x "$NODE" ] || { echo "The service's Node.js was not found; is the service installed?" >&2; exit 1; }
+    "$NODE" --disable-warning=ExperimentalWarning "$LIB/setup.mjs" "$ETC/service.conf"
+    systemctl restart garrett-service.service
+    echo "The service was restarted with these settings."
+    ;;
   token) need_root; setting ADMIN_TOKEN ;;
   ready) need_root; curl -fsS --cacert "$ETC/tls.crt" -o /dev/null "https://127.0.0.1:$(setting PORT)/v1/pulse" ;;
-  status) systemctl status garrett-service.service --no-pager ;;
-  *) sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//' ;;
+  status)
+    systemctl status garrett-service.service --no-pager
+    if [ -r "$ETC/service.conf" ]; then
+      case "$(setting AI_PROVIDER)" in
+        ""|none) echo "No model decides; machines end hostile programs on their own." ;;
+        *) echo "Model: $(setting AI_MODEL) ($(setting AI_PROVIDER)$([ -n "$(setting MODEL_DIR)" ] && echo ", inside the service" || echo " at $(setting AI_BASE_URL)"))" ;;
+      esac
+    fi
+    ;;
+  *) sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//' ;;
 esac

@@ -1,0 +1,19 @@
+[package]
+name = "garrett-installer"
+version = "1.8.2"
+edition = "2021"
+license = "MIT"
+description = "One file that installs the Sentinel service, its decision model and the agent on this machine: the files are carried inside it, nothing is downloaded."
+repository = "https://github.com/gary23w/sentinels"
+publish = false
+
+# No outside libraries: the payload format is a few lines, and the installers it runs are the shell and
+# PowerShell ones in packaging/service.
+[dependencies]
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

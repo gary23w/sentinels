@@ -58,7 +58,17 @@ One machine on its own is fine. If you have several, turn one of them into your 
 curl -fsSL https://gary23w.github.io/sentinels/service.sh | sudo sh
 ```
 
-It prints the command that joins your other machines. From then on, what one machine learns from an attack protects the rest, and every case shows up in one place. The service runs on your hardware and your cases stay there.
+On Windows, from an elevated PowerShell:
+
+```powershell
+irm https://gary23w.github.io/sentinels/service.ps1 | iex
+```
+
+That line fetches one file from the release, checks it, and runs it. Inside it are the service, its decision model and the agent for that machine, so nothing else is downloaded. The service and the agent are set up as daemons that start at every boot. It prints the command that joins your other machines. From then on, what one machine learns from an attack protects the rest, and every case shows up in one place. The service runs on your hardware and your cases stay there.
+
+The decision model is [crivo-sentinel-v1](https://huggingface.co/gary23w/crivo-sentinel-v1). When a machine freezes a hostile program, the model says whether to stop it, release it or hold it for you. It runs inside the service's own process, on the CPU; nothing leaves your machine. Add `--model off` (`$env:GARRETT_MODEL = 'off'` on Windows) to do without it.
+
+To plug in a model of your own, or your own reasoning, run `sudo garrett-service setup` (`garrett-service.cmd setup` on Windows): a few questions, then it writes the settings and restarts the service. Add `--wizard` (`$env:GARRETT_WIZARD = '1'`) to the install line to answer them during the install instead. Or edit `/etc/garrett-service/service.conf` by hand: the lines are `AI_PROVIDER` (`decision`, `chat`, `custom` or `none`), `AI_BASE_URL`, `AI_MODEL`, `AI_API_KEY`, `AI_HIGH_CONFIDENCE`, `DECISION_RELEASE` and `DECISION_FALLBACK`, and `MODEL_DIR` for the model that came with it, described in `server/serve.mjs` and `server/wrangler.example.jsonc`. Restart the service after a change.
 
 ## How hard it hits
 
@@ -68,10 +78,10 @@ You choose. The default is `kill`.
 |---|---|
 | `kill` | Ends it, and everything it started, at once |
 | `pause` | Freezes it and waits for you to decide |
-| `decide` | Freezes it and lets your service's model decide |
+| `decide` | Freezes it and lets the service's model decide: [crivo-sentinel-v1](https://huggingface.co/gary23w/crivo-sentinel-v1), or one of your own |
 | `report` | Only tells you |
 
-The default `kill` mode does not call a model. AI case analysis and `decide` mode require a configured provider on the service.
+The default `kill` mode does not call a model. AI case analysis and `decide` mode need a model on the service; the service installer sets one up, and `decide` becomes the default for machines that report to it.
 
 Nervous about letting it end things? Start it in report mode and read the cases for a week:
 
@@ -89,7 +99,7 @@ To build it yourself you need Rust:
 cd rust && cargo test && cargo build --release
 ```
 
-The agent lives in `rust/`, the service in `server/`, and the installers in `packaging/` and `deploy/`.
+The agent lives in `rust/`, the service in `server/`, the installers in `packaging/` and `deploy/`, and the stub of the one-file service installer in `packaging/installer/`. The decision model, with the code that trains and measures it, is its own repository: [huggingface.co/gary23w/crivo-sentinel-v1](https://huggingface.co/gary23w/crivo-sentinel-v1). Clone it as `model/` inside this one to train it again.
 
 To remove it: `sudo apt purge garrett` on Debian and Ubuntu, `sudo sh install.sh --remove` from the Linux or macOS bundle, or `Uninstall garrett.cmd` from the Windows bundle. It takes its firewall rules and its files with it.
 
