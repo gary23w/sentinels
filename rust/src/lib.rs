@@ -58,5 +58,7 @@ pub mod watch;
 pub mod web;
 #[cfg(windows)]
 pub mod win;
+#[cfg(windows)]
+mod windows_acl;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

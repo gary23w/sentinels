@@ -43,7 +43,9 @@ the licence column is what each library's authors declare.
 | version_check | 0.9.5 | MIT/Apache-2.0 | https://github.com/SergioBenitez/version_check |
 | wasi | 0.11.1+wasi-snapshot-preview1 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | https://github.com/bytecodealliance/wasi |
 | webpki-roots | 1.0.12 | CDLA-Permissive-2.0 | https://github.com/rustls/webpki-roots |
+| windows-link | 0.2.1 | MIT OR Apache-2.0 | https://github.com/microsoft/windows-rs |
 | windows-sys | 0.52.0 | MIT OR Apache-2.0 | https://github.com/microsoft/windows-rs |
+| windows-sys | 0.61.2 | MIT OR Apache-2.0 | https://github.com/microsoft/windows-rs |
 | windows-targets | 0.52.6 | MIT OR Apache-2.0 | https://github.com/microsoft/windows-rs |
 | windows_aarch64_gnullvm | 0.52.6 | MIT OR Apache-2.0 | https://github.com/microsoft/windows-rs |
 | windows_aarch64_msvc | 0.52.6 | MIT OR Apache-2.0 | https://github.com/microsoft/windows-rs |
@@ -2558,7 +2560,7 @@ of Data, including for example machine learning models and models'
 insights.
 ```
 
-### windows-sys 0.52.0 (license-apache-2.0), windows-targets 0.52.6 (license-apache-2.0), windows_aarch64_gnullvm 0.52.6 (license-apache-2.0), windows_aarch64_msvc 0.52.6 (license-apache-2.0), windows_i686_gnu 0.52.6 (license-apache-2.0), windows_i686_gnullvm 0.52.6 (license-apache-2.0), windows_i686_msvc 0.52.6 (license-apache-2.0), windows_x86_64_gnu 0.52.6 (license-apache-2.0), windows_x86_64_gnullvm 0.52.6 (license-apache-2.0), windows_x86_64_msvc 0.52.6 (license-apache-2.0)
+### windows-link 0.2.1 (license-apache-2.0), windows-sys 0.52.0 (license-apache-2.0), windows-sys 0.61.2 (license-apache-2.0), windows-targets 0.52.6 (license-apache-2.0), windows_aarch64_gnullvm 0.52.6 (license-apache-2.0), windows_aarch64_msvc 0.52.6 (license-apache-2.0), windows_i686_gnu 0.52.6 (license-apache-2.0), windows_i686_gnullvm 0.52.6 (license-apache-2.0), windows_i686_msvc 0.52.6 (license-apache-2.0), windows_x86_64_gnu 0.52.6 (license-apache-2.0), windows_x86_64_gnullvm 0.52.6 (license-apache-2.0), windows_x86_64_msvc 0.52.6 (license-apache-2.0)
 
 ```
 Apache License
@@ -2764,7 +2766,7 @@ Apache License
    limitations under the License.
 ```
 
-### windows-sys 0.52.0 (license-mit), windows-targets 0.52.6 (license-mit), windows_aarch64_gnullvm 0.52.6 (license-mit), windows_aarch64_msvc 0.52.6 (license-mit), windows_i686_gnu 0.52.6 (license-mit), windows_i686_gnullvm 0.52.6 (license-mit), windows_i686_msvc 0.52.6 (license-mit), windows_x86_64_gnu 0.52.6 (license-mit), windows_x86_64_gnullvm 0.52.6 (license-mit), windows_x86_64_msvc 0.52.6 (license-mit)
+### windows-link 0.2.1 (license-mit), windows-sys 0.52.0 (license-mit), windows-sys 0.61.2 (license-mit), windows-targets 0.52.6 (license-mit), windows_aarch64_gnullvm 0.52.6 (license-mit), windows_aarch64_msvc 0.52.6 (license-mit), windows_i686_gnu 0.52.6 (license-mit), windows_i686_gnullvm 0.52.6 (license-mit), windows_i686_msvc 0.52.6 (license-mit), windows_x86_64_gnu 0.52.6 (license-mit), windows_x86_64_gnullvm 0.52.6 (license-mit), windows_x86_64_msvc 0.52.6 (license-mit)
 
 ```
 MIT License

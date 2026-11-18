@@ -377,6 +377,8 @@ impl State {
 
     /// The saved enrolment, or `None` when this machine is not enrolled.
     pub fn load(&self) -> Result<Option<Value>, String> {
+        #[cfg(windows)]
+        self.make().map_err(|error| format!("The state folder is not private: {error}"))?;
         let path = self.path();
         if std::fs::symlink_metadata(&path).map(|meta| meta.file_type().is_symlink()).unwrap_or(true) {
             return Ok(None);
@@ -391,10 +393,15 @@ impl State {
     }
 
     pub fn make(&self) -> std::io::Result<()> {
+        #[cfg(windows)]
+        crate::windows_acl::check_path(&self.directory)?;
         if !self.directory.exists() {
             std::fs::create_dir_all(&self.directory)?;
-            private(&self.directory, 0o700);
         }
+        #[cfg(windows)]
+        crate::windows_acl::protect_tree(&self.directory)?;
+        #[cfg(not(windows))]
+        private(&self.directory, 0o700)?;
         Ok(())
     }
 
@@ -402,7 +409,7 @@ impl State {
         self.make()?;
         let temporary = self.directory.join(format!("agent-{}.tmp", random_hex(6)));
         std::fs::write(&temporary, value.to_string())?;
-        private(&temporary, 0o600);
+        private(&temporary, 0o600)?;
         std::fs::rename(&temporary, self.path())
     }
 
@@ -411,16 +418,20 @@ impl State {
     }
 }
 
-pub fn private(path: &Path, mode: u32) {
+pub fn private(path: &Path, mode: u32) -> std::io::Result<()> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode));
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode))?;
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
     {
-        let _ = (path, mode);
+        let _ = mode;
+        crate::windows_acl::protect_path(path)?;
     }
+    #[cfg(not(any(unix, windows)))]
+    let _ = (path, mode);
+    Ok(())
 }
 
 fn seconds(value: &Value, low: i64, high: i64, fallback: i64) -> i64 {
@@ -476,7 +487,7 @@ pub fn standalone_salt(state: &State) -> std::io::Result<String> {
     }
     let salt = random_hex(32);
     std::fs::write(&own, json!({"salt": salt}).to_string())?;
-    private(&own, 0o600);
+    private(&own, 0o600)?;
     Ok(salt)
 }
 
