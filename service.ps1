@@ -4,11 +4,12 @@
 # It prints the command that joins your other machines (Windows, Linux, macOS) to it.
 # To choose the port or the address other machines reach this one by, set these first in the same window:
 #   $env:GARRETT_PORT = '8443'; $env:GARRETT_ADDRESS = 'sentinel.example.internal'
+# To remember operators' verdicts and show a new case the nearest ones (off by default):  $env:GARRETT_MEMORY = 'neuron-db'
 # It downloads garrett-service-windows.zip, checks it against this script's pinned SHA-256, and runs its installer.
 $ErrorActionPreference = 'Stop'
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { throw 'Run this from an elevated PowerShell.' }
 $base = if ($env:GARRETT_BASE) { $env:GARRETT_BASE } else { 'https://gary23w.github.io/sentinels' }
-$pinnedServiceZip = 'c03244dd55eb8fe88df663851f205d5594e296f1e64bf74efbe9f1ac25f22eb3'
+$pinnedServiceZip = 'd3d20c4f1b2367e219c91fa55a02d97d1578e7668550a380c335fc504d66b22a'
 $releaseUri = $null
 if (-not [Uri]::TryCreate($base, [UriKind]::Absolute, [ref]$releaseUri) -or $releaseUri.Scheme -cne 'https' -or -not $releaseUri.Host -or $releaseUri.UserInfo -or $releaseUri.Query -or $releaseUri.Fragment) { throw 'The release site must be an HTTPS address without credentials or a query.' }
 $base = $releaseUri.AbsoluteUri.TrimEnd('/')
@@ -50,6 +51,7 @@ try {
   $arguments = @{ Command = 'install' }
   if ($env:GARRETT_PORT) { $arguments.Port = [int]$env:GARRETT_PORT }
   if ($env:GARRETT_ADDRESS) { $arguments.Address = $env:GARRETT_ADDRESS }
+  if ($env:GARRETT_MEMORY) { $arguments.Memory = $env:GARRETT_MEMORY }
   & (Join-Path $work 'garrett-service\garrett-service.ps1') @arguments
 } finally {
   if ($work.StartsWith($stageRoot + '\', [StringComparison]::OrdinalIgnoreCase) -and (Test-Path -LiteralPath $work)) { Remove-Item -LiteralPath $work -Recurse -Force }

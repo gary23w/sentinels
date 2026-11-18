@@ -6,6 +6,7 @@
 #
 # It prints the command that joins your other machines (Linux, macOS, Windows) to it.
 # Options:  --port <number, default 8443>  --address <name or address other machines reach this one by>
+#           --memory neuron-db   remember operators' verdicts and show a new case the nearest ones (off by default)
 # Remove it again:  curl -fsSL .../service.sh | sudo sh -s -- --remove
 #
 # It downloads garrett-service.tar.gz, checks it against this script's pinned SHA-256, and runs its installer.
@@ -13,7 +14,7 @@ set -eu
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
 export PATH
 BASE=${GARRETT_BASE:-https://gary23w.github.io/sentinels}
-SERVICE_SHA='008081ddcdc42fdaae7a3b857af2afe3f91bcf6871e3ba2191a8831cb9e3a5c3'
+SERVICE_SHA='5da152ebc9731821c8d7cdf1704203740811bec6863f21814b9527332a719732'
 [ "$(id -u)" = 0 ] || { echo "Run this as root (put sudo before sh)." >&2; exit 1; }
 [ "$(uname -s)" = Linux ] || { echo "This installer covers Linux. On Windows use service.ps1; elsewhere see serve.mjs in the repository." >&2; exit 1; }
 fetch() { if command -v curl >/dev/null 2>&1; then curl -fsSL "$1" -o "$2"; else wget -q "$1" -O "$2"; fi; }
