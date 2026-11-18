@@ -1,4 +1,5 @@
 import { SIGNALS } from './signals.mjs';
+import { bodyJson } from './util.mjs';
 
 // The AI analyst: an optional second opinion on a case, written for the operator.
 //
@@ -42,6 +43,12 @@ export function parseAnalysis(raw) {
   const summary = clean(value.summary, 600);
   return summary ? { summary, technique: clean(value.technique, 120) || 'unclear', recommendation, confidence } : null;
 }
+function remoteEndpoint(base, suffix = '') {
+  let url;
+  try { url = new URL(base); } catch { throw new Error('The model endpoint must be an HTTPS address.'); }
+  if (url.protocol !== 'https:' || !url.hostname || url.username || url.password || url.hash || suffix && url.search) throw new Error('The model endpoint must be an HTTPS address without credentials or a fragment.');
+  return url.href.replace(/\/$/, '') + suffix;
+}
 export async function analyze(env, detail, platform, similar, deciding = false) {
   const provider = env.AI_PROVIDER || 'none';
   if (provider === 'none') return null;
@@ -53,15 +60,15 @@ export async function analyze(env, detail, platform, similar, deciding = false) 
     raw = answer?.response ?? answer;
   } else if (provider === 'openai') {
     if (!env.AI_BASE_URL || !env.AI_MODEL || !env.AI_API_KEY) throw new Error('The openai provider needs AI_BASE_URL, AI_MODEL and AI_API_KEY.');
-    const response = await fetch(env.AI_BASE_URL.replace(/\/$/, '') + '/chat/completions', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + env.AI_API_KEY }, body: JSON.stringify({ model: env.AI_MODEL, max_tokens: 400, messages: [{ role: 'system', content: SYSTEM_TEXT }, { role: 'user', content: user }] }) });
+    const response = await fetch(remoteEndpoint(env.AI_BASE_URL, '/chat/completions'), { method: 'POST', redirect: 'error', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + env.AI_API_KEY }, body: JSON.stringify({ model: env.AI_MODEL, max_tokens: 400, messages: [{ role: 'system', content: SYSTEM_TEXT }, { role: 'user', content: user }] }) });
     if (!response.ok) throw new Error('The model endpoint answered ' + response.status + '.');
-    raw = (await response.json())?.choices?.[0]?.message?.content;
+    raw = (await bodyJson(response, 32 * 1024))?.choices?.[0]?.message?.content;
   } else if (provider === 'custom') {
     const init = { method: 'POST', headers: { 'Content-Type': 'application/json', ...(env.AI_API_KEY ? { Authorization: 'Bearer ' + env.AI_API_KEY } : {}) }, body: JSON.stringify({ instructions: SYSTEM_TEXT, case: request, deciding }) };
-    const response = env.ANALYST?.fetch ? await env.ANALYST.fetch('https://analyst/analyze', init) : env.AI_BASE_URL ? await fetch(env.AI_BASE_URL, init) : null;
+    const response = env.ANALYST?.fetch ? await env.ANALYST.fetch('https://analyst/analyze', init) : env.AI_BASE_URL ? await fetch(remoteEndpoint(env.AI_BASE_URL), { ...init, redirect: 'error' }) : null;
     if (!response) throw new Error('The custom provider needs an ANALYST service binding or AI_BASE_URL.');
     if (!response.ok) throw new Error('The analyst answered ' + response.status + '.');
-    raw = await response.json();
+    raw = await bodyJson(response, 32 * 1024);
   } else throw new Error('Unknown AI_PROVIDER.');
   const analysis = parseAnalysis(raw);
   return analysis && { ...analysis, provider, model: env.AI_MODEL || null };

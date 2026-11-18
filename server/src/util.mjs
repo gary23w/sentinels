@@ -15,8 +15,23 @@ export async function sameSecret(given, expected) {
   return difference === 0;
 }
 export async function bodyJson(request, limit) {
-  const raw = await request.text();
-  if (raw.length > limit) fail(413, 'The request is too large.');
+  const reader = request.body?.getReader();
+  if (!reader) fail(400, 'Send a JSON object.');
+  const decoder = new TextDecoder();
+  let raw = '', bytes = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      bytes += value.byteLength;
+      if (bytes > limit) {
+        try { await reader.cancel(); } catch {}
+        fail(413, 'The request is too large.');
+      }
+      raw += decoder.decode(value, { stream: true });
+    }
+    raw += decoder.decode();
+  } finally { reader.releaseLock(); }
   try { const value = JSON.parse(raw); if (value && typeof value === 'object' && !Array.isArray(value)) return value; } catch {}
   fail(400, 'Send a JSON object.');
 }

@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import worker, { PROTOCOL, validateCase } from '../src/service.mjs';
 import { SIGNALS, REFERENCE_ATTACKS, reported } from '../src/signals.mjs';
 import { cleanPolicy, learnPolicy, scoreShape } from '../src/learning.mjs';
-import { analystRequest, parseAnalysis } from '../src/analyst.mjs';
+import { analystRequest, analyze, parseAnalysis } from '../src/analyst.mjs';
+import { bodyJson } from '../src/util.mjs';
 import { environment } from './d1.mjs';
 
 const ADMIN = 'a'.repeat(40), KEY = 'e'.repeat(40);
@@ -18,6 +19,21 @@ function service(changes) {
 const signal = id => ({ id, points: SIGNALS[id].weight, category: 'x', evidence: 'Written on the device.' });
 const item = (letter, ids, changes = {}) => ({ key: letter.repeat(32), name: 'tool', path: '/opt/app/tool', parent: 'bash', signals: ids.map(signal), remotes: [], ...changes });
 const report = (cases, changes = {}) => ({ protocol: PROTOCOL, version: '0.1.0', platform: 'linux', cases, watching: { processes: 10, connections: 4, tracked: 2 }, ...changes });
+
+test('JSON requests stop at the byte limit without reading later chunks', async () => {
+  let reads = 0, cancelled = false;
+  const body = new ReadableStream({
+    pull(controller) { reads++; controller.enqueue(new TextEncoder().encode('{"x":"too long"}')); },
+    cancel() { cancelled = true; },
+  }, { highWaterMark: 0 });
+  const request = new Request('https://sentinel.example/v1/enroll', { method: 'POST', body, duplex: 'half' });
+  await assert.rejects(bodyJson(request, 4), error => error.status === 413);
+  assert.equal(reads, 1);
+  assert.equal(cancelled, true);
+  await assert.rejects(bodyJson(new Request('https://sentinel.example/v1/enroll', { method: 'POST', body: '{"x":"é"}' }), 9), error => error.status === 413);
+  assert.deepEqual(await bodyJson(new Request('https://sentinel.example/v1/enroll', { method: 'POST', body: '{"x":1}' }), 9), { x: 1 });
+});
+
 async function enrolled(s, mode) {
   const done = await s.call('POST', '/v1/enroll', { protocol: PROTOCOL, key: KEY, platform: 'linux', version: '0.1.0', label: 'web-01', ...(mode ? { mode } : {}) });
   assert.equal(done.status, 201);
@@ -155,7 +171,7 @@ test('the AI analyst is optional, pluggable and advisory', async () => {
   // An OpenAI-compatible endpoint, and a failing one: the case is unaffected either way.
   const real = globalThis.fetch;
   try {
-    globalThis.fetch = async (url, init) => { assert.equal(url, 'https://llm.example/v1/chat/completions'); assert.equal(init.headers.Authorization, 'Bearer k'); return new Response(JSON.stringify({ choices: [{ message: { content: '{"summary":"Looks like routine activity.","recommendation":"release","confidence":"low"}' } }] })); };
+    globalThis.fetch = async (url, init) => { assert.equal(url, 'https://llm.example/v1/chat/completions'); assert.equal(init.headers.Authorization, 'Bearer k'); assert.equal(init.redirect, 'error'); return new Response(JSON.stringify({ choices: [{ message: { content: '{"summary":"Looks like routine activity.","recommendation":"release","confidence":"low"}' } }] })); };
     const o = service({ AI_PROVIDER: 'openai', AI_BASE_URL: 'https://llm.example/v1/', AI_MODEL: 'm', AI_API_KEY: 'k' }), d = await enrolled(o);
     await o.call('POST', '/v1/report', report([item('a', ['shell_from_web_server', 'risky_command_line'])]), d.token); await o.settle();
     const id = (await o.call('GET', '/v1/cases', null, ADMIN)).body.cases[0].id;
@@ -167,4 +183,18 @@ test('the AI analyst is optional, pluggable and advisory', async () => {
   const none = service(), plain = await enrolled(none);
   await none.call('POST', '/v1/report', report([item('a', ['shell_from_web_server', 'risky_command_line'])]), plain.token); await none.settle();
   assert.equal((await none.call('GET', '/v1/cases', null, ADMIN)).body.cases[0].analysis, null);
+});
+
+test('remote models keep their key on HTTPS and refuse oversized replies', async () => {
+  const detail = validateCase(item('a', ['shell_from_web_server', 'risky_command_line']));
+  const config = { AI_PROVIDER: 'openai', AI_MODEL: 'm', AI_API_KEY: 'secret' };
+  const real = globalThis.fetch;
+  let sent = 0;
+  try {
+    globalThis.fetch = async () => { sent++; return new Response('{}'); };
+    await assert.rejects(analyze({ ...config, AI_BASE_URL: 'http://llm.example/v1' }, detail, 'linux', null), /HTTPS/);
+    assert.equal(sent, 0);
+    globalThis.fetch = async () => new Response(JSON.stringify({ choices: 'x'.repeat(32 * 1024) }));
+    await assert.rejects(analyze({ ...config, AI_BASE_URL: 'https://llm.example/v1' }, detail, 'linux', null), error => error.status === 413);
+  } finally { globalThis.fetch = real; }
 });
