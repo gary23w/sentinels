@@ -27,6 +27,7 @@ LINUX_ARM64_SHA='08519efa923c2b4df066106f1e9757bea5393744454e013bf8be346fdff5ce4
 LINUX_ARMV7_SHA='1a3086599648d20af4c289687be4ff73a4d884d97834869c2930fd9257ce1488'
 MACOS_SHA='4a172601421de9dd9421450284abda6bfda8aad56db7aff6ac0af8a0c87c34d6'
 APT_KEY_SHA='1f298d4106a58461a4a16d8976db87e8c5f581a20df180de1f69b73f1a69fa9d'
+RELEASE_VERSION='1.7.0'
 SERVER=""; KEY=""; MODE=""; LABEL=""
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -105,7 +106,7 @@ if [ "$PACKAGED" = yes ]; then
   echo "deb [signed-by=/usr/share/keyrings/garrett.gpg] $BASE stable main" > /etc/apt/sources.list.d/garrett.list
   chmod 0644 /usr/share/keyrings/garrett.gpg /etc/apt/sources.list.d/garrett.list
   apt-get update -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/garrett.list -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0 >/dev/null
-  DEBIAN_FRONTEND=noninteractive apt-get install -y garrett
+  DEBIAN_FRONTEND=noninteractive apt-get install -y "garrett=$RELEASE_VERSION"
 elif [ "$SYSTEM" = Linux ]; then
   case "$(uname -m)" in
     x86_64|amd64) bundle garrett-linux-x86_64.tar.gz "$LINUX_X86_SHA" ;;

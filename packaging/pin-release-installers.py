@@ -44,6 +44,14 @@ unix = pinned("packaging/install.sh", {
 }, "=")
 if len(re.findall(r"(?m)^APT_KEY_SHA='[0-9a-f]{64}'$", unix)) != 1:
     raise SystemExit("The installer has no single apt key pin.")
+version = re.search(r'(?m)^version = "([0-9]+(?:\.[0-9]+){1,3})"$',
+                    (root / "rust/Cargo.toml").read_text(encoding="utf-8"))
+if not version:
+    raise SystemExit("The release version is missing.")
+unix, count = re.subn(r"(?m)^RELEASE_VERSION='[0-9]+(?:\.[0-9]+){1,3}'$",
+                      lambda _: "RELEASE_VERSION='" + version[1] + "'", unix)
+if count != 1:
+    raise SystemExit("The installer has no single release version pin.")
 
 (site / "install.ps1").write_bytes(windows.encode("utf-8"))
 (site / "install.sh").write_bytes(unix.encode("utf-8"))
