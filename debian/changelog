@@ -17,6 +17,20 @@ garrett (1.8.2) stable; urgency=medium
       operator's verdict.
     - It runs where the service runs on Node.js (serve.mjs, local.mjs),
       not on the Cloudflare deployment.
+  * Any model can be plugged into the service: no service is built in.
+    AI_PROVIDER says how the model is spoken to, and AI_BASE_URL is the
+    HTTPS address the request is posted to, exactly as given; with no
+    address, a binding is used.
+    - decision (recommended): a decision model is sent the case and one
+      question with the allowed answers, and answers a probability for
+      each. The service writes the summary, and reads the probability as
+      confidence: high from AI_HIGH_CONFIDENCE (0.85 unless set).
+    - chat: a chat model is sent messages and answers in text.
+    - custom: your own analyst, as before.
+    - An answer is read in whichever of those shapes it comes back, and
+      nothing but the allowed answers is ever taken from a model.
+    - AI_KEY_HEADER sends the key in a header of your choosing.
+    - The earlier settings "openai" and "workers-ai" work as they did.
   * The agent is unchanged.
 
  -- sentinels <noreply@sentinels.invalid>  Wed, 18 Nov 2026 16:10:00 +0000

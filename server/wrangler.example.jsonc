@@ -15,7 +15,7 @@
   ],
   // Housekeeping: removes closed cases past their keep time and refreshes the watched addresses.
   "triggers": { "crons": ["*/15 * * * *"] },
-  // Only needed for AI_PROVIDER "workers-ai".
+  // Only needed when the model is reached through this binding (AI_PROVIDER decision or chat, with no AI_BASE_URL).
   "ai": { "binding": "AI" },
   "vars": {
     // What agents may do about a hostile program:
@@ -49,13 +49,20 @@
     "HEARTBEAT_WRITES_PER_SECOND": "25",
     "PULSE_REQUESTS_PER_SECOND": "500",
     "CASE_RETENTION_DAYS": "30",
-    // none | workers-ai | openai | custom   (see src/analyst.mjs)
+    // Plug in any model. How it is spoken to: none | decision | chat | custom   (see src/analyst.mjs)
+    //   decision  a decision model (recommended): sent the case and one question, answers a probability for each answer
+    //   chat      a chat model: sent messages, answers in text
+    //   custom    your own analyst: sent the case and the instructions
     "AI_PROVIDER": "none",
-    // For workers-ai: any Workers AI text-generation model your account can run.
+    // Sent as "model" when set. Needed when the model is the AI binding above.
     "AI_MODEL": "",
-    // For openai (an OpenAI-compatible chat-completions endpoint) or custom: an HTTPS base URL. The key is a secret:
+    // The HTTPS address the request is posted to, exactly as given. Leave it empty to use a binding (AI, or a
+    // service binding named ANALYST). The key is a secret, sent as "Authorization: Bearer <key>":
     //   npx wrangler secret put AI_API_KEY
-    "AI_BASE_URL": ""
+    // To send the key alone in another header, name the header in AI_KEY_HEADER.
+    "AI_BASE_URL": "",
+    // A decision model's probability at which its answer counts as high confidence (the service acts on those).
+    "AI_HIGH_CONFIDENCE": "0.85"
   }
   // Optional: a separate token for whatever forwards your cloud audit records to POST /v1/cloud-events
   // (the operator token also works):
