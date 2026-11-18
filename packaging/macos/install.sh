@@ -3,6 +3,9 @@
 #   sudo sh install.sh          remove it again with:  sudo sh install.sh --remove
 # The agent is one program file that runs on Apple silicon and Intel Macs alike. Nothing else has to be installed.
 set -eu
+umask 077
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
 [ "$(id -u)" = 0 ] || { echo "Run this as root (sudo sh install.sh)." >&2; exit 1; }
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 PLIST=/Library/LaunchDaemons/com.garrett.agent.plist
@@ -12,6 +15,27 @@ if [ "${1:-}" = --remove ]; then
   echo "garrett was removed."
   exit 0
 fi
+# The LaunchDaemon runs from shared /usr/local paths. On a Mac where a desktop user can
+# write one of those paths, installing there would let that user replace root-run code.
+private_path() {
+  path=$1
+  while :; do
+    if [ -e "$path" ] || [ -L "$path" ]; then
+      [ ! -L "$path" ] || { echo "Unsafe garrett path: $path" >&2; exit 1; }
+      [ "$(stat -f %u "$path")" = 0 ] || { echo "Unsafe garrett owner: $path" >&2; exit 1; }
+      mode=$(stat -f %p "$path")
+      [ $(( 0$mode & 0022 )) -eq 0 ] || { echo "Writable garrett path: $path" >&2; exit 1; }
+      acl=$(ls -lde "$path")
+      case "$acl" in *' allow '*) echo "Unverified garrett ACL: $path" >&2; exit 1 ;; esac
+    fi
+    [ "$path" = / ] && break
+    path=${path%/*}
+    [ -n "$path" ] || path=/
+  done
+}
+for path in /usr/local /usr/local/bin /usr/local/bin/garrett /usr/local/lib /usr/local/lib/garrett /usr/local/lib/garrett/garrett /usr/local/lib/garrett/garrett-agent /usr/local/etc /usr/local/etc/garrett.conf /usr/local/var /usr/local/var/garrett /Library/LaunchDaemons "$PLIST" /private/var/log /private/var/log/garrett.log; do
+  private_path "$path"
+done
 install -d -m 0755 /usr/local/lib/garrett /usr/local/bin /usr/local/etc
 install -d -m 0700 /usr/local/var/garrett
 install -m 0755 "$HERE/garrett-agent" /usr/local/lib/garrett/garrett-agent
@@ -40,6 +64,8 @@ cat > "$PLIST" <<'DAEMON'
 </plist>
 DAEMON
 chmod 0644 "$PLIST"
+[ -e /private/var/log/garrett.log ] || : > /private/var/log/garrett.log
+chmod 0600 /private/var/log/garrett.log
 launchctl bootout system "$PLIST" >/dev/null 2>&1 || true
 launchctl bootstrap system "$PLIST"
 echo "garrett is running. Its log: /var/log/garrett.log"

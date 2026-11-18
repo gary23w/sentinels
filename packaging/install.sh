@@ -17,6 +17,8 @@
 # Once installed, garrett keeps itself current: it installs each new version by itself, after checking that the
 # project signed it. Turn that off with UPDATE=off in its configuration file.
 set -eu
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
 BASE=${GARRETT_BASE:-https://gary23w.github.io/sentinels}
 SERVER=""; KEY=""; MODE=""; LABEL=""
 while [ $# -gt 0 ]; do
@@ -34,18 +36,40 @@ fetch() { if command -v curl >/dev/null 2>&1; then curl -fsSL "$1" -o "$2"; else
 SYSTEM=$(uname -s)
 CONF=/etc/garrett/garrett.conf
 [ "$SYSTEM" = Darwin ] && CONF=/usr/local/etc/garrett.conf
+if [ "$SYSTEM" = Darwin ]; then
+  # The bundle installer checks every root-run path. Check this one first because the
+  # enrolment key is written before the bundle is downloaded.
+  path=$CONF
+  while :; do
+    if [ -e "$path" ] || [ -L "$path" ]; then
+      [ ! -L "$path" ] || { echo "Unsafe garrett configuration path: $path" >&2; exit 1; }
+      [ "$(stat -f %u "$path")" = 0 ] || { echo "Unsafe garrett configuration owner: $path" >&2; exit 1; }
+      mode=$(stat -f %p "$path")
+      [ $(( 0$mode & 0022 )) -eq 0 ] || { echo "Writable garrett configuration path: $path" >&2; exit 1; }
+      acl=$(ls -lde "$path")
+      case "$acl" in *' allow '*) echo "Unverified garrett configuration ACL: $path" >&2; exit 1 ;; esac
+    fi
+    [ "$path" = / ] && break
+    path=${path%/*}
+    [ -n "$path" ] || path=/
+  done
+fi
 
 # The configuration goes down first, so the service finds it the moment it starts.
 if [ -n "$SERVER$MODE$LABEL" ]; then
   mkdir -p "$(dirname "$CONF")"
-  # Only root may read the enrolment key. The file is made empty and closed to others before anything is written
-  # to it; the umask is left alone, because apt must be able to read the files this installer adds next.
+  [ ! -L "$CONF" ] || { echo "The garrett configuration path is a symbolic link." >&2; exit 1; }
+  # Tighten an existing file before writing the key; create a new one under a private umask.
+  [ ! -e "$CONF" ] || chmod 0600 "$CONF"
+  previous_umask=$(umask)
+  umask 077
   : > "$CONF"
   chmod 0600 "$CONF"
   [ -z "$SERVER" ] || printf 'SERVER=%s\nENROLL_KEY=%s\n' "$SERVER" "$KEY" >> "$CONF"
   [ -z "$MODE" ] || printf 'MODE=%s\n' "$MODE" >> "$CONF"
   [ -z "$LABEL" ] || printf 'LABEL=%s\n' "$LABEL" >> "$CONF"
   chmod 0600 "$CONF"
+  umask "$previous_umask"
 fi
 
 bundle() {
