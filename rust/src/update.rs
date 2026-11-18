@@ -224,15 +224,15 @@ pub fn start_again(exe: &Path) {
         // As the scheduled task: the task is started again a moment after this process has ended, so the new
         // agent runs under the task like the old one. Otherwise the new program is started directly.
         let started = if as_task() {
-            let cmd = crate::windows_system::executable("cmd.exe");
             let ping = crate::windows_system::executable("ping.exe");
             let task = crate::windows_system::executable("schtasks.exe");
-            match (cmd, ping, task) {
-                (Ok(cmd), Ok(ping), Ok(task)) => {
-                    let script = format!("\"{}\" -n 4 127.0.0.1 >nul & \"{}\" /Run /TN garrett", ping.display(), task.display());
-                    std::process::Command::new(cmd).args(["/d", "/c", &script]).creation_flags(NO_WINDOW | NEW_GROUP).spawn()
-                }
-                _ => {
+            let line = match (&ping, &task) {
+                (Ok(ping), Ok(task)) => crate::windows_system::command_line(&format!("\"{}\" -n 4 127.0.0.1 >nul & \"{}\" /Run /TN garrett", ping.display(), task.display())),
+                _ => Err(std::io::ErrorKind::NotFound.into()),
+            };
+            match line {
+                Ok(mut line) => line.creation_flags(NO_WINDOW | NEW_GROUP).spawn(),
+                Err(_) => {
                     eprintln!("garrett: Windows system tools could not be located for restart");
                     return;
                 }

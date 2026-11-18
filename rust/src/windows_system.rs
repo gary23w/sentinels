@@ -42,6 +42,15 @@ pub fn executable(name: &str) -> io::Result<PathBuf> {
     Ok(system_directory()?.join(relative))
 }
 
+/// The system's command processor, given one line to run. The line goes to it exactly as written: quoted the way
+/// other programs take their arguments, it would not recognise a quoted program path at all.
+pub fn command_line(script: &str) -> io::Result<std::process::Command> {
+    use std::os::windows::process::CommandExt;
+    let mut command = std::process::Command::new(executable("cmd.exe")?);
+    command.args(["/d", "/s", "/c"]).raw_arg(format!("\"{script}\""));
+    Ok(command)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -59,10 +68,10 @@ mod tests {
 
     #[test]
     fn delayed_restart_command_uses_absolute_tools() -> io::Result<()> {
-        let cmd = executable("cmd.exe")?;
+        // The second command runs only if the first, a quoted path, was found and succeeded.
         let ping = executable("ping.exe")?;
-        let script = format!("\"{}\" -n 1 127.0.0.1 >nul & echo garrett-ready", ping.display());
-        let output = std::process::Command::new(cmd).args(["/d", "/c", &script]).output()?;
+        let script = format!("\"{}\" -n 1 127.0.0.1 >nul && echo garrett-ready", ping.display());
+        let output = command_line(&script)?.output()?;
         assert!(output.status.success());
         assert!(String::from_utf8_lossy(&output.stdout).contains("garrett-ready"));
         Ok(())
