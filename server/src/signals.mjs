@@ -79,7 +79,7 @@ export const SIGNALS = {
   dcsync_pattern: S(7, 'directory', 'asked a domain controller to replicate directory secrets (DCSync)'),
   logon_failure_burst: S(5, 'directory', 'had a burst of failed sign-ins'),
   audit_log_cleared: S(5, 'directory', 'cleared the Security event log'),
-  privileged_group_change: S(5, 'directory', 'was added to a privileged group')
+  privileged_group_change: S(5, 'directory', 'recorded an addition to a privileged group')
 };
 // Hosts whose current addresses the service looks up and hands to agents, so a connection to one is recognised
 // on machines that keep no DNS cache. The lookups leave from the service, never from your machines.

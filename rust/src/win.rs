@@ -390,28 +390,90 @@ fn names() -> HashMap<String, Vec<String>> {
     found
 }
 
-/// Per-account summaries of the Security log's directory-attack events. Empty without administrator rights.
-fn directory_events() -> Vec<Activity> {
-    let script = "$s=(Get-Date).AddMinutes(-6); $o=@(); \
-        function Ev($id){ try { Get-WinEvent -FilterHashtable @{LogName='Security';Id=$id;StartTime=$s} -MaxEvents 2000 -ErrorAction Stop } catch { @() } }; \
+// Identify the privileged groups by SID so that renamed and localized groups are reported.
+const GROUP_MEMBERSHIPS: &str = r"
+function GroupChanges($events) {
+    $changes = [ordered]@{}
+    foreach ($event in $events) {
+        $fields = @{}
+        foreach ($data in ([xml]$event.ToXml()).Event.EventData.Data) { $fields[$data.Name] = [string]$data.'#text' }
+        if ($fields.TargetSid -notmatch '^(S-1-5-32-(544|548|551)|S-1-5-21-(\d+-){3}(512|518|519))$') { continue }
+        $member = $fields.MemberName
+        if (-not $member -or $member -eq '-') { $member = $fields.MemberSid }
+        if (-not $member -or $member -eq '-') { continue }
+        $key = if ($fields.MemberSid) { $fields.MemberSid } else { $member }
+        if (-not $changes.Contains($key)) {
+            $actor = if ($fields.SubjectUserSid -eq 'S-1-5-18') { 'SYSTEM' } else { $fields.SubjectUserName }
+            $changes[$key] = [pscustomobject]@{Kind='privileged_group'; Account=$member; Actor=$actor; Group=$fields.TargetUserName; Count=0}
+        }
+        $changes[$key].Count++
+    }
+    $changes.Values
+}
+";
+
+#[cfg(test)]
+#[test]
+fn privileged_membership_uses_the_member_and_group_sid() {
+    let script = GROUP_MEMBERSHIPS.to_owned() + r#"
+function Sample($group, $groupSid, $member, $memberSid, $actor, $actorSid) {
+    $xml = @"
+<Event><EventData>
+<Data Name="TargetUserName">$group</Data><Data Name="TargetSid">$groupSid</Data>
+<Data Name="MemberName">$member</Data><Data Name="MemberSid">$memberSid</Data>
+<Data Name="SubjectUserName">$actor</Data><Data Name="SubjectUserSid">$actorSid</Data>
+</EventData></Event>
+"@
+    $event = [pscustomobject]@{Xml=$xml}
+    Add-Member -InputObject $event -MemberType ScriptMethod -Name ToXml -Value { $this.Xml } -PassThru
+}
+$events = @(
+    (Sample 'Renamed local administrators' 'S-1-5-32-544' '-' 'S-1-5-21-1-2-3-1000' 'MEMBER$' 'S-1-5-18')
+    (Sample 'Renamed domain administrators' 'S-1-5-21-1-2-3-512' 'CN=Lab User,DC=example,DC=test' 'S-1-5-21-1-2-3-1001' 'operator' 'S-1-5-21-1-2-3-500')
+    (Sample 'Domain Admins' 'S-1-5-21-1-2-3-1700' 'CN=Other User,DC=example,DC=test' 'S-1-5-21-1-2-3-1002' 'operator' 'S-1-5-21-1-2-3-500')
+)
+@(GroupChanges $events) | ConvertTo-Json -Compress
+"#;
+    let rows = ps_json(&script, Duration::from_secs(15));
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0]["Account"], "S-1-5-21-1-2-3-1000");
+    assert_eq!(rows[0]["Actor"], "SYSTEM");
+    assert_eq!(rows[1]["Account"], "CN=Lab User,DC=example,DC=test");
+    assert_eq!(rows[1]["Actor"], "operator");
+}
+
+/// Summaries of the Windows Security log. No result means a query failed or timed out.
+fn directory_events() -> Option<Vec<Activity>> {
+    let script = GROUP_MEMBERSHIPS.to_owned() + "$s=(Get-Date).AddMinutes(-6); $o=@(); \
+        function Ev($id){ try { Get-WinEvent -FilterHashtable @{LogName='Security';Id=$id;StartTime=$s} -MaxEvents 2000 -ErrorAction Stop } catch { if ($_.FullyQualifiedErrorId -notlike 'NoMatchingEventsFound,*') { throw } } }; \
         function Val($e,$n){ ([xml]$e.ToXml()).Event.EventData.Data | Where-Object { $_.Name -eq $n } | ForEach-Object { [string]$_.'#text' } | Select-Object -First 1 }; \
-        $k=@{}; foreach($e in Ev 4769){ if((Val $e 'TicketEncryptionType') -eq '0x17'){ $a=Val $e 'TargetUserName'; $svc=Val $e 'ServiceName'; if($svc -and -not $svc.EndsWith('$') -and $svc -ne 'krbtgt'){ if(-not $k[$a]){$k[$a]=@{}}; $k[$a][$svc]=1 } } }; \
+        $k=@{}; foreach($e in Ev 4769){ if((Val $e 'TicketEncryptionType') -eq '0x17'){ $a=Val $e 'TargetUserName'; $svc=Val $e 'ServiceName'; if($a -and $svc -and -not $svc.EndsWith('$') -and $svc -ne 'krbtgt'){ if(-not $k[$a]){$k[$a]=@{}}; $k[$a][$svc]=1 } } }; \
         foreach($a in $k.Keys){ if($k[$a].Count -ge 5){ $o+=[pscustomobject]@{Kind='kerberoast';Account=$a;Count=$k[$a].Count} } }; \
         $d=@{}; foreach($e in Ev 4662){ $p=Val $e 'Properties'; $a=Val $e 'SubjectUserName'; if($p -match '1131f6aa-9c07-11d1-f79f-00c04fc2dcd2|1131f6ad-9c07-11d1-f79f-00c04fc2dcd2' -and $a -and -not $a.EndsWith('$')){ $d[$a]=1+[int]$d[$a] } }; \
         foreach($a in $d.Keys){ $o+=[pscustomobject]@{Kind='dcsync';Account=$a;Count=$d[$a]} }; \
-        $f=@{}; foreach($e in Ev 4625){ $a=Val $e 'TargetUserName'; $f[$a]=1+[int]$f[$a] }; foreach($a in $f.Keys){ if($f[$a] -ge 20){ $o+=[pscustomobject]@{Kind='logon_failures';Account=$a;Count=$f[$a]} } }; \
+        $f=@{}; foreach($e in Ev 4625){ $a=Val $e 'TargetUserName'; if($a){ $f[$a]=1+[int]$f[$a] } }; foreach($a in $f.Keys){ if($f[$a] -ge 20){ $o+=[pscustomobject]@{Kind='logon_failures';Account=$a;Count=$f[$a]} } }; \
         $c=@(Ev 1102); if($c.Count){ $o+=[pscustomobject]@{Kind='log_cleared';Account=[string](([xml]$c[0].ToXml()).Event.UserData.LogFileCleared.SubjectUserName);Count=$c.Count} }; \
-        $g=@{}; foreach($id in 4728,4732,4756){ foreach($e in Ev $id){ $n=Val $e 'TargetUserName'; if($n -match '^(Domain Admins|Enterprise Admins|Schema Admins|Administrators|Account Operators|Backup Operators)$'){ $a=Val $e 'SubjectUserName'; $g[$a]=1+[int]$g[$a] } } }; \
-        foreach($a in $g.Keys){ $o+=[pscustomobject]@{Kind='privileged_group';Account=$a;Count=$g[$a]} }; @($o | Select-Object -First 20) | ConvertTo-Json -Compress";
+        $o+=@(GroupChanges (Ev @(4728,4732,4756))); \
+        [pscustomobject]@{Events=@($o | Select-Object -First 20)} | ConvertTo-Json -Compress -Depth 3";
+    let result = ps_json(&script, Duration::from_secs(90));
+    let rows = result.first()?.get("Events")?.as_array()?;
     let mut found = Vec::new();
-    for row in ps_json(script, Duration::from_secs(90)) {
+    for row in rows {
         let (Some(kind), Some(count)) = (row["Kind"].as_str(), row["Count"].as_i64()) else { continue };
         if count > 0 && EVENT_SIGNALS.iter().any(|(known, _, _, _)| *known == kind) {
             let account = row["Account"].as_str().filter(|account| !account.is_empty()).unwrap_or("unknown account");
-            found.push(Activity { kind: kind.to_string(), account: clean(account, 80), count: count.min(100000) });
+            let count = count.min(100000);
+            let evidence = if kind == "privileged_group" {
+                let group = row["Group"].as_str().filter(|group| !group.is_empty()).unwrap_or("a privileged group");
+                let actor = row["Actor"].as_str().filter(|actor| !actor.is_empty()).unwrap_or("an unknown account");
+                format!("Most recent addition to {} by {} ({} recorded).", clean(group, 35), clean(actor, 35), count)
+            } else {
+                String::new()
+            };
+            found.push(Activity { kind: kind.to_string(), account: clean(account, 80), count, evidence });
         }
     }
-    found
+    Some(found)
 }
 
 /// What only PowerShell can answer, asked while a look is prepared and kept for the sensor.
@@ -424,7 +486,7 @@ struct Slow {
     names_at: f64,
     detections: Vec<Found>,
     detections_at: f64,
-    events: Vec<Activity>,
+    events: Option<Vec<Activity>>,
     events_at: f64,
 }
 
@@ -535,7 +597,11 @@ impl Sensor for Live {
         slow().lock().map(|slow| slow.detections.clone()).unwrap_or_default()
     }
     fn directory_events(&mut self) -> Option<Vec<Activity>> {
-        Some(slow().lock().map(|slow| slow.events.clone()).unwrap_or_default())
+        slow().lock().ok()?.events.clone()
+    }
+    fn directory_log(&self) -> Option<bool> {
+        let slow = slow().lock().ok()?;
+        (slow.events_at > 0.0).then_some(slow.events.is_some())
     }
     fn file_age(&mut self, path: &str, now: f64) -> Option<f64> {
         if path.is_empty() {

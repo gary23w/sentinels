@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test test/service.test.mjs test/decide.test.mjs test/cloud.test.mjs test/mesh.test.mjs test/growth.test.mjs test/scale.test.mjs test/edge.test.mjs test/memory.test.mjs test/brain.test.mjs test/setup.test.mjs test/decisions.test.mjs",
+    "test": "node --test test/service.test.mjs test/decide.test.mjs test/cloud.test.mjs test/mesh.test.mjs test/growth.test.mjs test/scale.test.mjs test/edge.test.mjs test/memory.test.mjs test/brain.test.mjs test/setup.test.mjs test/decisions.test.mjs test/tenants.test.mjs test/silent.test.mjs test/dev-log.test.mjs",
     "local": "node local.mjs"
   },
   "optionalDependencies": {

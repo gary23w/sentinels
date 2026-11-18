@@ -1115,7 +1115,7 @@ impl<S: Sensor, H: Hands> Watcher<S, H> {
         json!({"addresses": addresses,
             "peers": peers.into_iter().take(60).map(|((address, port, direction), _)| json!({"address": address, "port": port, "direction": direction})).collect::<Vec<_>>(),
             "coverage": {"privileged": privileged, "process_feed": self.more.process_feed, "host_names": !self.names.is_empty() || !self.more.watch.is_empty(),
-                "web_logs": self.more.web.as_ref().map(|web| web.logs.len()).unwrap_or(0), "web_folders": self.more.web.as_ref().map(|web| web.roots.len()).unwrap_or(0), "directory_log": privileged && self.sensor.system() == "windows",
+                "web_logs": self.more.web.as_ref().map(|web| web.logs.len()).unwrap_or(0), "web_folders": self.more.web.as_ref().map(|web| web.roots.len()).unwrap_or(0), "directory_log": self.sensor.directory_log(),
                 "responds": responds, "blocking": self.more.blocked.as_ref().map(Vec::len).unwrap_or(0), "block_failed": self.more.block_failed}})
     }
 

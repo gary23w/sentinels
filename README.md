@@ -133,6 +133,22 @@ The decision model is [crivo-sentinel-v1](https://huggingface.co/gary23w/crivo-s
 
 To plug in a model of your own, or your own reasoning, run `sudo garrett-service setup` (`garrett-service.cmd setup` on Windows): a few questions, then it writes the settings and restarts the service. Add `--wizard` (`$env:GARRETT_WIZARD = '1'`) to the install line to answer them during the install instead. Or edit `/etc/garrett-service/service.conf` by hand: the lines are `AI_PROVIDER` (`decision`, `chat`, `custom` or `none`), `AI_BASE_URL`, `AI_MODEL`, `AI_API_KEY`, `AI_HIGH_CONFIDENCE`, `DECISION_RELEASE` and `DECISION_FALLBACK`, and `MODEL_DIR` for the model that came with it, described in `server/serve.mjs` and `server/wrangler.example.jsonc`. Restart the service after a change.
 
+### Windows domain rollout
+
+From the unpacked Windows bundle, run the rollout script in an elevated Windows PowerShell session with the Group Policy and Active Directory modules. Start with a pilot OU and use the enrolment key exactly as the service supplied it, including the certificate fingerprint if present.
+
+```powershell
+.\deploy\domain-rollout.ps1 -Target 'OU=Pilot,DC=example,DC=org' -Server 'https://sentinel.example.org' -EnrollKey $enrollKey -Mode report -Update off
+```
+
+Group Policy installs the agent as SYSTEM at the next computer startup. The rollout options apply to new installations, and the startup script records installation and task repair in `%WINDIR%\Temp\garrett-rollout.log`. The service coverage view reports whether the agent successfully queried the Security log. Windows audit policy controls which events reach that log. Directory Service Access events also require a matching audit rule on the directory object. [Microsoft’s Windows event auditing guide](https://learn.microsoft.com/en-us/defender-for-identity/deploy/configure-windows-event-collection)
+
+See the [Active Directory lab runbook](deploy/active-directory-lab.md) for the two-tenant service setup, DNS repair and rollout checks.
+
+### Development logs
+
+Set `LOG=on` in the self-hosted service configuration to emit JSON Lines to standard error, or set `LOG` to a file path to append there as well. For local-only testing with `node local.mjs`, use `SENTINEL_LOG`. The logs show request status and timing, accepted device IDs, signal IDs, and housekeeping results. Look up device labels in the operator device list. The local service runs housekeeping every `SENTINEL_HOUSEKEEP` seconds when that variable is set.
+
 ## How hard it hits
 
 You choose. The default is `kill`.

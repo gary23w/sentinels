@@ -156,6 +156,8 @@ def main(arguments):
         add("Uninstall garrett.cmd", windows("packaging/windows/Uninstall garrett.cmd"))
         add("deploy/install-windows.ps1", windows("deploy/install-windows.ps1"))
         add("deploy/uninstall-windows.ps1", windows("deploy/uninstall-windows.ps1"))
+        add("deploy/domain-rollout.ps1", windows("deploy/domain-rollout.ps1"))
+        add("deploy/domain-startup.ps1", windows("deploy/domain-startup.ps1"))
         add("garrett.exe", built.get("garrett-windows.exe", b""))
         add("LICENSE", windows("LICENSE"))
         add("NOTICES.md", windows("rust/NOTICES.md"))

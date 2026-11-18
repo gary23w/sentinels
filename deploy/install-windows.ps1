@@ -109,7 +109,7 @@ foreach ($notice in 'LICENSE', 'NOTICES.md') {
 Set-Content -Path (Join-Path $install 'garrett.cmd') -Encoding ascii -Value ('@"' + $agent + '" --state-dir "' + $state + '" %*')
 Lock-File (Join-Path $install 'garrett.cmd')
 # This binary locks and checks every existing state entry before it reads the saved credential.
-& $agent --state-dir $state status
+& $agent --state-dir $state status | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'The Sentinel state could not be protected.' }
 if ($Server -and -not (Test-Path (Join-Path $state 'agent.json'))) {
   $env:SENTINEL_ENROLL_KEY = $EnrollKey

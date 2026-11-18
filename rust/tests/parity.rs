@@ -206,7 +206,7 @@ mod scripted {
                 unsigned: list("unsigned").iter().map(text).collect(),
                 names: list("names").iter().map(|item| (text(&item[0]), item[1].as_array().unwrap().iter().map(text).collect())).collect(),
                 found: list("found").iter().map(|item| Found { id: text(&item["id"]), name: text(&item["name"]), executed: item["executed"].as_bool().unwrap_or(false), active: item["active"].as_bool().unwrap_or(false), at: item["at"].as_f64().unwrap_or(0.0), process: text(&item["process"]), resource: text(&item["resource"]) }).collect(),
-                events: list("events").iter().map(|item| Activity { kind: text(&item["kind"]), account: text(&item["account"]), count: item["count"].as_i64().unwrap_or(0) }).collect(),
+                events: list("events").iter().map(|item| Activity { kind: text(&item["kind"]), account: text(&item["account"]), count: item["count"].as_i64().unwrap_or(0), ..Activity::default() }).collect(),
                 ages: list("ages").iter().map(|item| (text(&item[0]), item[1].as_f64().unwrap())).collect(),
                 listening: std::collections::HashSet::new(),
             }

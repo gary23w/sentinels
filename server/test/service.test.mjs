@@ -81,7 +81,7 @@ test('case alerts are not sent over HTTP', async () => {
   let sent = 0;
   globalThis.fetch = async () => { sent++; return new Response('{}'); };
   try {
-    const s = service({ ALERT_WEBHOOK_URL: 'http://hooks.example/alert' }), device = await enrolled(s);
+    const s = service({ ALERT_WEBHOOK_URL: 'http://hooks.example/alert', WATCHLIST: 'off', TOR_EXITS: 'off' }), device = await enrolled(s);
     await s.call('POST', '/v1/report', report([item('a', ['shell_from_web_server', 'risky_command_line'])]), device.token);
     await s.settle();
     assert.equal(sent, 0);

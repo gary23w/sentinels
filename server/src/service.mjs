@@ -36,6 +36,7 @@ const DEVICE_SHARES_A_DAY = 8, DECISIONS_A_DAY = 12, FLEET_MAX = 300;
 // An agent gets the lower of what it asked for and what RESPONSE_MODE allows. With no RESPONSE_MODE set, a
 // deployment that has a model configured decides with it, and one without ends hostile programs outright.
 export const MODES = ['report', 'pause', 'decide', 'kill'];
+const SILENT = 'agent_silent', SILENT_POINTS = 5, SILENT_KEY = '51e47a6e7700000000000000000000aa';
 const hasModel = env => (env.AI_PROVIDER || 'none') !== 'none';
 const allowedMode = env => MODES.includes(env.RESPONSE_MODE) ? env.RESPONSE_MODE : hasModel(env) ? 'decide' : 'kill';
 const fallbackFor = env => env.DECISION_FALLBACK === 'hold' ? 'hold' : 'kill';
@@ -48,7 +49,7 @@ const cleanupSteps = value => {
 };
 
 export function validateCase(input) {
-  if (!input || typeof input !== 'object' || !/^[a-f0-9]{32}$/.test(input.key || '') || !text(input.name, 80) || text(input.path ?? '', 300) === null || text(input.parent ?? '', 80) === null) fail(400, 'Invalid case.');
+  if (!input || typeof input !== 'object' || input.key === SILENT_KEY || !/^[a-f0-9]{32}$/.test(input.key || '') || !text(input.name, 80) || text(input.path ?? '', 300) === null || text(input.parent ?? '', 80) === null) fail(400, 'Invalid case.');
   if (!Array.isArray(input.signals) || !input.signals.length || input.signals.length > 14 || !Array.isArray(input.remotes) || input.remotes.length > 8) fail(400, 'Invalid case.');
   const signals = input.signals.map(signal => {
     const id = signal?.id, trust = TRUST.has(id), known = SIGNALS[id];
@@ -73,7 +74,7 @@ export function validateCase(input) {
   return { key: input.key, name: input.name, path: input.path ?? '', parent: input.parent ?? '', signals, remotes, chain, actions, persistence, ...(cleanup.length ? { cleanup } : {}), ...(input.repeats ? { repeats: input.repeats } : {}), score, categories, level: levelFor(score, categories.length), observed_at: now() };
 }
 const isPaused = detail => !!detail?.actions?.some(action => action.action === 'paused') && !detail.outcome;
-const why = detail => detail.signals.filter(signal => signal.points > 0).sort((a, b) => b.points - a.points).slice(0, 2).map(signal => SIGNALS[signal.id].phrase).join(' and ');
+const why = detail => detail.signals.filter(signal => signal.points > 0 && SIGNALS[signal.id]).sort((a, b) => b.points - a.points).slice(0, 2).map(signal => SIGNALS[signal.id].phrase).join(' and ');
 function titleFor(detail, paused, stopped) {
   const positive = detail.signals.filter(signal => signal.points > 0);
   if (positive.every(signal => signal.category === 'cloud')) return 'Cloud: ' + detail.name;
@@ -81,7 +82,9 @@ function titleFor(detail, paused, stopped) {
   if (positive.some(signal => signal.category === 'web') && positive.every(signal => ['web', 'inbound'].includes(signal.category))) return 'Web attack: ' + detail.name;
   if (positive.some(signal => signal.id === 'antivirus_detection')) return 'Windows Defender detected a threat';
   if (positive.every(signal => signal.category === 'inbound')) return 'Connection attempts against ' + detail.name;
+  if (!detail.path && positive.every(signal => signal.id === 'privileged_group_change')) return 'Privileged group membership changed: ' + detail.name;
   if (!detail.path && positive.every(signal => signal.category === 'directory')) return 'Directory attack pattern: ' + detail.name;
+  if (positive.every(signal => signal.id === SILENT)) return 'Agent stopped answering: ' + detail.name;
   return detail.name + (stopped ? ' was stopped' : paused ? ' was paused' : detail.level === 'HOSTILE' ? ' looks hostile' : ' looks suspicious');
 }
 // ---- the fleet mesh: what one machine learns protects the others
@@ -133,7 +136,7 @@ function meshOf(input) {
 async function promote(env, caseId, detail, why, deviceId = null) {
   let room = deviceId ? DEVICE_SHARES_A_DAY - (await env.DB.prepare('SELECT COUNT(*) AS n FROM fleet_indicators f JOIN cases c ON c.id=f.case_id WHERE c.device_id=? AND f.added_at>?').bind(deviceId, now() - 86400).first()).n : Infinity;
   for (const remote of detail?.remotes || []) {
-    if (remote.direction !== 'out' || !IP.test(remote.address) || privateAddress(remote.address) || Object.hasOwn(watchCache.map, remote.address)) continue;
+    if (remote.direction !== 'out' || !IP.test(remote.address) || privateAddress(remote.address) || Object.hasOwn(watchMap(env), remote.address)) continue;
     if ((remote.names || []).some(name => String(name).startsWith('~')) || sharedAddress(remote.address)) continue;
     if (room <= 0 || deviceId && (await env.DB.prepare('SELECT COUNT(*) AS n FROM fleet_indicators WHERE expires_at>?').bind(now()).first()).n >= FLEET_MAX) break;
     room--;
@@ -222,17 +225,57 @@ async function readState(env, ctx) {
 // Every enrolled machine holds the same read key for the shared state. It opens nothing else.
 const stateKey = env => sha256('state:' + env.DATA_KEY);
 const sharedParts = state => ({ policy: state.policy, policy_revision: state.policy_revision, shapes: state.shapes, watch: state.watch, fleet: state.fleet, signals: state.signals });
+// ---- an agent that stops answering
+// Whoever holds administrator or root rights on a machine can end its agent, and nothing on that machine can then
+// say so. The service can: a machine that was enrolled, was not removed here, and has not answered for longer
+// than a watching machine ever stays quiet gets a case of its own, once for each silence. The service cannot tell
+// an agent that was ended from a machine that was switched off or lost its network; the case says so. Marking the
+// case as yours (trust) stops it being raised for that machine again. SILENT_CASES=off turns this off.
+// The signal exists only here: no agent can report it about itself or about another machine.
+async function silentAgents(env, ctx) {
+  if (env.SILENT_CASES === 'off') return 0;
+  const stamp = now(), quiet = Math.max(900, 2.5 * (await fleetState(env, ctx)).interval);
+  // Not yet said for this silence: no case of this kind that is trusted, or newer than the machine's last answer.
+  const rows = await env.DB.prepare(`SELECT d.id,d.label,d.last_seen_at FROM devices d WHERE d.revoked_at IS NULL AND d.platform IN (${PLATFORMS.map(() => '?').join(',')}) AND d.last_seen_at IS NOT NULL AND d.last_seen_at<? AND NOT EXISTS (SELECT 1 FROM cases c WHERE c.device_id=d.id AND c.case_key=? AND (c.state='trusted' OR c.last_seen_at>d.last_seen_at)) ORDER BY d.last_seen_at LIMIT 200`).bind(...PLATFORMS, stamp - quiet, SILENT_KEY).all();
+  let saved = 0;
+  for (const row of rows.results) {
+    const evidence = 'Last answered ' + new Date(row.last_seen_at * 1000).toISOString().slice(0, 16).replace('T', ' ') + ' UTC and was not removed from this service.';
+    const detail = { key: SILENT_KEY, name: row.label, path: '', parent: '', signals: [{ id: SILENT, points: SILENT_POINTS, category: 'coverage', evidence }], remotes: [], chain: [], actions: [], persistence: [], score: SILENT_POINTS, categories: ['coverage'], level: levelFor(SILENT_POINTS, 1), observed_at: stamp };
+    const id = crypto.randomUUID(), title = titleFor(detail, false, false);
+    // Check the heartbeat and case again at the write, in case a report or another sweep arrived first.
+    const written = await env.DB.prepare(`
+      INSERT INTO cases(id,device_id,case_key,level,severity,title,detail,first_seen_at,last_seen_at)
+      SELECT ?,id,?,?,'high',?,?,?,? FROM devices WHERE id=? AND revoked_at IS NULL AND last_seen_at=?
+      ON CONFLICT(device_id,case_key) DO UPDATE SET
+        state='open',severity='high',title=excluded.title,detail=excluded.detail,last_seen_at=excluded.last_seen_at
+      WHERE cases.state!='trusted' AND cases.last_seen_at<=?
+    `).bind(id, SILENT_KEY, detail.level, title, await seal(detail, env.DATA_KEY), stamp, stamp, row.id, row.last_seen_at, row.last_seen_at).run();
+    if (!written.meta?.changes) continue;
+    saved++;
+    const kept = await env.DB.prepare('SELECT id FROM cases WHERE device_id=? AND case_key=?').bind(row.id, SILENT_KEY).first();
+    await audit(env, 'service', 'agent_silent', row.id);
+    ctx?.waitUntil(alert(env, { text: row.label + ': its Sentinel agent stopped answering. ' + evidence + ' Either the agent was ended or kept from starting, or the machine is off or cut off from the service. Sentinel cannot tell which from here: look at the machine.', title, level: detail.level, severity: 'high', device: row.label, case_id: kept?.id || id, paused: false, stopped: false, signals: [SILENT] }));
+  }
+  return saved;
+}
 // Housekeeping, run on a timer (see the cron trigger in wrangler.example.jsonc): closed cases, expired shared
 // addresses and old audit lines are removed so the database stays small however long the service runs.
 export async function housekeeping(env, ctx) {
   const stamp = now(), keep = positive(env.CASE_RETENTION_DAYS, 30) * 86400;
-  const cases = await env.DB.prepare("DELETE FROM cases WHERE state='resolved' AND response IS NULL AND last_seen_at<?").bind(stamp - keep).run();
+  // A resolved silence still marks the current outage until the device returns or is revoked.
+  const cases = await env.DB.prepare(`
+    DELETE FROM cases WHERE state='resolved' AND response IS NULL AND last_seen_at<?
+    AND (case_key!=? OR NOT EXISTS (
+      SELECT 1 FROM devices d WHERE d.id=cases.device_id AND d.revoked_at IS NULL AND d.last_seen_at<cases.last_seen_at
+    ))
+  `).bind(stamp - keep, SILENT_KEY).run();
   await env.DB.prepare('DELETE FROM fleet_indicators WHERE expires_at<?').bind(stamp).run();
   await env.DB.prepare('DELETE FROM audit WHERE at<?').bind(stamp - 90 * 86400).run();
   if (env.WATCHLIST !== 'off') await refreshWatch(env);
   if (env.TOR_EXITS !== 'off') await refreshExits(env);
+  const silent = await silentAgents(env, ctx);
   invalidate(env);
-  return { cases_removed: cases.meta?.changes ?? 0 };
+  return { cases_removed: cases.meta?.changes ?? 0, ...(silent ? { silent_agents: silent } : {}) };
 }
 
 async function audit(env, actor, action, detail = '') { await env.DB.prepare('INSERT INTO audit(at,actor,action,detail) VALUES(?,?,?,?)').bind(now(), actor, action, String(detail).slice(0, 300)).run(); }
@@ -273,7 +316,7 @@ export async function decideCase(env, id, detail, platform) {
   return action;
 }
 // Addresses that currently answer for the watched hosts, looked up from here over DNS-over-HTTPS.
-let watchCache = { at: 0, map: {} };
+const watchCaches = new WeakMap();
 export async function refreshWatch(env) {
   const resolver = env.WATCH_RESOLVER || 'https://cloudflare-dns.com/dns-query', map = {};
   await Promise.all(WATCH_HOSTS.map(async host => {
@@ -283,24 +326,26 @@ export async function refreshWatch(env) {
       for (const answer of (await response.json()).Answer || []) if (answer.type === 1 && /^\d{1,3}(\.\d{1,3}){3}$/.test(answer.data) && Object.keys(map).length < 400) map[answer.data] = host;
     } catch {}
   }));
-  if (Object.keys(map).length) { watchCache = { at: now(), map }; invalidate(env); }
-  return watchCache.map;
+  if (Object.keys(map).length) { watchCaches.set(env.DB, { at: now(), map }); invalidate(env); }
+  return watchCaches.get(env.DB)?.map || {};
 }
 // The Tor Project's published list of exit nodes, fetched from here and handed to an agent only when it changed.
-let exitCache = { at: 0, revision: '', addresses: [] };
+const exitCaches = new WeakMap();
 export async function refreshExits(env) {
   try {
     const response = await fetch(env.TOR_EXIT_LIST || 'https://check.torproject.org/torbulkexitlist');
-    if (!response.ok) return exitCache;
-    const addresses = [...new Set((await response.text()).split(/\s+/).filter(line => /^\d{1,3}(\.\d{1,3}){3}$/.test(line)))].sort().slice(0, 6000);
-    if (addresses.length) exitCache = { at: now(), revision: (await sha256(addresses.join(','))).slice(0, 16), addresses };
+    if (response.ok) {
+      const addresses = [...new Set((await response.text()).split(/\s+/).filter(line => /^\d{1,3}(\.\d{1,3}){3}$/.test(line)))].sort().slice(0, 6000);
+      if (addresses.length) exitCaches.set(env.DB, { at: now(), revision: (await sha256(addresses.join(','))).slice(0, 16), addresses });
+    }
   } catch {}
-  return exitCache;
+  return exitCaches.get(env.DB) || { at: 0, revision: '', addresses: [] };
 }
 function exitsFor(env, ctx, have) {
   if (env.TOR_EXITS === 'off') return {};
-  if (now() - exitCache.at > 3600) { exitCache = { ...exitCache, at: now() }; ctx?.waitUntil(refreshExits(env)); }
-  return exitCache.revision && exitCache.revision !== have ? { exits: { revision: exitCache.revision, addresses: exitCache.addresses } } : {};
+  const cached = exitCaches.get(env.DB) || { at: 0, revision: '', addresses: [] };
+  if (ctx && now() - cached.at > 3600) { exitCaches.set(env.DB, { ...cached, at: now() }); ctx.waitUntil(refreshExits(env)); }
+  return cached.revision && cached.revision !== have ? { exits: { revision: cached.revision, addresses: cached.addresses } } : {};
 }
 // Cloud audit records forwarded by the organisation. Each identity whose records add up to a reportable case
 // gets one, under a stand-in device named after the source.
@@ -391,11 +436,12 @@ async function edgeRefused(env) {
 }
 function watchMap(env, ctx) {
   if (env.WATCHLIST === 'off') return {};
-  if (now() - watchCache.at > 900) { watchCache = { at: now(), map: watchCache.map }; ctx?.waitUntil(refreshWatch(env)); }
-  return watchCache.map;
+  const cached = watchCaches.get(env.DB) || { at: 0, map: {} };
+  if (ctx && now() - cached.at > 900) { watchCaches.set(env.DB, { ...cached, at: now() }); ctx.waitUntil(refreshWatch(env)); }
+  return cached.map;
 }
 
-async function enroll(request, env) {
+async function enroll(request, env, ctx) {
   const input = await bodyJson(request, 4096);
   if (!await sameSecret(input.key, env.ENROLL_KEY)) fail(401, 'The enrolment key is not valid.');
   if (input.protocol !== PROTOCOL || !PLATFORMS.includes(input.platform) || !text(input.label, 80) || !text(input.version, 40)) fail(400, 'Use a current Sentinel agent.');
@@ -406,6 +452,7 @@ async function enroll(request, env) {
   const token = randomToken(), id = crypto.randomUUID();
   await env.DB.prepare('INSERT INTO devices(id,label,platform,token_hash,respond,created_at) VALUES(?,?,?,?,?,?)').bind(id, input.label, input.platform, await sha256(token), MODES.indexOf(mode), now()).run();
   await audit(env, 'device:' + id, 'enrolled', input.platform + ' ' + mode + ' ' + input.label);
+  if (ctx?.diagnostics) Object.assign(ctx.diagnostics, { device_id: id, platform: input.platform, mode });
   return json({ protocol: PROTOCOL, device_id: id, token, mode, fallback: fallbackFor(env), decide_after: 20, state_key: await stateKey(env), interval: state.interval, pulse: state.pulse }, 201);
 }
 
@@ -509,6 +556,13 @@ async function report(request, env, ctx) {
   const state = await fleetState(env, ctx), mine = new Set(mesh.addresses);
   // A machine that already holds the current shared state is not sent it again.
   const parts = input.have === state.revision ? {} : { ...sharedParts(state), fleet: { ...state.fleet, suspects: state.fleet.suspects.filter(address => !mine.has(address)) } };
+  if (ctx?.diagnostics) {
+    Object.assign(ctx.diagnostics, {
+      device_id: device.id, platform: device.platform, mode: MODES[level], cases: cases.length, saved,
+      signals: [...new Set(cases.flatMap(item => item.signals.map(signal => signal.id)))],
+      ...(typeof mesh.coverage.directory_log === 'boolean' ? { directory_log: mesh.coverage.directory_log } : {}),
+    });
+  }
   return json({ protocol: PROTOCOL, accepted: true, saved, trusted: own.results.filter(row => row.state === 'trusted').map(row => row.case_key), commands: respond ? own.results.filter(row => row.response).slice(0, 16).map(row => ({ key: row.case_key, action: row.response })) : [],
     mode: MODES[level] || 'report', revision: state.revision, interval: state.interval, pulse: state.pulse, state_key: await stateKey(env), ...parts, ...exitsFor(env, ctx, input.exits_have) });
 }
@@ -547,7 +601,7 @@ async function route(request, env, ctx) {
   const url = new URL(request.url), path = url.pathname, method = request.method;
   if (method === 'GET' && path === '/health') return json({ ok: true, protocol: PROTOCOL });
   for (const name of ['DATA_KEY', 'ENROLL_KEY', 'ADMIN_TOKEN']) if (typeof env[name] !== 'string' || env[name].length < 32) fail(500, 'Set the ' + name + ' secret (at least 32 characters).');
-  if (method === 'POST' && path === '/v1/enroll') return enroll(request, env);
+  if (method === 'POST' && path === '/v1/enroll') return enroll(request, env, ctx);
   if (method === 'POST' && path === '/v1/report') return report(request, env, ctx);
   if (method === 'GET' && path === '/v1/pulse') {
     // Kept in the edge cache for a few seconds as well, so a fresh copy of the Worker answers without the database.
@@ -621,7 +675,10 @@ async function route(request, env, ctx) {
 export default {
   async fetch(request, env, ctx) {
     try { return await route(request, env, ctx); }
-    catch (error) { return json({ error: error.status ? error.message : 'The request could not be completed.' }, error.status || 500); }
+    catch (error) {
+      if (ctx?.diagnostics && !error.status) ctx.diagnostics.error = 'unexpected';
+      return json({ error: error.status ? error.message : 'The request could not be completed.' }, error.status || 500);
+    }
   },
   async scheduled(event, env, ctx) { await housekeeping(env, ctx); }
 };

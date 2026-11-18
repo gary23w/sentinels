@@ -70,6 +70,7 @@ pub struct Activity {
     pub kind: String,
     pub account: String,
     pub count: i64,
+    pub evidence: String,
 }
 
 /// What the watcher asks of the machine. Each system has its own sensor; the tests have a scripted one.
@@ -99,8 +100,11 @@ pub trait Sensor {
     fn detections(&mut self) -> Vec<Found> {
         Vec::new()
     }
-    /// `None` where the system has no such log.
+    /// No result when the Security log is unavailable or has yet to be queried.
     fn directory_events(&mut self) -> Option<Vec<Activity>> {
+        None
+    }
+    fn directory_log(&self) -> Option<bool> {
         None
     }
     /// Addresses with a burst of failed SSH sign-ins, where the system keeps such a log.
@@ -671,8 +675,21 @@ impl<S: Sensor, H: Hands> Watcher<S, H> {
             let view = View { name: "Windows directory activity".into(), system: self.sensor.system().into(), events: vec![(event.kind.clone(), event.count)], ..View::default() };
             let outcome = score_process(&view, now, &HashMap::new(), &[], &self.system_root);
             if outcome.level == "SUSPECT" || outcome.level == "HOSTILE" {
-                cases.push(json!({"key": key, "level": outcome.level, "score": outcome.score, "name": format!("Directory account {}", event.account), "path": "",
-                    "parent": "", "categories": outcome.categories, "signals": Self::signal_values(&outcome, |_| true), "remotes": [],
+                let mut name = "Directory account ".to_string();
+                let mut units = name.len();
+                for character in event.account.chars() {
+                    units += character.len_utf16();
+                    if units > 80 { break; }
+                    name.push(character);
+                }
+                let mut signals = Self::signal_values(&outcome, |_| true);
+                if !event.evidence.is_empty() {
+                    if let Some(signal) = signals.iter_mut().find(|signal| signal["id"] == "privileged_group_change") {
+                        signal["evidence"] = json!(event.evidence);
+                    }
+                }
+                cases.push(json!({"key": key, "level": outcome.level, "score": outcome.score, "name": name, "path": "",
+                    "parent": "", "categories": outcome.categories, "signals": signals, "remotes": [],
                     "first_seen": now.trunc() as i64, "observed_at": now.trunc() as i64}));
             }
         }
@@ -938,8 +955,8 @@ impl<S: Sensor, H: Hands> Watcher<S, H> {
             cases.extend(self.detection_cases(now));
         }
         if now - self.directory_at >= 60.0 {
+            self.directory_at = now;
             if let Some(found) = self.sensor.directory_events() {
-                self.directory_at = now;
                 cases.extend(self.directory_cases(found, now));
             }
         }
