@@ -13,9 +13,9 @@
 $ErrorActionPreference = 'Stop'
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { throw 'Run this from an elevated PowerShell.' }
 $base = if ($env:GARRETT_BASE) { $env:GARRETT_BASE } else { 'https://gary23w.github.io/sentinels' }
-$releaseVersion = '1.9.1'
+$releaseVersion = '1.9.2'
 $release = if ($env:GARRETT_RELEASE) { $env:GARRETT_RELEASE } else { 'https://github.com/gary23w/sentinels/releases/download/v' + $releaseVersion }
-$pinnedInstaller = '44bded204442e03c9ed30856690fe9b6b28b18d45a77118911167ba00895342f'
+$pinnedInstaller = 'c271a30350c5235e4cf253d317d7466c51b1032d81faeee0543808a37ee94b84'
 foreach ($address in @($base, $release)) {
   $uri = $null
   if (-not [Uri]::TryCreate($address, [UriKind]::Absolute, [ref]$uri) -or $uri.Scheme -cne 'https' -or -not $uri.Host -or $uri.UserInfo -or $uri.Query -or $uri.Fragment) { throw 'The release addresses must be HTTPS addresses without credentials or a query.' }

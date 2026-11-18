@@ -1,0 +1,35 @@
+{
+    "version": "1.9.2",
+    "description": "garrett, the Sentinel agent: a host intrusion sentinel that stops what it catches. It runs as SYSTEM, so install it from a PowerShell opened with Run as administrator.",
+    "homepage": "https://github.com/gary23w/sentinels",
+    "license": "MIT",
+    "notes": [
+        "garrett is running as SYSTEM, starts with Windows, and keeps itself up to date. See what it finds:",
+        "  & 'C:\\Program Files\\garrett\\garrett.cmd' cases"
+    ],
+    "architecture": {
+        "64bit": {
+            "url": "https://github.com/gary23w/sentinels/releases/download/v1.9.2/garrett-windows.zip",
+            "hash": "4f09c5873ae216be0a6c1ec176385276088fcf35e020244597268c21d8f12cd2"
+        }
+    },
+    "extract_dir": "garrett",
+    "installer": {
+        "script": [
+            "# The bundle's installer copies garrett to C:\\Program Files\\garrett, locks it, and starts it as SYSTEM. It runs in",
+            "# a PowerShell of its own: it sets its own PATH, which must not become the PATH of the shell Scoop runs in.",
+            "& (Join-Path $env:SystemRoot 'System32\\WindowsPowerShell\\v1.0\\powershell.exe') -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"$dir\\deploy\\install-windows.ps1\"",
+            "if ($LASTEXITCODE -ne 0) { throw 'garrett was not installed.' }"
+        ]
+    },
+    "uninstaller": {
+        "script": [
+            "# Scoop runs this before every update as well ($cmd is then 'update'): garrett, its cases and its enrolment",
+            "# stay on the machine through an update, and only leave it on scoop uninstall.",
+            "if ($cmd -eq 'uninstall') {",
+            "    & (Join-Path $env:SystemRoot 'System32\\WindowsPowerShell\\v1.0\\powershell.exe') -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"$dir\\deploy\\uninstall-windows.ps1\"",
+            "    if ($LASTEXITCODE -ne 0) { throw 'garrett was not removed.' }",
+            "}"
+        ]
+    }
+}
