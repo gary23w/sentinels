@@ -28,9 +28,18 @@
 #   LEARN_HOURS=24                  how long a fresh install learns the machine before it acts on a program that
 #                                   only looks suspicious (0: act on everything at once)
 set -eu
-LIB=${GARRETT_LIB:-/usr/lib/garrett}
-STATE=${GARRETT_STATE_DIR:-/var/lib/garrett}
-CONF=${GARRETT_CONF:-/etc/garrett/garrett.conf}
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+if [ "$(uname -s)" = Darwin ]; then
+  MACROOT='/Library/Application Support/Garrett'
+  LIB=${GARRETT_LIB:-$MACROOT}
+  STATE=${GARRETT_STATE_DIR:-$MACROOT/state}
+  CONF=${GARRETT_CONF:-$MACROOT/garrett.conf}
+else
+  LIB=${GARRETT_LIB:-/usr/lib/garrett}
+  STATE=${GARRETT_STATE_DIR:-/var/lib/garrett}
+  CONF=${GARRETT_CONF:-/etc/garrett/garrett.conf}
+fi
 AGENT=$LIB/garrett-agent
 setting() { [ -r "$CONF" ] && sed -n "s/^$1=//p" "$CONF" | tail -n 1 || true; }
 restart() {

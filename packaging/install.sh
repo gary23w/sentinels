@@ -43,7 +43,7 @@ fetch() { if command -v curl >/dev/null 2>&1; then curl -fsSL "$1" -o "$2"; else
 hash_file() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi; }
 SYSTEM=$(uname -s)
 CONF=/etc/garrett/garrett.conf
-[ "$SYSTEM" = Darwin ] && CONF=/usr/local/etc/garrett.conf
+[ "$SYSTEM" = Darwin ] && CONF='/Library/Application Support/Garrett/garrett.conf'
 if [ "$SYSTEM" = Darwin ]; then
   # The bundle installer checks every root-run path. Check this one first because the
   # enrolment key is written before the bundle is downloaded.
@@ -119,4 +119,6 @@ else
   echo "This installer covers Linux and macOS. For Windows, download garrett-windows.zip from the releases page." >&2
   exit 1
 fi
-if [ -n "$SERVER" ]; then echo "garrett is installed and is enrolling with $SERVER."; else echo "garrett is installed and protecting this machine. See what it finds: garrett cases"; fi
+if [ "$SYSTEM" = Darwin ]; then
+  if [ -n "$SERVER" ]; then echo "garrett is installed and is enrolling with $SERVER."; else echo 'garrett is installed and protecting this machine. See what it finds: sudo "/Library/Application Support/Garrett/garrett" cases'; fi
+elif [ -n "$SERVER" ]; then echo "garrett is installed and is enrolling with $SERVER."; else echo "garrett is installed and protecting this machine. See what it finds: garrett cases"; fi
