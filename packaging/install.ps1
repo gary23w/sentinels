@@ -16,18 +16,24 @@ $system32 = [Environment]::GetFolderPath([Environment+SpecialFolder]::System)
 $programFiles = [Environment]::GetFolderPath([Environment+SpecialFolder]::ProgramFiles)
 if (-not $windows -or -not $system32 -or -not $programFiles) { throw 'The Windows system folders are not available.' }
 $env:PATH = $system32 + ';' + $windows + ';' + (Join-Path $system32 'WindowsPowerShell\v1.0')
-$icacls = Join-Path $system32 'icacls.exe'
 $stageRoot = [IO.Path]::GetFullPath($programFiles).TrimEnd('\')
 $work = [IO.Path]::GetFullPath((Join-Path $stageRoot ('garrett-bootstrap-' + [Guid]::NewGuid().ToString('N'))))
 if (-not $work.StartsWith($stageRoot + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'The staging directory is not valid.' }
-New-Item -ItemType Directory -Path $work | Out-Null
+$systemSid = [Security.Principal.SecurityIdentifier]::new('S-1-5-18')
+$adminSid = [Security.Principal.SecurityIdentifier]::new('S-1-5-32-544')
+$security = [Security.AccessControl.DirectorySecurity]::new()
+$security.SetAccessRuleProtection($true, $false)
+$inherit = [Security.AccessControl.InheritanceFlags]'ContainerInherit, ObjectInherit'
+foreach ($sid in @($systemSid, $adminSid)) {
+  $security.AddAccessRule([Security.AccessControl.FileSystemAccessRule]::new($sid, [Security.AccessControl.FileSystemRights]::FullControl, $inherit, [Security.AccessControl.PropagationFlags]::None, [Security.AccessControl.AccessControlType]::Allow))
+}
+$security.SetOwner($adminSid)
+$createWithAcl = [IO.Directory].GetMethod('CreateDirectory', [type[]]@([string], [Security.AccessControl.DirectorySecurity]))
+if ($createWithAcl) { [IO.Directory]::CreateDirectory($work, $security) | Out-Null }
+else { [IO.FileSystemAclExtensions]::CreateDirectory($security, $work) | Out-Null }
 try {
-  # The unelevated half of an administrator account must not be able to alter the bundle after verification.
+  # The access rules are applied when the directory is created, before any file can be staged.
   if ((Get-Item -LiteralPath $work -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'The staging directory is a reparse point.' }
-  & $icacls $work /inheritance:r /grant:r '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' | Out-Null
-  if ($LASTEXITCODE -ne 0) { throw 'The staging directory could not be locked.' }
-  & $icacls $work /setowner '*S-1-5-32-544' | Out-Null
-  if ($LASTEXITCODE -ne 0) { throw 'The staging directory owner could not be locked.' }
   $acl = Get-Acl -LiteralPath $work
   if ($acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -ne 'S-1-5-32-544') { throw 'The staging directory owner is not protected.' }
   $rules = $acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])
