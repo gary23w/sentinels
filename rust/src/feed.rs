@@ -12,10 +12,11 @@
 
 
 use crate::linux::{exec_worth, LinuxSensor, Snap};
+use crate::score::{is_shell, INTERPRETER_PREFIXES, WEB_SERVER_PREFIXES};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::mpsc::{channel, Receiver};
+use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
 
 pub struct ExecFeed {
@@ -37,9 +38,29 @@ fn word(data: &[u8], at: usize) -> u32 {
     u32::from_ne_bytes([data[at], data[at + 1], data[at + 2], data[at + 3]])
 }
 
+/// An exec can replace a web server with a shell under the same PID. Its process parent then names the service
+/// manager, while the image it just replaced is the source that matters for containment.
+fn web_exec_source(previous: Option<&Path>, next: &str) -> Option<String> {
+    let lowered = next.to_lowercase();
+    if !is_shell(&lowered) && !INTERPRETER_PREFIXES.iter().any(|prefix| lowered.starts_with(prefix)) {
+        return None;
+    }
+    let name = previous?.file_name()?.to_string_lossy().into_owned();
+    WEB_SERVER_PREFIXES.iter().any(|prefix| name.to_lowercase().starts_with(prefix)).then_some(name)
+}
+
 impl ExecFeed {
     /// Start listening. Fails where the feed is not permitted (not root, some containers).
     pub fn open(proc: &Path) -> std::io::Result<ExecFeed> {
+        Self::open_with(proc, None)
+    }
+
+    /// Send starts straight to the responders. The run loop must not add a polling delay before containment.
+    pub fn open_to(proc: &Path, starts: Sender<Snap>) -> std::io::Result<ExecFeed> {
+        Self::open_with(proc, Some(starts))
+    }
+
+    fn open_with(proc: &Path, direct: Option<Sender<Snap>>) -> std::io::Result<ExecFeed> {
         let own = std::process::id();
         let handle = unsafe { libc::socket(libc::AF_NETLINK, libc::SOCK_DGRAM | libc::SOCK_CLOEXEC, 11) }; // NETLINK_CONNECTOR
         if handle < 0 {
@@ -118,6 +139,8 @@ impl ExecFeed {
                 let Ok(image) = std::fs::read_link(sensor.proc.join(pid.to_string()).join("exe")) else { continue };
                 caught_in.fetch_add(1, Ordering::Relaxed);
                 let worth = exec_worth(&image.to_string_lossy());
+                let source = web_exec_source(followed.get(&pid).and_then(|images| images.last()).map(PathBuf::as_path),
+                    &image.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default());
                 let mut too_long = false;
                 if let Some(images) = followed.get_mut(&pid) {
                     images.push(image);
@@ -130,9 +153,16 @@ impl ExecFeed {
                     continue; // one look at its name, and nothing more is read
                 }
                 if let Some(mut snap) = sensor.snapshot(pid) {
+                    if let Some(source) = source {
+                        snap.parent = source;
+                    }
                     snap.jumped = followed.get(&pid).is_some_and(|images| sensor.jumped(&snap.proc, images));
                     snap.handed = followed.get(&pid).is_some_and(|images| sensor.handed(&snap.proc, images));
-                    if sender.send(snap).is_err() {
+                    let sent = match &direct {
+                        Some(starts) => starts.send(snap),
+                        None => sender.send(snap),
+                    };
+                    if sent.is_err() {
                         break;
                     }
                 }
@@ -151,6 +181,20 @@ impl ExecFeed {
     /// (program starts the kernel reported, how many of them could be found here).
     pub fn counts(&self) -> (u64, u64) {
         (self.seen.load(Ordering::Relaxed), self.caught.load(Ordering::Relaxed))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::web_exec_source;
+    use std::path::Path;
+
+    #[test]
+    fn a_web_server_replaced_by_a_shell_keeps_its_source() {
+        assert_eq!(web_exec_source(Some(Path::new("/home/site/php-fpm8.3")), "dash"), Some("php-fpm8.3".into()));
+        assert_eq!(web_exec_source(Some(Path::new("/usr/sbin/nginx")), "python3"), Some("nginx".into()));
+        assert_eq!(web_exec_source(Some(Path::new("/usr/bin/bash")), "dash"), None);
+        assert_eq!(web_exec_source(Some(Path::new("/usr/sbin/nginx")), "grep"), None);
     }
 }
 

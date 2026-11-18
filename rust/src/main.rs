@@ -30,6 +30,7 @@ pub fn view_from(value: &Value) -> View {
         parent_name: text(&value["parent_name"]),
         system: text(&value["system"]),
         cmdline: value["cmdline"].as_str().map(str::to_string),
+        parent_cmdline: value["parent_cmdline"].as_str().map(str::to_string),
         signature: value["signature"].as_array().map(|pair| (text(&pair[0]), text(&pair[1]))),
         remotes: list("remotes").iter().map(|item| Remote { address: text(&item[0]), port: item[1].as_u64().unwrap_or(0) as u16, names: item[2].as_array().map(|names| names.iter().map(text).collect()).unwrap_or_default() }).collect(),
         contacts: list("contacts").iter().map(|item| (text(&item[0]), item[1].as_u64().unwrap_or(0) as u16, item[2].as_array().map(|times| times.iter().filter_map(Value::as_f64).collect()).unwrap_or_default())).collect(),

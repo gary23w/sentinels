@@ -13,6 +13,7 @@ export const SIGNALS = {
   script_from_document: S(3, 'lineage', 'is a script started by a browser, document or mail program'),
   shell_from_web_server: S(3, 'lineage', 'is a shell started by a web server process'),
   risky_command_line: S(3, 'lineage', 'was started with a decode-and-run or download-and-run command'),
+  parent_risky_command_line: S(3, 'lineage', 'is a shell whose web server parent ran a download-and-run command'),
   script_from_shortcut: S(3, 'lineage', 'is a download-and-run command started from a shortcut or the Run box'),
   program_from_attachment: S(3, 'lineage', 'was started from a mail or archive program, the way an opened attachment runs'),
   remote_session_shell: S(3, 'lineage', 'was started inside a remote session from another machine'),
@@ -93,7 +94,7 @@ export const TRUST = new Set(['installed_program', 'owner_trusted', 'known_basel
 export const LOCKED = new Set(['learned_attack_shape', 'fleet_indicator', 'inbound_from_suspect_peer', 'cloud_credential_added', 'cloud_advisory_indicator', 'web_shell_file', 'advisory_indicator', 'inbound_advisory_indicator', 'antivirus_detection', 'threat_executed', 'remote_access_burst', 'credential_theft_tool', 'kerberoast_pattern', 'dcsync_pattern', 'logon_failure_burst', 'audit_log_cleared', 'privileged_group_change']);
 // Attack shapes that must stay reported whatever an organisation's Sentinel learns.
 export const REFERENCE_ATTACKS = [
-  ['shell_from_web_server', 'risky_command_line'], ['shell_from_web_server', 'discovery_command'], ['shell_from_web_server', 'agent_command_stream'],
+  ['shell_from_web_server', 'risky_command_line'], ['shell_from_web_server', 'parent_risky_command_line'], ['shell_from_web_server', 'discovery_command'], ['shell_from_web_server', 'agent_command_stream'],
   ['script_from_document', 'risky_command_line'], ['script_from_shortcut', 'risky_command_line'],
   ['program_from_attachment', 'fresh_file'], ['program_from_attachment', 'unsigned_program'],
   ['system_tool_misuse', 'unusual_port'], ['runs_from_temp', 'unusual_port', 'beaconing'], ['runs_from_temp', 'fan_out'],

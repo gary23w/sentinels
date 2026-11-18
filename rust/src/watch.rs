@@ -145,6 +145,7 @@ struct Tracked {
     signature: Option<(String, String)>,
     file_age: Option<f64>,
     parent_name: String,
+    source_override: Option<String>,
     last_alive: f64,
     noted: bool,
     served: bool,
@@ -299,7 +300,8 @@ impl<S: Sensor, H: Hands> Watcher<S, H> {
             return false; // everything else is judged at the next look, as before
         }
         let siege = self.unusual(proc.ppid, parent, cmdline, now);
-        let view = View { name: proc.name.clone(), path: proc.path.clone(), parent_name: parent.to_string(), system, cmdline: Some(cmdline.to_string()), served, siege, ..View::default() };
+        let parent_cmdline = if served && is_shell(&lowered) { self.sensor.command_lines(&[proc.ppid]).remove(&proc.ppid) } else { None };
+        let view = View { name: proc.name.clone(), path: proc.path.clone(), parent_name: parent.to_string(), system, cmdline: Some(cmdline.to_string()), parent_cmdline, served, siege, ..View::default() };
         let outcome = score_process(&view, now, &self.policy, &self.shapes, &self.system_root);
         let reason = containment_reason(&outcome);
         if reason.is_empty() {
@@ -430,14 +432,35 @@ impl<S: Sensor, H: Hands> Watcher<S, H> {
             None => {
                 let file_age = self.sensor.file_age(&proc.path, now);
                 self.tracked.push(Tracked {
-                    proc: proc.clone(), first_seen: now, cmdline: None, signature: None, file_age, parent_name: String::new(), last_alive: now,
+                    proc: proc.clone(), first_seen: now, cmdline: None, signature: None, file_age, parent_name: String::new(), source_override: None, last_alive: now,
                     noted: false, served: false, counted: false, remotes: Vec::new(), contacts: Vec::new(), inbound: Vec::new(), seen: HashSet::new(), origin: String::new(),
                 });
                 self.tracked.len() - 1
             }
         };
         let served = self.served(proc.ppid, parent_name);
+        let web_source = starts(&parent_name.to_lowercase(), WEB_SERVER_PREFIXES);
+        if self.tracked[index].proc.path != proc.path {
+            // exec can replace a program without changing its PID or start time. Score the new image and its
+            // command line, rather than leaving the earlier image attached to this identity.
+            let file_age = self.sensor.file_age(&proc.path, now);
+            let tracked = &mut self.tracked[index];
+            tracked.proc = proc.clone();
+            tracked.first_seen = now;
+            tracked.cmdline = None;
+            tracked.signature = None;
+            tracked.file_age = file_age;
+            tracked.parent_name = parent_name.to_string();
+            tracked.source_override = web_source.then(|| parent_name.to_string());
+            tracked.served = false;
+            tracked.noted = false;
+            tracked.counted = false;
+            tracked.origin.clear();
+        }
         let tracked = &mut self.tracked[index];
+        if web_source {
+            tracked.source_override = Some(parent_name.to_string());
+        }
         if tracked.parent_name.is_empty() {
             tracked.parent_name = parent_name.to_string();
         }
@@ -703,7 +726,7 @@ impl<S: Sensor, H: Hands> Watcher<S, H> {
                 None => {
                     let file_age = self.sensor.file_age(&proc.path, now);
                     self.tracked.push(Tracked {
-                        proc: proc.clone(), first_seen: now, cmdline: None, signature: None, file_age, parent_name: String::new(), last_alive: now,
+                        proc: proc.clone(), first_seen: now, cmdline: None, signature: None, file_age, parent_name: String::new(), source_override: None, last_alive: now,
                         noted: false, served: false, counted: false, remotes: Vec::new(), contacts: Vec::new(), inbound: Vec::new(), seen: HashSet::new(), origin: String::new(),
                     });
                     self.tracked.len() - 1
@@ -828,9 +851,16 @@ impl<S: Sensor, H: Hands> Watcher<S, H> {
                 }
             }
             let marks = self.streams.iter().find(|(key, _)| *key == stream_key).map(|(_, stream)| agent_marks(stream, now, 180.0)).unwrap_or_default();
-            let parent_name = parent.as_ref().map(|found| found.name.clone()).unwrap_or_default();
+            let parent_name = self.tracked[index].source_override.clone()
+                .unwrap_or_else(|| parent.as_ref().map(|found| found.name.clone()).unwrap_or_default());
             let key = self.case_key(&proc, &parent_name);
             let siege = self.tracked[index].served && self.unusual(proc.ppid, &parent_name, self.tracked[index].cmdline.as_deref().unwrap_or(""), now);
+            let web_parent = self.tracked[index].served || starts(&parent_name.to_lowercase(), WEB_SERVER_PREFIXES);
+            let parent_cmdline = if web_parent && is_shell(&proc.name.to_lowercase()) {
+                self.sensor.command_lines(&[proc.ppid]).remove(&proc.ppid)
+            } else {
+                None
+            };
             let tracked = &self.tracked[index];
             let labels: Vec<String> = tracked.remotes.iter().filter(|((address, _), _)| is_internet(address))
                 .map(|((address, _), names)| names.iter().next().cloned().unwrap_or_else(|| address.clone())).collect::<BTreeSet<_>>().into_iter().collect();
@@ -840,7 +870,7 @@ impl<S: Sensor, H: Hands> Watcher<S, H> {
             };
             let view = View {
                 name: proc.name.clone(), path: proc.path.clone(), parent_name: parent_name.clone(), system: self.sensor.system().to_string(),
-                cmdline: tracked.cmdline.clone(), signature: tracked.signature.clone(),
+                cmdline: tracked.cmdline.clone(), parent_cmdline, signature: tracked.signature.clone(),
                 remotes: tracked.remotes.iter().map(|((address, port), names)| Remote { address: address.clone(), port: *port as u16, names: names.iter().cloned().collect() }).collect(),
                 contacts: tracked.contacts.iter().map(|((address, port), stamps)| (address.clone(), *port as u16, stamps.clone())).collect(),
                 inbound: tracked.inbound.iter().map(|(port, sources)| (*port as u16, sources.clone())).collect(),

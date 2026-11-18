@@ -192,6 +192,30 @@ pub fn account_kind(identifier: &[u8]) -> &'static str {
     }
 }
 
+fn system_shell_under_user(proc: &Proc, parent_started: u64, read_account: impl Fn(u32) -> Option<Vec<u8>>) -> bool {
+    // Check the parent's age before asking about its account, in case Windows has reused the PID.
+    proc.ppid > 4
+        && parent_started > 0
+        && parent_started <= proc.started
+        && crate::score::is_script_host(&proc.name.to_ascii_lowercase())
+        && read_account(proc.pid).is_some_and(|sid| account_kind(&sid) == "system")
+        && read_account(proc.ppid).is_some_and(|sid| account_kind(&sid) == "person")
+}
+
+#[cfg(test)]
+#[test]
+fn system_shell_requires_an_older_parent_running_as_a_user() {
+    const SYSTEM: &[u8] = &[1, 1, 0, 0, 0, 0, 0, 5, 18, 0, 0, 0];
+    const USER: &[u8] = &[1, 5, 0, 0, 0, 0, 0, 5, 21, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 233, 3, 0, 0];
+    let shell = Proc { pid: 100, ppid: 50, started: 20, name: "cmd.exe".into(), ..Proc::default() };
+    let transition = |pid| Some(if pid == shell.pid { SYSTEM.to_vec() } else { USER.to_vec() });
+    assert!(system_shell_under_user(&shell, 10, transition));
+    assert!(!system_shell_under_user(&shell, 30, transition));
+    assert!(!system_shell_under_user(&shell, 10, |_| Some(SYSTEM.to_vec())));
+    assert!(!system_shell_under_user(&shell, 10, |_| Some(USER.to_vec())));
+    assert!(!system_shell_under_user(&shell, 10, |_| None));
+}
+
 /// One program that has just started: who it is, who started it, and its command line.
 pub fn snapshot(pid: u32) -> Option<Snap> {
     let (path, started) = identity(pid);
@@ -205,10 +229,8 @@ pub fn snapshot(pid: u32) -> Option<Snap> {
     }).unwrap_or(0);
     let (above_path, above_started) = if parent > 4 { identity(parent) } else { (String::new(), 0) };
     let above = base(&above_path);
-    // A shell that runs as SYSTEM under a program of an ordinary account: nothing on Windows grants that. Asked
-    // only of script hosts, and only when the parent is older than the child, so its number is really its own.
-    let jumped = parent > 4 && above_started > 0 && above_started <= started && crate::score::is_script_host(&base(&path).to_lowercase())
-        && account(pid).is_some_and(|own| account_kind(&own) == "system") && account(parent).is_some_and(|theirs| account_kind(&theirs) == "person");
+    let proc = Proc { pid, ppid: parent, name: base(&path), path, started };
+    let jumped = system_shell_under_user(&proc, above_started, account);
     // A process is listed a moment before its command line can be read: asked again for up to two milliseconds.
     let mut line = command_line(pid).unwrap_or_default();
     let until = std::time::Instant::now() + Duration::from_millis(2);
@@ -216,7 +238,7 @@ pub fn snapshot(pid: u32) -> Option<Snap> {
         std::thread::yield_now();
         line = command_line(pid).unwrap_or_default();
     }
-    Some(Snap { proc: Proc { pid, ppid: parent, name: base(&path), path, started }, cmdline: line, parent: above, jumped, handed: false })
+    Some(Snap { proc, cmdline: line, parent: above, jumped, handed: false })
 }
 
 fn cache() -> &'static Mutex<HashMap<u32, Proc>> {

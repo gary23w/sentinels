@@ -170,6 +170,11 @@ test('the service says which signals it knows and takes the later ones', async (
     const taken = validateCase({ key: 'a'.repeat(32), name: 'sh', path: '/usr/bin/dash', parent: 'bash', signals: [{ id, points, category: 'x', evidence: 'e' }], remotes: [], categories: [], level: 'SUSPECT', score: points, observed_at: 1794832407, first_seen: 1794832407 });
     assert.equal(taken.signals[0].id, id);
   }
+  const webShell = validateCase({ key: 'b'.repeat(32), name: 'sh', path: '/usr/bin/dash', parent: 'php-fpm8.3',
+    signals: ['shell_from_web_server', 'parent_risky_command_line'].map(id => ({ id, points: 3, category: 'lineage', evidence: 'e' })),
+    remotes: [], categories: ['lineage'], level: 'SUSPECT', score: 6, observed_at: 1794832407, first_seen: 1794832407 });
+  assert.deepEqual(webShell.signals.map(signal => signal.id), ['shell_from_web_server', 'parent_risky_command_line']);
+
   const bootChange = validateCase({ key: 'c'.repeat(32), name: 'firmware boot order', path: '', parent: '',
     signals: [{ id: 'boot_selection_changed', points: 5, category: 'hardware', evidence: 'The firmware boot order changed.' }],
     remotes: [], categories: ['hardware'], level: 'SUSPECT', score: 5, observed_at: 1794832407, first_seen: 1794832407 });

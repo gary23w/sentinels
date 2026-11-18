@@ -231,13 +231,16 @@ fn build(state: &State, salt: &str, mode: &str, clean: bool, fallback_kill: bool
             std::thread::sleep(Duration::from_secs(20));
             let Some(card) = crate::lan::way_out_card() else { return };
             let mut watch = crate::lan::ScanWatch::default();
-            let _ = crate::card::listen(&STOP, &card, |packet| {
+            let captured = crate::card::listen(&STOP, &card, |packet| {
                 if let Some(found) = crate::lan::opening(packet).and_then(|(source, port)| watch.attempt(&source, port, now())) {
                     if let Ok(mut watcher) = watcher.lock() {
                         watcher.network_found(&found, now());
                     }
                 }
             });
+            if let Err(error) = captured {
+                eprintln!("garrett: could not read incoming connection attempts on {card}: {error}");
+            }
         });
     }
     #[cfg(target_os = "linux")]

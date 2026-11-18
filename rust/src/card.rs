@@ -96,19 +96,22 @@ pub fn listen(stop: &AtomicBool, card: &str, mut seen: impl FnMut(&[u8])) -> std
         return Err(fail(handle));
     }
     let mut data = vec![0u8; size as usize];
-    while !stop.load(Ordering::SeqCst) {
+    let result = loop {
+        if stop.load(Ordering::SeqCst) {
+            break Ok(());
+        }
         let got = unsafe { libc::read(handle, data.as_mut_ptr() as *mut libc::c_void, data.len()) };
         if got < 0 {
-            let error = std::io::Error::last_os_error().raw_os_error().unwrap_or(0);
-            if error == libc::EAGAIN || error == libc::EINTR || error == libc::ETIMEDOUT {
+            let error = std::io::Error::last_os_error();
+            if matches!(error.raw_os_error(), Some(libc::EAGAIN | libc::EINTR | libc::ETIMEDOUT)) {
                 continue;
             }
-            break;
+            break Err(error);
         }
         records(&data[..got as usize], &mut seen);
-    }
+    };
     unsafe { libc::close(handle) };
-    Ok(())
+    result
 }
 
 /// What one read gives: records one after another, each a small header saying how long it and its packet are.

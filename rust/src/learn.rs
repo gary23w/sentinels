@@ -25,7 +25,7 @@ use std::path::Path;
 pub const SIGNALS: &[(&str, i64, &str)] = &[
     ("unsigned_program", 2, "identity"), ("user_writable_path", 1, "identity"), ("runs_from_temp", 3, "identity"), ("fresh_file", 2, "identity"),
     ("system_name_elsewhere", 3, "identity"), ("advisory_tool_name", 2, "identity"), ("script_from_document", 3, "lineage"),
-    ("shell_from_web_server", 3, "lineage"), ("risky_command_line", 3, "lineage"), ("script_from_shortcut", 3, "lineage"),
+    ("shell_from_web_server", 3, "lineage"), ("risky_command_line", 3, "lineage"), ("parent_risky_command_line", 3, "lineage"), ("script_from_shortcut", 3, "lineage"),
     ("program_from_attachment", 3, "lineage"), ("remote_session_shell", 3, "lineage"), ("helper_with_child", 5, "lineage"), ("privilege_jump", 6, "privilege"), ("signin_key_added", 5, "behaviour"),
     ("hidden_browser", 5, "behaviour"), ("remote_control_tool", 3, "behaviour"), ("address_lookup_host", 1, "destinations"),
     ("boot_protection_off", 6, "hardware"), ("boot_entry_added", 5, "hardware"), ("firmware_downgraded", 5, "hardware"), ("firmware_changed_unannounced", 6, "hardware"),
@@ -52,7 +52,7 @@ pub const LOCKED: &[&str] = &["learned_attack_shape", "fleet_indicator", "inboun
 
 /// Attack shapes that must stay reported whatever this machine learns.
 pub const REFERENCE_ATTACKS: &[&[&str]] = &[
-    &["shell_from_web_server", "risky_command_line"], &["shell_from_web_server", "discovery_command"], &["shell_from_web_server", "agent_command_stream"],
+    &["shell_from_web_server", "risky_command_line"], &["shell_from_web_server", "parent_risky_command_line"], &["shell_from_web_server", "discovery_command"], &["shell_from_web_server", "agent_command_stream"],
     &["script_from_document", "risky_command_line"], &["script_from_shortcut", "risky_command_line"],
     &["program_from_attachment", "fresh_file"], &["program_from_attachment", "unsigned_program"],
     &["system_tool_misuse", "unusual_port"], &["runs_from_temp", "unusual_port", "beaconing"], &["runs_from_temp", "fan_out"],

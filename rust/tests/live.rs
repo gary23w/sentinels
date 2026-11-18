@@ -10,7 +10,8 @@
 //!   cargo test --release --test live -- --ignored live_restore
 //!   cargo test --release --test live -- --ignored live_block
 //!   cargo test --release --test live -- --ignored live_jump     (Linux, as root, with capsh, python3 and cc)
-//!   cargo test --release --test live -- --ignored live_system_shell   (Windows, with GARRETT_LIVE_PID)
+//!   cargo test --release --test live -- --ignored live_user_shell     (Windows, as a user)
+//!   cargo test --release --test live -- --ignored live_system_shell   (Windows, as SYSTEM on a test runner)
 //!   cargo test --release --test live -- --ignored live_card       (macOS, as root)
 
 const KEY: &str = "0123456789abcdef0123456789abcdef";
@@ -124,32 +125,49 @@ os.execv('/bin/sh', ['sh', '-c', 'sleep 3'])
     assert_eq!(seen, (false, true), "root handed over by a program that never becomes a root shell");
 }
 
-/// GARRETT_LIVE_PID is a shell that runs as SYSTEM and was started by a program of an ordinary account (the hosted
-/// check makes one). The agent's reading of it says so, and says nothing of a shell started the ordinary way.
+#[cfg(windows)]
+fn check_live_shell_account(expected: &str) {
+    use garrett::win::{account, account_kind, snapshot};
+    let parent = std::process::id();
+    assert_eq!(account_kind(&account(parent).expect("read the test runner's account")), expected);
+
+    let mut shell = std::process::Command::new("cmd.exe").args(["/d", "/c", "ping -n 4 127.0.0.1 > nul"]).spawn().unwrap();
+    let observed = snapshot(shell.id());
+    let sid = account(shell.id());
+    let _ = shell.wait();
+
+    let observed = observed.expect("read the test shell");
+    assert!(observed.proc.name.eq_ignore_ascii_case("cmd.exe"));
+    assert_eq!(observed.proc.ppid, parent);
+    assert_eq!(account_kind(&sid.expect("read the test shell's account")), expected);
+    assert!(!observed.jumped, "a shell started by its own account was taken for an escalation");
+    println!("{} under a {expected} parent: jumped {}", observed.proc.name, observed.jumped);
+}
+
+#[cfg(windows)]
+#[test]
+#[ignore]
+fn live_user_shell() {
+    check_live_shell_account("person");
+}
+
+/// The hosted check runs this test as SYSTEM through Task Scheduler.
 #[cfg(windows)]
 #[test]
 #[ignore]
 fn live_system_shell() {
-    let pid: u32 = std::env::var("GARRETT_LIVE_PID").expect("GARRETT_LIVE_PID").parse().expect("a process id");
-    let snap = garrett::win::snapshot(pid).expect("the stand-in is running");
-    println!("{} started by {}: jumped {}", snap.proc.name, snap.parent, snap.jumped);
-    assert!(snap.jumped, "a SYSTEM shell under a person's program was not noticed");
-    let mut ordinary = std::process::Command::new("cmd.exe").args(["/c", "ping -n 4 127.0.0.1 > nul"]).spawn().unwrap();
-    std::thread::sleep(std::time::Duration::from_millis(300));
-    let own = garrett::win::snapshot(ordinary.id()).expect("the ordinary shell is running");
-    let _ = ordinary.wait();
-    assert!(!own.jumped, "an ordinary shell was taken for an escalation");
+    check_live_shell_account("system");
 }
 
-/// The network card this Mac sends out through can be opened for the first packets of arriving connection
-/// attempts, the kernel takes the filter, and reading it for a few seconds ends cleanly when told to stop. Whatever
-/// arrives in that time is a packet that opens a connection, or nothing is handed over at all.
+/// The normal interface can be opened and closed cleanly. On the hosted test's isolated interface, the filter
+/// must also pass the known connection attempt sent by the fixture.
 #[cfg(target_os = "macos")]
 #[test]
 #[ignore]
 fn live_card() {
     use std::sync::atomic::{AtomicBool, Ordering};
-    let card = garrett::lan::way_out_card().expect("this machine has a way out");
+    let test_card = std::env::var("GARRETT_LIVE_TEST_CARD").ok();
+    let card = test_card.clone().or_else(garrett::lan::way_out_card).expect("this machine has a way out");
     println!("reading at {card}");
     static STOP: AtomicBool = AtomicBool::new(false);
     std::thread::spawn(|| {
@@ -157,10 +175,21 @@ fn live_card() {
         STOP.store(true, Ordering::SeqCst);
     });
     let (mut handed, mut openings) = (0u32, 0u32);
+    let mut expected = 0;
     garrett::card::listen(&STOP, &card, |packet| {
         handed += 1;
-        openings += u32::from(garrett::lan::opening(packet).is_some());
-    }).expect("the card could not be opened");
+        if let Some((source, port)) = garrett::lan::opening(packet) {
+            openings += 1;
+            if source == "192.0.2.1" && port == 45001 {
+                expected += 1;
+            }
+        }
+    }).expect("the card could not be read");
+    assert!(STOP.load(Ordering::SeqCst), "the card reader exited before it was asked to stop");
     println!("{handed} packet(s) handed over, {openings} of them the first of a connection attempt");
     assert_eq!(handed, openings, "something other than an opening packet came through the filter");
+    if test_card.is_some() {
+        println!("{expected} opening packet(s) from the test peer");
+        assert!(expected > 0, "the test peer's connection attempt was not captured");
+    }
 }

@@ -18,6 +18,11 @@
 name: verify
 on:
   workflow_dispatch:
+    inputs:
+      windows_macos_only:
+        description: Run the Windows and macOS checks only
+        type: boolean
+        default: false
   push:
     branches: [main]
   pull_request:
@@ -30,7 +35,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: ${{ fromJSON(inputs.windows_macos_only && '["macos-latest", "windows-latest"]' || '["ubuntu-latest", "macos-latest", "windows-latest"]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -42,7 +47,7 @@ jobs:
         shell: bash
 
   linux:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && !inputs.windows_macos_only
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -125,9 +130,25 @@ jobs:
           live=$(ls rust/target/release/deps/live-* | grep -v '\.d$' | head -1)
           sudo env GARRETT_LIVE_ADDRESS=1.0.0.1 "$live" --ignored --nocapture live_block
       - name: The network card can be read for arriving connection attempts
+        timeout-minutes: 2
         run: |
           live=$(ls rust/target/release/deps/live-* | grep -v '\.d$' | head -1)
           sudo "$live" --ignored --nocapture live_card
+          # Use a private virtual Ethernet pair so the filter must receive a real opening packet.
+          tx=$(sudo ifconfig feth create)
+          rx=
+          trap 'sudo ifconfig "$tx" destroy; if [ -n "$rx" ]; then sudo ifconfig "$rx" destroy; fi' EXIT
+          rx=$(sudo ifconfig feth create)
+          sudo ifconfig "$tx" peer "$rx"
+          sudo ifconfig "$tx" inet 192.0.2.1 netmask 255.255.255.252 up
+          sudo ifconfig "$rx" up
+          mac=$(ifconfig "$rx" | awk '$1 == "ether" {print $2; exit}')
+          sudo arp -s 192.0.2.2 "$mac" ifscope "$tx"
+          test "$(route -n get 192.0.2.2 | awk '$1 == "interface:" {print $2}')" = "$tx"
+          (for i in 1 2 3 4; do sleep 0.5; nc -4 -n -G 1 -s 192.0.2.1 192.0.2.2 45001 </dev/null || true; done) &
+          probe=$!
+          sudo env GARRETT_LIVE_TEST_CARD="$rx" "$live" --ignored --nocapture live_card
+          wait "$probe"
       - name: The machine below the system can be read
         run: |
           (cd rust && cargo build --release --locked)
@@ -188,38 +209,35 @@ jobs:
           $left = @(Get-NetFirewallRule -DisplayName 'Garrett fleet block' -ErrorAction SilentlyContinue).Count
           "rules left: $left"
           if ($code -ne 0 -or $left -ne 0) { throw 'fleet blocking did not behave as expected' }
-      - name: A SYSTEM shell started by a person's program is noticed
+      - name: Read the accounts of live user and SYSTEM shells
         shell: pwsh
         run: |
-          # A stand-in for a privilege escalation: this session's own shell starts cmd.exe with the machine's own account.
-          Add-Type @'
-          using System; using System.Diagnostics; using System.Runtime.InteropServices;
-          public static class Up {
-            [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] public struct Start { public int cb; public string reserved, desktop, title; public int x, y, xSize, ySize, xChars, yChars, fill, flags; public short show, reserved2; public IntPtr reserved3, input, output, error; }
-            [StructLayout(LayoutKind.Sequential)] public struct Made { public IntPtr process, thread; public int pid, tid; }
-            [DllImport("advapi32", SetLastError = true)] public static extern bool OpenProcessToken(IntPtr process, uint access, out IntPtr token);
-            [DllImport("advapi32", SetLastError = true)] public static extern bool DuplicateTokenEx(IntPtr token, uint access, IntPtr attributes, int level, int type, out IntPtr made);
-            [DllImport("advapi32", SetLastError = true, CharSet = CharSet.Unicode)] public static extern bool CreateProcessWithTokenW(IntPtr token, int logon, string application, string command, int creation, IntPtr environment, string directory, ref Start start, out Made made);
-            public static int Run(string name, string command) {
-              Process.EnterDebugMode();
-              foreach (var source in Process.GetProcessesByName(name)) {
-                IntPtr token, primary;
-                try { if (!OpenProcessToken(source.Handle, 0x0002, out token)) continue; } catch { continue; }
-                if (!DuplicateTokenEx(token, 0x02000000, IntPtr.Zero, 2, 1, out primary)) continue;
-                var start = new Start(); start.cb = Marshal.SizeOf(start); Made made;
-                if (CreateProcessWithTokenW(primary, 0, null, command, 0x08000000, IntPtr.Zero, null, ref start, out made)) return made.pid;
-              }
-              return 0;
+          cargo test --manifest-path rust/Cargo.toml --release --locked --test live -- --ignored --nocapture --exact live_user_shell
+          if ($LASTEXITCODE -ne 0) { throw 'the live user shell check failed' }
+
+          $live = @(Get-ChildItem -LiteralPath rust/target/release/deps -Filter 'live-*.exe' -File)
+          if ($live.Count -ne 1) { throw 'expected one Windows live test binary' }
+          $livePath = $live[0].FullName
+          if ((& $livePath --list) -notcontains 'live_system_shell: test') { throw 'the SYSTEM check was not built' }
+
+          $name = 'GarrettVerifySystemShell'
+          $action = New-ScheduledTaskAction -Execute $livePath -Argument '--ignored --exact live_system_shell'
+          Register-ScheduledTask -TaskName $name -Action $action -User SYSTEM | Out-Null
+          try {
+            $before = (Get-ScheduledTaskInfo -TaskName $name).LastRunTime
+            Start-ScheduledTask -TaskName $name
+            foreach ($i in 1..30) {
+              Start-Sleep -Seconds 1
+              $info = Get-ScheduledTaskInfo -TaskName $name
+              if ($info.LastRunTime -gt $before -and (Get-ScheduledTask -TaskName $name).State -eq 'Ready') { break }
             }
+            if ($info.LastRunTime -le $before -or (Get-ScheduledTask -TaskName $name).State -ne 'Ready') { throw 'the SYSTEM check did not finish' }
+            if ($info.LastTaskResult -ne 0) { throw "the live SYSTEM shell check returned $($info.LastTaskResult)" }
+            'The live SYSTEM shell and parent check passed'
+          } finally {
+            Stop-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
+            Unregister-ScheduledTask -TaskName $name -Confirm:$false
           }
-          '@
-          $made = 0
-          foreach ($name in 'winlogon', 'services', 'spoolsv', 'svchost') { $made = [Up]::Run($name, 'cmd.exe /c ping -n 60 127.0.0.1'); if ($made) { "made from $name"; break } }
-          if (-not $made) { throw 'no stand-in could be started' }
-          $env:GARRETT_LIVE_PID = "$made"
-          Push-Location rust; cargo test --release --locked --test live -- --ignored --nocapture live_system_shell; $code = $LASTEXITCODE; Pop-Location
-          Stop-Process -Id $made -Force -ErrorAction SilentlyContinue
-          if ($code) { throw 'the live check failed' }
       - name: The machine below the system can be read
         shell: pwsh
         run: |
@@ -240,6 +258,7 @@ jobs:
   # The self-hosted service, built from this checkout and served the way the site serves it: one line makes the
   # machine a Sentinel service, a machine joins with the printed command, its case reaches the service.
   service-linux:
+    if: ${{ !inputs.windows_macos_only }}
     runs-on: ubuntu-latest
     env:
       GARRETT_BASE: http://127.0.0.1:8765
@@ -399,7 +418,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: ${{ fromJSON(inputs.windows_macos_only && '["macos-latest", "windows-latest"]' || '["ubuntu-latest", "macos-latest", "windows-latest"]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -426,6 +445,7 @@ jobs:
   # The whole agent, running for real on each system: what it must end is ended before it acts, and what it
   # cleans up comes back exactly when restored.
   rust-agent-linux:
+    if: ${{ !inputs.windows_macos_only }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -461,6 +481,25 @@ jobs:
           echo "chains that ran to the end: $(ls /tmp/gs-work | grep -c '^reached-') of $sent"
           sudo grep -q "STOPPED" /tmp/agent.log
           test "$(ls /tmp/gs-work | grep -c '^reached-')" = 0
+      - name: Web shells with a bare child or an exec replacement are stopped and recorded
+        run: |
+          mkdir -p /tmp/gs-variant
+          printf 'sleep 3\ntouch /tmp/gs-variant/reached\n' > /tmp/gs-variant/p
+          cp /bin/bash /tmp/gs-variant/php-fpm8.3
+          cp /bin/bash /tmp/gs-variant/nginx
+          python3 -m http.server 18082 --bind 127.0.0.1 --directory /tmp/gs-variant > /tmp/gs-variant/http.log 2>&1 &
+          server=$!
+          trap 'kill "$server" 2>/dev/null || true' EXIT
+          sleep 2
+          timeout 8 /tmp/gs-variant/php-fpm8.3 -c "curl -fsS http://127.0.0.1:18082/p | sh; true" || true
+          sleep 4
+          test ! -e /tmp/gs-variant/reached
+          timeout 8 /tmp/gs-variant/nginx -c "exec sh -c 'curl -fsS http://127.0.0.1:18082/p | sh'" || true
+          sleep 4
+          test ! -e /tmp/gs-variant/reached
+          sudo rust/target/release/garrett --state-dir /tmp/gs-state cases | tee /tmp/gs-variant/cases.txt
+          grep -q parent_risky_command_line /tmp/gs-variant/cases.txt
+          grep -q 'shell_from_web_server, risky_command_line' /tmp/gs-variant/cases.txt
       - name: A dropped program with a scheduled job and a shell startup line is cleaned up, then restored
         run: |
           sudo touch /root/.bashrc
@@ -769,6 +808,7 @@ jobs:
   # key). The earlier one is installed the way a user installs it; the later one is offered by a stand-in for
   # the site. First the things that must be refused, then the update itself.
   update-linux:
+    if: ${{ !inputs.windows_macos_only }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -890,6 +930,7 @@ jobs:
   # Small boards and devices. The 32-bit ARM agent is cross-built and its tests run under an emulated processor.
   # The no-systemd install is tried on Alpine, where services are started by OpenRC, in report mode.
   small-devices:
+    if: ${{ !inputs.windows_macos_only }}
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4

