@@ -206,7 +206,7 @@ impl Hands for RealHands {
         let mut gone: Vec<String> = held.difference(&wanted).cloned().collect();
         gone.sort();
         for address in gone {
-            let mut arguments = vec!["route", "-n", "delete"];
+            let mut arguments = vec!["/sbin/route", "-n", "delete"];
             if address.contains(':') {
                 arguments.push("-inet6");
             }
@@ -217,7 +217,7 @@ impl Hands for RealHands {
         let mut new: Vec<String> = wanted.difference(&held).cloned().collect();
         new.sort();
         for address in new {
-            let mut arguments = vec!["route", "-n", "add"];
+            let mut arguments = vec!["/sbin/route", "-n", "add"];
             if address.contains(':') {
                 arguments.push("-inet6");
             }

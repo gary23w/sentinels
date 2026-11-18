@@ -87,7 +87,7 @@ export const WATCH_HOSTS = ['webhook.site', 'pastebin.com', 'paste.ee', 'rentry.
   'api.telegram.org', 'bashupload.com', 'api.anthropic.com', 'api.deepseek.com', 'open.bigmodel.cn', 'api.x.ai', 'xcai.pro'];
 // Which signals this service knows, said to agents with the shared state: an agent newer than the service keeps
 // back the signals a lower number does not cover. Raise it whenever a signal is added.
-export const SIGNAL_SET = 9;
+export const SIGNAL_SET = 10;
 export const TRUST = new Set(['installed_program', 'owner_trusted', 'known_baseline']);
 // Never learned up or down: published indicators, the antivirus's own verdict, attacks on a service, and
 // directory attacks.

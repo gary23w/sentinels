@@ -106,12 +106,15 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install with the one-line installer
         run: curl -fsSL "$BASE/install.sh" | sudo sh
+      # A release up to 1.7.0 put the command on the PATH; later ones keep it in a folder only root can change.
+      - name: Where its command is
+        run: echo "G=$(command -v garrett || echo '/Library/Application Support/Garrett/garrett')" >> "$GITHUB_ENV"
       - name: It is running as a LaunchDaemon
         run: |
           sleep 8
           sudo launchctl print system/com.garrett.agent | grep -E "state = |pid = " | head -3
           sudo launchctl print system/com.garrett.agent | grep -q "state = running"
-          garrett status
+          sudo "$G" status
           sudo cat /var/log/garrett.log | tail -5
       - name: A stand-in web shell is ended and recorded
         run: |
@@ -121,9 +124,9 @@ jobs:
           sudo tail -5 /var/log/garrett.log
           ! pgrep -f "203.0.113.9/p"
           # The program is ended first and written down when that sample finishes, which can be a few seconds later.
-          for i in $(seq 1 30); do sudo garrett cases | grep -q "stopped" && break; sleep 1; done
-          sudo garrett cases
-          sudo garrett cases | grep -q "stopped"
+          for i in $(seq 1 30); do sudo "$G" cases | grep -q "stopped" && break; sleep 1; done
+          sudo "$G" cases
+          sudo "$G" cases | grep -q "stopped"
       - name: Fleet blocking refuses an address and lets it through again
         run: |
           (cd rust && cargo test --release --locked --test live --no-run)
@@ -158,7 +161,7 @@ jobs:
         run: |
           curl -fsSL "$BASE/garrett-macos.tar.gz" | tar -xz -C /tmp
           sudo sh /tmp/garrett/install.sh --remove
-          for p in /usr/local/lib/garrett /usr/local/bin/garrett /usr/local/var/garrett /Library/LaunchDaemons/com.garrett.agent.plist; do if [ -e "$p" ]; then echo "left behind: $p"; exit 1; fi; done
+          for p in "/Library/Application Support/Garrett" /usr/local/lib/garrett /usr/local/bin/garrett /usr/local/var/garrett /Library/LaunchDaemons/com.garrett.agent.plist; do if [ -e "$p" ]; then echo "left behind: $p"; exit 1; fi; done
 
   windows:
     if: github.event_name == 'workflow_dispatch'
@@ -269,7 +272,11 @@ jobs:
           (cd rust && cargo build --release --locked)
           mkdir -p agents && cp rust/target/release/garrett agents/garrett-linux-x86_64
           python3 -B packaging/build-release.py site --agents agents >/dev/null
-          cp packaging/service.sh packaging/install.sh site/
+          cp packaging/install.sh site/
+          # The one-line installer carries the hash of the bundle it installs: give it this build's, as a release does.
+          pin=$(sed -n 's/  garrett-service\.tar\.gz$//p' site/SHA256SUMS)
+          sed "s/^SERVICE_SHA='[0-9a-f]*'\$/SERVICE_SHA='$pin'/" packaging/service.sh > site/service.sh
+          grep -q "^SERVICE_SHA='$pin'\$" site/service.sh
           (cd site && nohup python3 -m http.server 8765 --bind 127.0.0.1 >/dev/null 2>&1 &)
           sleep 1
       - name: One line makes this machine a Sentinel service
@@ -330,7 +337,7 @@ jobs:
   service-windows:
     runs-on: windows-latest
     env:
-      GARRETT_BASE: http://127.0.0.1:8765
+      GARRETT_BASE: https://127.0.0.1:8765
     steps:
       - uses: actions/checkout@v4
       - name: Build the bundles and serve them
@@ -339,9 +346,33 @@ jobs:
           Push-Location rust; cargo build --release --locked; if ($LASTEXITCODE -ne 0) { throw 'the agent did not build' }; Pop-Location
           New-Item -ItemType Directory -Force agents | Out-Null; Copy-Item rust/target/release/garrett.exe agents/garrett-windows.exe
           python -B packaging/build-release.py site --agents agents | Out-Null
-          Copy-Item packaging/service.ps1, packaging/install.ps1 site/
-          Start-Process python -ArgumentList '-m', 'http.server', '8765', '--bind', '127.0.0.1' -WorkingDirectory site -WindowStyle Hidden
-          Start-Sleep -Seconds 2
+          # The one-line installers carry the hash of the bundle they install: give them this build's, as a release does.
+          $sums = @{}; Get-Content site/SHA256SUMS | ForEach-Object { $hash, $name = $_ -split '  ', 2; $sums[$name] = $hash }
+          foreach ($pin in @('install.ps1', 'pinnedWindowsZip', 'garrett-windows.zip'), @('service.ps1', 'pinnedServiceZip', 'garrett-service-windows.zip')) {
+            $text = [IO.File]::ReadAllText("$PWD/packaging/$($pin[0])") -replace "(?m)^\`$$($pin[1]) = '[0-9a-f]{64}'", "`$$($pin[1]) = '$($sums[$pin[2]])'"
+            if ($text -notmatch [regex]::Escape("`$$($pin[1]) = '$($sums[$pin[2]])'")) { throw "no pin was set in $($pin[0])" }
+            [IO.File]::WriteAllText("$PWD/site/$($pin[0])", $text)
+          }
+      # The installers take a release site over HTTPS only: this one has a certificate made here, which this machine is told to trust.
+      - name: Serve them over HTTPS
+        shell: powershell
+        run: |
+          $made = New-SelfSignedCertificate -Subject 'CN=127.0.0.1' -TextExtension @('2.5.29.17={text}IPAddress=127.0.0.1') -CertStoreLocation Cert:\LocalMachine\My -KeyExportPolicy Exportable -NotAfter (Get-Date).AddDays(2)
+          $word = ConvertTo-SecureString -String 'verify' -AsPlainText -Force
+          Export-PfxCertificate -Cert $made -FilePath "$env:RUNNER_TEMP\site.pfx" -Password $word -CryptoAlgorithmOption AES256_SHA256 | Out-Null
+          Export-Certificate -Cert $made -FilePath "$env:RUNNER_TEMP\site.cer" | Out-Null
+          Import-Certificate -FilePath "$env:RUNNER_TEMP\site.cer" -CertStoreLocation Cert:\LocalMachine\Root | Out-Null
+          Set-Content -LiteralPath "$env:RUNNER_TEMP\site.cjs" -Value @'
+          const fs = require('fs'), path = require('path'), https = require('https');
+          const root = path.resolve(process.argv[2]);
+          https.createServer({ pfx: fs.readFileSync(process.argv[3]), passphrase: 'verify' }, (request, response) => {
+            const file = path.join(root, path.basename(decodeURIComponent(request.url.split('?')[0])));
+            fs.readFile(file, (error, data) => { response.writeHead(error ? 404 : 200); response.end(error ? '' : data); });
+          }).listen(8765, '127.0.0.1');
+          '@
+          Start-Process node -ArgumentList "`"$env:RUNNER_TEMP\site.cjs`"", "`"$PWD\site`"", "`"$env:RUNNER_TEMP\site.pfx`"" -WindowStyle Hidden
+          Start-Sleep -Seconds 3
+          if ((Invoke-WebRequest -UseBasicParsing -Uri "$env:GARRETT_BASE/SHA256SUMS").StatusCode -ne 200) { throw 'the site is not being served' }
       # Windows PowerShell 5.1: what a person pastes into an elevated window.
       - name: One line makes this machine a Sentinel service
         shell: powershell
@@ -858,6 +889,8 @@ jobs:
 
   update-macos:
     runs-on: macos-latest
+    env:
+      G: /Library/Application Support/Garrett/garrett
     steps:
       - uses: actions/checkout@v4
       - name: Two versions and a site that offers the later one
@@ -877,11 +910,11 @@ jobs:
           sudo launchctl setenv GARRETT_UPDATE_AFTER 15
           sudo sh "$U/pack/install.sh"
           sleep 3
-          echo "installed: $(garrett version)"
-          for i in $(seq 1 60); do [ "$(garrett version)" = "garrett 9.9.9" ] && break; sleep 2; done
+          echo "installed: $(sudo "$G" version)"
+          for i in $(seq 1 60); do [ "$(sudo "$G" version)" = "garrett 9.9.9" ] && break; sleep 2; done
           sleep 8
           sudo tail -6 /var/log/garrett.log
-          test "$(garrett version)" = "garrett 9.9.9"
+          test "$(sudo "$G" version)" = "garrett 9.9.9"
           sudo grep -q "updated itself from $(cat $U/old.version) to 9.9.9" /var/log/garrett.log
           test "$(sudo grep -c 'watching this machine by itself' /var/log/garrett.log)" = 2
           pgrep -x garrett-agent > /dev/null

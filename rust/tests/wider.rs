@@ -140,8 +140,8 @@ fn a_newer_agent_keeps_back_what_an_older_service_does_not_know() {
     assert_eq!(known_to(plain.clone(), 1), Some(plain));
     let web_shell = json!({"key": "k", "score": 6, "categories": ["lineage"],
         "signals": [signal("shell_from_web_server", 3, "lineage"), signal("parent_risky_command_line", 3, "lineage")]});
-    assert_eq!(known_to(web_shell.clone(), 7), Some(web_shell.clone()));
-    assert_eq!(known_to(web_shell, 6), None);
+    assert_eq!(known_to(web_shell.clone(), 10), Some(web_shell.clone()));
+    assert_eq!(known_to(web_shell, 9), None);
 }
 
 #[derive(Default)]
