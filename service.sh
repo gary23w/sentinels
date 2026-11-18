@@ -13,7 +13,7 @@ set -eu
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
 export PATH
 BASE=${GARRETT_BASE:-https://gary23w.github.io/sentinels}
-SERVICE_SHA='dd04bf3ba297e137b8cba565a4adc4c4d07618dfb863c1b2bd007fb6b5c5663f'
+SERVICE_SHA='008081ddcdc42fdaae7a3b857af2afe3f91bcf6871e3ba2191a8831cb9e3a5c3'
 [ "$(id -u)" = 0 ] || { echo "Run this as root (put sudo before sh)." >&2; exit 1; }
 [ "$(uname -s)" = Linux ] || { echo "This installer covers Linux. On Windows use service.ps1; elsewhere see serve.mjs in the repository." >&2; exit 1; }
 fetch() { if command -v curl >/dev/null 2>&1; then curl -fsSL "$1" -o "$2"; else wget -q "$1" -O "$2"; fi; }

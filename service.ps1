@@ -8,7 +8,7 @@
 $ErrorActionPreference = 'Stop'
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { throw 'Run this from an elevated PowerShell.' }
 $base = if ($env:GARRETT_BASE) { $env:GARRETT_BASE } else { 'https://gary23w.github.io/sentinels' }
-$pinnedServiceZip = '800af7e73dbe2e2bb19ecec0a6a4532e1fc4a8c87935d354388827070384dd9a'
+$pinnedServiceZip = 'c03244dd55eb8fe88df663851f205d5594e296f1e64bf74efbe9f1ac25f22eb3'
 $releaseUri = $null
 if (-not [Uri]::TryCreate($base, [UriKind]::Absolute, [ref]$releaseUri) -or $releaseUri.Scheme -cne 'https' -or -not $releaseUri.Host -or $releaseUri.UserInfo -or $releaseUri.Query -or $releaseUri.Fragment) { throw 'The release site must be an HTTPS address without credentials or a query.' }
 $base = $releaseUri.AbsoluteUri.TrimEnd('/')

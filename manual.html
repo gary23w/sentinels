@@ -101,14 +101,21 @@ hr { display: none; }
       enrolment key may be given in the environment variable
       <b>SENTINEL_ENROLL_KEY</b> instead of on the command line.</dd>
   <dt id="status"><a class="permalink" href="#status"><b>status</b></a></dt>
-  <dd>Show which service this machine reports to, and its response mode.</dd>
+  <dd>Show which service this machine reports to, and the response mode it runs
+      in.</dd>
   <dt id="forget"><a class="permalink" href="#forget"><b>forget</b></a></dt>
   <dd>Stop the service and remove this machine's credential.</dd>
   <dt id="cases"><a class="permalink" href="#cases"><b>cases</b></a></dt>
-  <dd>List the latest cases on this machine.</dd>
+  <dd>List the latest cases on this machine. On an enrolled machine they are on
+      its service as well, and judged there.</dd>
   <dt id="trust"><a class="permalink" href="#trust"><b>trust</b><i>
     case</i></a></dt>
-  <dd>This program is mine: leave it alone from now on.</dd>
+  <dd>This program is mine: leave it alone from now on. What was cleaned up
+      under the case stays where it was put (<b>restore</b> puts it back), and
+      is never cleaned up again: not the same program file, and not the same
+      startup lines. On an enrolled machine this is done on the service, and the
+      machine hears of it with its next report; whatever it cleaned up before
+      then is said on the service, so it can be put back.</dd>
   <dt id="stop"><a class="permalink" href="#stop"><b>stop</b><i> case</i><b>,
     </b><i>release</i><b> case</b></a></dt>
   <dd>Decide a program the agent paused: end it, or let it continue.</dd>
@@ -157,8 +164,11 @@ hr { display: none; }
   <dt id="report"><a class="permalink" href="#report"><b>report</b></a></dt>
   <dd>Only report.</dd>
 </dl>
-<p class="Pp">The service may hold a machine to a lower mode than it asked
-  for.</p>
+<p class="Pp">The service may hold a machine to a lower mode than it asked for.
+    So may the machine itself: an enrolled machine runs in the lower of the mode
+    its service allowed it at enrolment and the one <b>MODE=</b> in its
+    configuration file asks for. A higher <b>MODE=</b> than the service allowed
+    changes nothing; enrol the machine again for that.</p>
 </section>
 <section class="Sh">
 <h1 class="Sh" id="FILES"><a class="permalink" href="#FILES">FILES</a></h1>
@@ -172,6 +182,10 @@ hr { display: none; }
   <dt><i>/var/lib/garrett/</i></dt>
   <dd>This machine's credential and what the agent remembers about it.</dd>
 </dl>
+<p class="Pp">Purging the package removes these, and the apt source and signing
+    key the installer added, <i>/etc/apt/sources.list.d/garrett.list</i> and
+    <i>/usr/share/keyrings/garrett.gpg</i>; the key stays while another apt
+    source still names it.</p>
 </section>
 <section class="Sh">
 <h1 class="Sh" id="LEARNING"><a class="permalink" href="#LEARNING">LEARNING</a></h1>
@@ -239,24 +253,28 @@ hr { display: none; }
 <section class="Sh">
 <h1 class="Sh" id="AT_THE_NETWORK_CARD"><a class="permalink" href="#AT_THE_NETWORK_CARD">AT
   THE NETWORK CARD</a></h1>
-<p class="Pp">Two things happen on the wire that no program on this machine
-    starts:</p>
+<p class="Pp">Things happen on the wire, and at the sockets of the machine, that
+    no program on it starts:</p>
 <ul class="Bl-bullet">
   <li>Another machine on the network starts answering in place of the gateway,
       so that what this machine sends out passes through it. garrett reads the
-      system's table of neighbours every two seconds (every thirty on a Mac) and
-      reports the moment the gateway's hardware address becomes one that already
-      belongs to another machine on the network. A new router is learned without
-      a word.</li>
-  <li>On Linux, a machine on the network tries port after port here. garrett
-      reads the first packet of each arriving connection attempt at the network
-      card: who sent it and which port it asked for, never what follows. Thirty
-      different ports from one neighbour in a minute are reported, once an hour
-      for each neighbour. Scans from the open internet are not reported.</li>
+      system's table of neighbours every two seconds (every thirty on a Mac, and
+      every thirty for IPv6 everywhere) and reports the moment the gateway's
+      hardware address becomes that of a machine that was already on the
+      network, or starts going back and forth between two, which is what happens
+      while the true gateway and an impostor both keep answering. A new router
+      is learned without a word.</li>
+  <li>On Linux and macOS, a machine on the network tries port after port here.
+      garrett reads the first packet of each arriving connection attempt at the
+      network card: who sent it and which port it asked for, never what follows.
+      Thirty different ports from one neighbour in a minute are reported, once
+      an hour for each neighbour. Scans from the open internet are not
+    reported.</li>
+  <li>On Linux and Windows, a keyboard this machine has never had is plugged in
+      and a command window opens within seconds: how a device that types by
+      itself works. Only the names of the keyboards are read, never a key.</li>
 </ul>
-<p class="Pp">Both are reported and nothing is done about them: what is wrong is
-    on another machine. Addresses on the newer kind of network (IPv6) are not
-    read yet.</p>
+<p class="Pp">All of these are reported and nothing is done about them.</p>
 </section>
 <section class="Sh">
 <h1 class="Sh" id="UPDATES"><a class="permalink" href="#UPDATES">UPDATES</a></h1>
