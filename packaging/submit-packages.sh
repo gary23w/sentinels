@@ -33,8 +33,27 @@ case "$2" in
         -f message="Sentinels.Garrett $VERSION" -F content=@"$WORK/content" \
         -f "author[name]=$NAME" -f "author[email]=$EMAIL" -f "committer[name]=$NAME" -f "committer[email]=$EMAIL" >/dev/null
     done
-    gh pr create --repo "$UPSTREAM" --head "$ME:$BRANCH" --base master --title "New version: Sentinels.Garrett version $VERSION" \
-      --body "garrett $VERSION, from its GitHub release: https://github.com/gary23w/sentinels/releases/tag/v$VERSION"
+    # The title the repository asks for: a package it does not have yet is new, otherwise it is an update.
+    if gh api "repos/$UPSTREAM/contents/manifests/s/Sentinels/Garrett" >/dev/null 2>&1; then TITLE="Update: Sentinels.Garrett to $VERSION"; else TITLE="New package: Sentinels.Garrett version $VERSION"; fi
+    cat > "$WORK/body.md" <<BODY
+## 📖 Description
+
+Sentinels.Garrett $VERSION: garrett, the Sentinel agent (MIT, https://github.com/gary23w/sentinels), from its GitHub release https://github.com/gary23w/sentinels/releases/tag/v$VERSION. The installer is garrett-windows.msi (WiX, per-machine, silent with /qn).
+
+## ✅ Checklist
+
+- [ ] Signed the [Contributor License Agreement](https://cla.opensource.microsoft.com)
+- [ ] Linked to an issue (if applicable)
+
+## 📦 Manifest Checklist
+
+- [x] Checked that there aren't other open [pull requests](https://github.com/microsoft/winget-pkgs/pulls) for the same manifest update/change
+- [x] This PR only modifies one (1) manifest
+- [x] Validated manifest locally with \`winget validate --manifest <path>\`
+- [ ] Tested manifest locally with \`winget install --manifest <path>\` (the MSI's install, upgrade and removal are tested on Windows in the project's release workflow)
+- [x] Manifest conforms to the [1.28 schema](https://github.com/microsoft/winget-pkgs/tree/master/doc/manifest/schema/1.28.0)
+BODY
+    gh pr create --repo "$UPSTREAM" --head "$ME:$BRANCH" --base master --title "$TITLE" --body-file "$WORK/body.md"
     ;;
   aur)
     git clone --quiet ssh://aur@aur.archlinux.org/garrett-bin.git "$WORK/aur" 2>/dev/null
