@@ -423,10 +423,9 @@ fn command(arguments: &[String]) -> Result<i32, String> {
                     println!("garrett {version} is installed (this was {}).", garrett::VERSION);
                     #[cfg(windows)]
                     if update::as_task() {
-                        let quiet = |arguments: &[&str]| std::process::Command::new("schtasks.exe").args(arguments).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status().is_ok_and(|status| status.success());
-                        quiet(&["/End", "/TN", "garrett"]);
+                        update::task_action("/End");
                         std::thread::sleep(std::time::Duration::from_secs(2));
-                        println!("{}", if quiet(&["/Run", "/TN", "garrett"]) { "The agent was started again on the new version." } else { "Start the agent again to run it: schtasks /Run /TN garrett" });
+                        println!("{}", if update::task_action("/Run") { "The agent was started again on the new version." } else { "Start the agent again to run it: schtasks /Run /TN garrett" });
                         return Ok(0);
                     }
                     Ok(10)

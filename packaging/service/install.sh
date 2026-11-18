@@ -7,6 +7,8 @@
 # the unprivileged user garrett-service, and prints the command that joins other machines to it.
 # Running it again upgrades the program and keeps the keys, the certificate and the database.
 set -eu
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
 [ "$(id -u)" = 0 ] || { echo "Run this as root." >&2; exit 1; }
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 LIB=/usr/lib/garrett-service; ETC=/etc/garrett-service; DATA=/var/lib/garrett-service; UNIT=/etc/systemd/system/garrett-service.service

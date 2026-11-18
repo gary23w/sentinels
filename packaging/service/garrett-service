@@ -7,6 +7,8 @@
 #   sudo garrett-service token      the operator token, for the API described in the README
 #   garrett-service status          whether it is running
 set -eu
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
 ETC=/etc/garrett-service
 BASE=${GARRETT_BASE:-https://gary23w.github.io/sentinels}
 setting() { sed -n "s/^$1=//p" "$ETC/service.conf" | tail -n 1; }

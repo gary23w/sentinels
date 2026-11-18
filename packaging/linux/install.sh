@@ -3,6 +3,8 @@
 # Alpine, and small boards and devices. It runs as a service where the machine has systemd or OpenRC.
 #   sudo sh install.sh          remove it again with:  sudo sh install.sh --remove
 set -eu
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
 [ "$(id -u)" = 0 ] || { echo "Run this as root." >&2; exit 1; }
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 if [ "${1:-}" = --remove ]; then

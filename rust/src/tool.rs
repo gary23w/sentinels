@@ -5,22 +5,43 @@ use crate::linux::Snap;
 use crate::parse::{Conn, Proc};
 use std::collections::{HashMap, HashSet};
 use std::io::Read;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+/// Only use absolute program paths or known utilities in protected operating-system folders.
+fn program(name: &str) -> Option<PathBuf> {
+    if Path::new(name).is_absolute() {
+        return Some(PathBuf::from(name));
+    }
+    #[cfg(windows)]
+    { return crate::windows_system::executable(name).ok(); }
+    #[cfg(not(windows))]
+    {
+        #[cfg(target_os = "linux")]
+        let places: &[&str] = match name {
+            "systemd-run" => &["/usr/bin/systemd-run", "/bin/systemd-run"],
+            "systemctl" => &["/usr/bin/systemctl", "/bin/systemctl"],
+            "journalctl" => &["/usr/bin/journalctl", "/bin/journalctl"],
+            "ip" => &["/usr/sbin/ip", "/sbin/ip", "/usr/bin/ip", "/bin/ip"],
+            "nsenter" => &["/usr/bin/nsenter", "/bin/nsenter"],
+            "ss" => &["/usr/bin/ss", "/bin/ss"],
+            "nft" => &["/usr/sbin/nft", "/sbin/nft", "/usr/bin/nft", "/bin/nft"],
+            _ => &[],
+        };
+        #[cfg(target_os = "macos")]
+        let places: &[&str] = match name { "launchctl" => &["/bin/launchctl"], _ => &[] };
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        let places: &[&str] = &[];
+        places.iter().map(|path| PathBuf::from(*path)).find(|path| path.is_file())
+    }
+}
+
 /// Run one fixed operating-system query: no shell, bounded output, enforced timeout. `None` when it fails.
 pub fn run(arguments: &[&str], input: Option<&[u8]>, timeout: Duration) -> Option<String> {
-    #[cfg(windows)]
-    let program = match arguments[0] {
-        "powershell.exe" | "netsh" | "netsh.exe" | "route.exe" | "bcdedit.exe" =>
-            crate::windows_system::executable(arguments[0]).ok()?,
-        other => std::path::PathBuf::from(other),
-    };
-    #[cfg(not(windows))]
-    let program = arguments[0];
-    let mut command = Command::new(program);
+    let mut command = Command::new(program(arguments.first()?)?);
     command.args(&arguments[1..]).stdin(if input.is_some() { Stdio::piped() } else { Stdio::null() }).stdout(Stdio::piped()).stderr(Stdio::null());
     #[cfg(windows)]
     {

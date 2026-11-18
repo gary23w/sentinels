@@ -71,7 +71,7 @@ fn plain_file(path: &Path) -> bool {
 }
 
 fn quiet(arguments: &[&str]) {
-    let _ = std::process::Command::new(arguments[0]).args(&arguments[1..]).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status();
+    let _ = crate::tool::run(arguments, None, std::time::Duration::from_secs(60));
 }
 
 /// The marks of a startup file's lines: one per line that is not blank and not a comment, in the file's order.

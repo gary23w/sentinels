@@ -6,6 +6,8 @@
 # The mode defaults to kill: a hostile program and everything it started is ended at once.
 # Remove it again with:  sudo sh packaging/linux/install.sh --remove
 set -eu
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
 [ "$(id -u)" = 0 ] || { echo "Run as root." >&2; exit 1; }
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 SERVER=${1:-}; MODE=${2:-}

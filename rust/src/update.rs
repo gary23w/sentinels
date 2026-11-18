@@ -122,11 +122,14 @@ fn packaged(exe: &Path) -> bool {
 /// Have apt install the newer package. It runs in a unit of its own: the package restarts this agent while it
 /// installs, and that must not take the installer down with it.
 #[cfg(target_os = "linux")]
-fn by_package() -> Result<(), String> {
-    let script = "apt-get update -qq -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/garrett.list -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0; \
-        DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --only-upgrade -o DPkg::Lock::Timeout=300 -o Dpkg::Options::=--force-confold garrett";
+fn by_package(version: &str) -> Result<(), String> {
+    if numbers(version).is_none() {
+        return Err("the signed update version is invalid".into());
+    }
+    let script = format!("/usr/bin/apt-get update -qq -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/garrett.list -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0 && \
+        DEBIAN_FRONTEND=noninteractive /usr/bin/apt-get install -y -qq --only-upgrade -o DPkg::Lock::Timeout=300 -o Dpkg::Options::=--force-confold garrett={version}");
     let unit = format!("garrett-update-{}", crate::agent::now() as u64);
-    crate::tool::run(&["systemd-run", "--quiet", "--collect", "--unit", &unit, "/bin/sh", "-c", script], None, Duration::from_secs(30)).map(|_| ()).ok_or_else(|| "apt could not be started".to_string())
+    crate::tool::run(&["systemd-run", "--quiet", "--collect", "--unit", &unit, "/bin/sh", "-c", &script], None, Duration::from_secs(30)).map(|_| ()).ok_or_else(|| "apt could not be started".to_string())
 }
 
 fn beside(exe: &Path, word: &str) -> PathBuf {
@@ -182,7 +185,7 @@ pub fn bring_current(base: &str) -> Result<Outcome, String> {
     let exe = std::env::current_exe().map_err(|error| error.to_string())?;
     #[cfg(target_os = "linux")]
     if packaged(&exe) {
-        by_package()?;
+        by_package(&listed.version)?;
         return Ok(Outcome::Packaged(listed.version));
     }
     replace(base, &listed, &exe)?;
@@ -192,8 +195,15 @@ pub fn bring_current(base: &str) -> Result<Outcome, String> {
 /// True where the agent runs as the scheduled task its installer makes.
 #[cfg(windows)]
 pub fn as_task() -> bool {
+    task_action("/Query")
+}
+
+/// Control the one scheduled task the installer owns, using the system copy of schtasks.
+#[cfg(windows)]
+pub fn task_action(action: &str) -> bool {
     let Ok(program) = crate::windows_system::executable("schtasks.exe") else { return false };
-    std::process::Command::new(program).args(["/Query", "/TN", "garrett"]).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status().is_ok_and(|status| status.success())
+    if !matches!(action, "/Query" | "/End" | "/Run") { return false; }
+    std::process::Command::new(program).args([action, "/TN", "garrett"]).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status().is_ok_and(|status| status.success())
 }
 
 /// Start the program file that is in place now, with the arguments this one was started with. Called as the last

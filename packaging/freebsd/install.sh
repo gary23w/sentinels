@@ -3,6 +3,8 @@
 #   sh install.sh          remove it again with:  sh install.sh --remove
 # Run it as root. The agent is one program file; nothing else has to be installed, and no firewall has to be on.
 set -eu
+PATH=/sbin:/bin:/usr/sbin:/usr/bin
+export PATH
 [ "$(id -u)" = 0 ] || { echo "Run this as root." >&2; exit 1; }
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 RC=/usr/local/etc/rc.d/garrett
