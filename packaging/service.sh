@@ -6,6 +6,7 @@
 #
 # It prints the command that joins your other machines (Linux, macOS, Windows) to it.
 # Options:  --port <number, default 8443>  --address <name or address other machines reach this one by>
+#           --memory neuron-db   remember operators' verdicts and show a new case the nearest ones (off by default)
 # Remove it again:  curl -fsSL .../service.sh | sudo sh -s -- --remove
 #
 # It downloads garrett-service.tar.gz, checks it against this script's pinned SHA-256, and runs its installer.

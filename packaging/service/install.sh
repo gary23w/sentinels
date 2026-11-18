@@ -1,6 +1,6 @@
 #!/bin/sh
 # Turn this Linux machine into your own Sentinel service, from this folder.
-#   sudo sh install.sh [--port 8443] [--address <name or address other machines reach this one by>]
+#   sudo sh install.sh [--port 8443] [--address <name or address other machines reach this one by>] [--memory neuron-db|off]
 #   sudo sh install.sh --remove
 #
 # It installs the service under /usr/lib/garrett-service, makes its keys and its own HTTPS certificate, runs it as
@@ -15,11 +15,12 @@ LIB=/usr/lib/garrett-service; ETC=/etc/garrett-service; DATA=/var/lib/garrett-se
 NODE_VERSION=v24.22.3
 NODE_SUM_x64=061ec3e3062115705b56b51fa9cc330ab50d34b6969387d4e4b1a50c6809acc2
 NODE_SUM_arm64=261af2af250dfd7e9f25cf151d1b2713a0adf8f10a9ad116c4947f68627affe8
-PORT=""; ADDRESS=""; REMOVE=""
+PORT=""; ADDRESS=""; REMOVE=""; MEMORY=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --port) PORT=$2; shift 2 ;;
     --address) ADDRESS=$2; shift 2 ;;
+    --memory) MEMORY=$2; shift 2 ;;
     --remove) REMOVE=1; shift ;;
     *) echo "Unknown option: $1" >&2; exit 1 ;;
   esac
@@ -35,12 +36,19 @@ fi
 [ -d /run/systemd/system ] || { echo "This installer needs systemd. On other systems run:  node serve.mjs <configuration file>  from your own supervisor (see serve.mjs)." >&2; exit 1; }
 command -v openssl >/dev/null 2>&1 || { echo "openssl is required. Install it with your package manager and run this again." >&2; exit 1; }
 case "$PORT" in *[!0-9]*) echo "The port must be a number." >&2; exit 1 ;; esac
+case "$MEMORY" in ""|off) ;; neuron-db) [ -f "$HERE/node_modules/@gary23w/neuron-db/neuron_core.wasm" ] || { echo "This bundle was built without neuron-db, so --memory neuron-db cannot be used." >&2; exit 1; } ;; *) echo "The memory must be neuron-db or off." >&2; exit 1 ;; esac
 command -v curl >/dev/null 2>&1 || { echo "curl is required. Install it with your package manager and run this again." >&2; exit 1; }
 fetch() { curl -fsSL "$1" -o "$2"; }
 
 install -d -m 0755 "$LIB" "$LIB/src"
 install -m 0644 "$HERE/serve.mjs" "$HERE/sqlite.mjs" "$HERE/schema.sql" "$HERE/LICENSE" "$LIB/"
 install -m 0644 "$HERE"/src/*.mjs "$LIB/src/"
+# The optional memory engine (src/memory.mjs), when the bundle carries it. Used only if MEMORY=neuron-db is set.
+rm -rf "$LIB/node_modules"
+if [ -d "$HERE/node_modules/@gary23w/neuron-db" ]; then
+  install -d -m 0755 "$LIB/node_modules/@gary23w/neuron-db"
+  install -m 0644 "$HERE"/node_modules/@gary23w/neuron-db/* "$LIB/node_modules/@gary23w/neuron-db/"
+fi
 install -m 0755 "$HERE/garrett-service" /usr/bin/garrett-service
 
 # Node.js: the one already here if it is new enough, otherwise the official build from nodejs.org, checked against
@@ -88,9 +96,14 @@ if [ ! -s "$ETC/service.conf" ]; then
     echo "DATA_KEY=$(openssl rand -hex 32)"
     echo "# What machines do about a hostile program: kill (the default), pause or report. See the README for the rest."
     echo "RESPONSE_MODE="
+    echo "# Remember operators' verdicts and show a new case the nearest ones: neuron-db, or off (the default)."
+    echo "MEMORY=${MEMORY:-off}"
   } > "$ETC/service.conf"
 else
   # An upgrade keeps everything; only what was asked for on the command line changes.
+  if [ -n "$MEMORY" ]; then
+    if grep -q '^MEMORY=' "$ETC/service.conf"; then sed -i "s/^MEMORY=.*/MEMORY=$MEMORY/" "$ETC/service.conf"; else echo "MEMORY=$MEMORY" >> "$ETC/service.conf"; fi
+  fi
   [ -z "$PORT" ] || sed -i "s/^PORT=.*/PORT=$PORT/" "$ETC/service.conf"
   [ -z "$ADDRESS" ] || sed -i "s/^ADDRESS=.*/ADDRESS=$ADDRESS/" "$ETC/service.conf"
 fi

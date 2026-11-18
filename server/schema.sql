@@ -48,6 +48,12 @@ CREATE TABLE IF NOT EXISTS learning (
   revision INTEGER NOT NULL DEFAULT 0,
   updated_at INTEGER NOT NULL
 );
+-- The optional recall memory (see src/memory.mjs): the verdict sentences, sealed. Empty unless MEMORY is set.
+CREATE TABLE IF NOT EXISTS memory (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  facts TEXT NOT NULL DEFAULT '[]',
+  updated_at INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS audit (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   at INTEGER NOT NULL,

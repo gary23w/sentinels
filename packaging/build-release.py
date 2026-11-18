@@ -26,6 +26,7 @@ The archives are reproducible: fixed times, fixed owners, sorted names.
 import gzip
 import hashlib
 import io
+import json
 import sys
 import tarfile
 import zipfile
@@ -95,6 +96,14 @@ def main(arguments):
         add("NOTICES.md", windows("rust/NOTICES.md"))
     service = [(name, unix("server/" + name), 0o644) for name in ("serve.mjs", "sqlite.mjs", "ask.mjs", "schema.sql")]
     service += [("src/" + path.name, unix("server/src/" + path.name), 0o644) for path in sorted((ROOT / "server" / "src").glob("*.mjs"))]
+    # The service's optional memory engine (server/src/memory.mjs), as "npm install" in server/ left it: packed as
+    # published, so MEMORY=neuron-db works on an installed service with nothing more to fetch.
+    memory = ROOT / "server" / "node_modules" / "@gary23w" / "neuron-db"
+    if (memory / "neuron_core.wasm").is_file():
+        service += [("node_modules/@gary23w/neuron-db/" + name, (memory / name).read_bytes(), 0o644) for name in ("LICENSE", "index.mjs", "neuron_core.wasm", "package.json")]
+        print("neuron-db %s goes into the service bundles" % json.loads((memory / "package.json").read_text(encoding="utf-8"))["version"])
+    elif "--all" in arguments:
+        raise SystemExit("neuron-db is not in server/node_modules. Run npm install in server/ first (assemble-release.sh does).")
     tarball(out / "garrett-service.tar.gz", service + [("LICENSE", unix("LICENSE"), 0o644), ("install.sh", unix("packaging/service/install.sh"), 0o755),
             ("garrett-service", unix("packaging/service/garrett-service"), 0o755), ("garrett-service.service", unix("packaging/service/garrett-service.service"), 0o644)], "garrett-service")
     with zipfile.ZipFile(out / "garrett-service-windows.zip", "w", zipfile.ZIP_DEFLATED, compresslevel=9) as archive:

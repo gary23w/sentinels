@@ -1,6 +1,6 @@
 # garrett-service: your own Sentinel service on this Windows machine.
 #
-#   garrett-service.ps1 install [-Port 8443] [-Address <name or address other machines reach this one by>]
+#   garrett-service.ps1 install [-Port 8443] [-Address <name or address other machines reach this one by>] [-Memory neuron-db|off]
 #   garrett-service.ps1 join       the commands that join other machines to this service
 #   garrett-service.ps1 devices    the machines that report here
 #   garrett-service.ps1 cases      the open cases
@@ -14,7 +14,8 @@
 param(
   [ValidateSet('install', 'join', 'devices', 'cases', 'token', 'remove')][string]$Command = 'install',
   [int]$Port = 0,
-  [string]$Address = ''
+  [string]$Address = '',
+  [ValidateSet('', 'neuron-db', 'off')][string]$Memory = ''
 )
 $ErrorActionPreference = 'Stop'
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { throw 'Run this from an elevated PowerShell.' }
@@ -78,11 +79,20 @@ if ($Command -ne 'install') {
 
 # install
 $here = $PSScriptRoot
+$engine = Join-Path $here 'node_modules\@gary23w\neuron-db'
+if ($Memory -eq 'neuron-db' -and -not (Test-Path (Join-Path $engine 'neuron_core.wasm'))) { throw 'This bundle was built without neuron-db, so -Memory neuron-db cannot be used.' }
 if (Get-ScheduledTask -TaskName 'garrett-service' -ErrorAction SilentlyContinue) { Stop-ScheduledTask -TaskName 'garrett-service' -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2 }
 New-Item -ItemType Directory -Force -Path $install, (Join-Path $install 'src'), $data | Out-Null
 if ($here -ne $install) {
   Copy-Item -Force (Join-Path $here 'serve.mjs'), (Join-Path $here 'sqlite.mjs'), (Join-Path $here 'ask.mjs'), (Join-Path $here 'schema.sql'), (Join-Path $here 'LICENSE'), (Join-Path $here 'garrett-service.ps1') $install
   Copy-Item -Force (Join-Path $here 'src\*.mjs') (Join-Path $install 'src')
+  # The optional memory engine (src\memory.mjs), when the bundle carries it. Used only if MEMORY=neuron-db is set.
+  $modules = Join-Path $install 'node_modules'
+  if (Test-Path $modules) { Remove-Item -Recurse -Force $modules }
+  if (Test-Path $engine) {
+    New-Item -ItemType Directory -Force -Path (Join-Path $modules '@gary23w\neuron-db') | Out-Null
+    Copy-Item -Force (Join-Path $engine '*') (Join-Path $modules '@gary23w\neuron-db')
+  }
 }
 Set-Content -Path (Join-Path $install 'garrett-service.cmd') -Encoding ascii -Value ('@powershell.exe -NoProfile -ExecutionPolicy Bypass -File "' + (Join-Path $install 'garrett-service.ps1') + '" %*')
 # Node.js: the official build from nodejs.org, checked against the SHA-256 this installer was published with.
@@ -115,10 +125,12 @@ if (-not (Test-Path $conf)) {
     '# Lets a machine enrol. The join command carries it.', ('ENROLL_KEY=' + (New-Key)),
     '# Lets you read cases and decide. Keep it to yourself.', ('ADMIN_TOKEN=' + (New-Key)),
     '# Encrypts case evidence in the database. Lose it and stored evidence cannot be read.', ('DATA_KEY=' + (New-Key)),
-    '# What machines do about a hostile program: kill (the default), pause or report. See the README for the rest.', 'RESPONSE_MODE=')
+    '# What machines do about a hostile program: kill (the default), pause or report. See the README for the rest.', 'RESPONSE_MODE=',
+    "# Remember operators' verdicts and show a new case the nearest ones: neuron-db, or off (the default).", ('MEMORY=' + $(if ($Memory) { $Memory } else { 'off' })))
 } else {
   # An upgrade keeps everything; only what was asked for on the command line changes.
-  $lines = Get-Content $conf
+  $lines = @(Get-Content $conf)
+  if ($Memory) { if ($lines -match '^MEMORY=') { $lines = $lines -replace '^MEMORY=.*', "MEMORY=$Memory" } else { $lines += "MEMORY=$Memory" } }
   if ($Port) { $lines = $lines -replace '^PORT=.*', "PORT=$Port" }
   if ($Address) { $lines = $lines -replace '^ADDRESS=.*', "ADDRESS=$Address" }
   Set-Content -Path $conf -Encoding ascii -Value $lines

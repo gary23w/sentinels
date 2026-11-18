@@ -6,7 +6,7 @@
 #   <output>/dist   for the GitHub release: Debian packages, bundles, program files, SHA256SUMS
 #   <output>/site   for the project's site: apt repository, installers, update list, manual, the same downloads
 #
-# Needs a Debian or Ubuntu machine with: build-essential debhelper apt-utils mandoc python3
+# Needs a Debian or Ubuntu machine with: build-essential debhelper apt-utils mandoc python3 npm
 set -eu
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 [ $# -eq 2 ] || { echo "Usage: $0 <built program files> <output folder>" >&2; exit 1; }
@@ -26,6 +26,8 @@ sh "$HERE/packaging/make-apt-repo.sh" "$OUT/dist" "$OUT/site"
 # The program files by themselves: what an installed agent downloads when it updates itself.
 for name in $NAMES; do cp "$OUT/agents/$name" "$OUT/dist/$name"; done
 sed 's/\r$//' "$HERE/deploy/kubernetes-daemonset.yaml" > "$OUT/dist/kubernetes-daemonset.yaml"
+# The service's optional memory engine: the newest neuron-db release, packed into the service bundles.
+(cd "$HERE/server" && npm install --omit=dev --no-audit --no-fund >/dev/null)
 python3 -B "$HERE/packaging/build-release.py" "$OUT/dist" --agents "$OUT/agents" --all
 # The update list: the version, then the SHA-256 of each program file. An agent installs nothing this list
 # does not name, and nothing at all unless the list carries the project's signature.

@@ -84,8 +84,9 @@ export async function rememberVerdict(env, platform, detail, verdict, source = '
   const revision = state.revision + (changed ? 1 : 0);
   await env.DB.prepare('INSERT INTO learning(id,history,policy,revision,updated_at) VALUES(1,?,?,?,?) ON CONFLICT(id) DO UPDATE SET history=excluded.history,policy=excluded.policy,revision=excluded.revision,updated_at=excluded.updated_at')
     .bind(await seal(history, env.DATA_KEY), JSON.stringify(learned.policy), revision, now()).run();
-  // Optional semantic memory: see README "Plugging in a memory engine".
-  if (env.SENTINEL_MEMORY?.remember) { try { await env.SENTINEL_MEMORY.remember(verdict + ' case on ' + platform + ' with ' + shape.join(' ')); } catch {} }
+  // The optional recall memory: see memory.mjs. It holds operators' verdicts only: a stop the decision model
+  // ordered is not remembered, or the model would be shown its own decisions as precedent.
+  if (env.SENTINEL_MEMORY?.remember && source !== 'model') { try { await env.SENTINEL_MEMORY.remember(verdict + ' case on ' + platform + ' with ' + shape.join(' '), { platform, shape, verdict }); } catch {} }
   return { changes: learned.changes, rejected: learned.rejected, policy: learned.policy, revision, shapes: learnShapes(history) };
 }
 // What the operators decided before about cases like this one.
@@ -96,11 +97,14 @@ export async function recallSimilar(env, platform, detail) {
   const overlap = item => item.shape.filter(id => shape.includes(id)).length / new Set([...item.shape, ...shape]).size;
   const near = state.history.filter(item => overlap(item) >= 0.5);
   let recalled = [];
-  if (env.SENTINEL_MEMORY?.recall) { try { recalled = (await env.SENTINEL_MEMORY.recall('case on ' + platform + ' with ' + shape.join(' '), 3)).map(String).slice(0, 3); } catch {} }
+  if (env.SENTINEL_MEMORY?.recall) { try { recalled = (await env.SENTINEL_MEMORY.recall('case on ' + platform + ' with ' + shape.join(' '), 3, { platform, shape })).map(String).slice(0, 3); } catch {} }
   return { dismissed: near.filter(item => item.verdict === 'dismissed').length, confirmed: near.filter(item => item.verdict === 'confirmed').length, recalled };
 }
 export async function learningView(env) {
   const state = await load(env);
   return { verdicts: state.history.length, dismissed: state.history.filter(item => item.verdict === 'dismissed').length, confirmed: state.history.filter(item => item.verdict === 'confirmed').length, confirmed_by_model: state.history.filter(item => item.source === 'model').length, policy: state.policy, shapes: learnShapes(state.history), revision: state.revision, limit: POLICY_LIMIT };
 }
-export async function resetLearning(env) { await env.DB.prepare('DELETE FROM learning WHERE id=1').run(); }
+export async function resetLearning(env) {
+  await env.DB.prepare('DELETE FROM learning WHERE id=1').run();
+  if (env.SENTINEL_MEMORY?.forget) await env.SENTINEL_MEMORY.forget();
+}

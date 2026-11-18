@@ -43,7 +43,8 @@ jobs:
         with:
           node-version: 24
       - name: Service tests
-        run: cd server && npm test
+        # npm install brings in the newest neuron-db, so the optional memory's tests run against it.
+        run: cd server && npm install --no-audit --no-fund && npm test
         shell: bash
 
   linux:
@@ -271,6 +272,7 @@ jobs:
         run: |
           (cd rust && cargo build --release --locked)
           mkdir -p agents && cp rust/target/release/garrett agents/garrett-linux-x86_64
+          (cd server && npm install --omit=dev --no-audit --no-fund >/dev/null)
           python3 -B packaging/build-release.py site --agents agents >/dev/null
           cp packaging/install.sh site/
           # The one-line installer carries the hash of the bundle it installs: give it this build's, as a release does.
@@ -281,8 +283,11 @@ jobs:
           sleep 1
       - name: One line makes this machine a Sentinel service
         run: |
-          curl -fsSL "$GARRETT_BASE/service.sh" | sudo GARRETT_BASE="$GARRETT_BASE" sh -s -- --address 127.0.0.1 | sed -E 's/[a-f0-9]{64}/<hidden>/g'
+          curl -fsSL "$GARRETT_BASE/service.sh" | sudo GARRETT_BASE="$GARRETT_BASE" sh -s -- --address 127.0.0.1 --memory neuron-db | sed -E 's/[a-f0-9]{64}/<hidden>/g'
           systemctl is-active garrett-service
+          # The optional memory came in the bundle and the service started with it.
+          sudo grep -q '^MEMORY=neuron-db$' /etc/garrett-service/service.conf
+          sudo journalctl -u garrett-service --no-pager | grep -q "remembering verdicts with neuron-db"
           test "$(stat -c %U "/proc/$(systemctl show -p MainPID --value garrett-service)")" = garrett-service
       - name: A machine joins with the printed key and its case reaches the service
         run: |
@@ -345,6 +350,7 @@ jobs:
         run: |
           Push-Location rust; cargo build --release --locked; if ($LASTEXITCODE -ne 0) { throw 'the agent did not build' }; Pop-Location
           New-Item -ItemType Directory -Force agents | Out-Null; Copy-Item rust/target/release/garrett.exe agents/garrett-windows.exe
+          Push-Location server; npm install --omit=dev --no-audit --no-fund | Out-Null; if ($LASTEXITCODE -ne 0) { throw 'npm install failed' }; Pop-Location
           python -B packaging/build-release.py site --agents agents | Out-Null
           # The one-line installers carry the hash of the bundle they install: give them this build's, as a release does.
           $sums = @{}; Get-Content site/SHA256SUMS | ForEach-Object { $hash, $name = $_ -split '  ', 2; $sums[$name] = $hash }
@@ -377,7 +383,11 @@ jobs:
       - name: One line makes this machine a Sentinel service
         shell: powershell
         run: |
+          # With the optional memory on: the service answers only if neuron-db came in the bundle and loaded.
+          $env:GARRETT_MEMORY = 'neuron-db'
           irm "$env:GARRETT_BASE/service.ps1" | iex | ForEach-Object { $_ -replace '[a-f0-9]{64}', '<hidden>' }
+          if (-not (Select-String -Path "$env:ProgramData\garrett-service\service.conf" -Pattern '^MEMORY=neuron-db$' -Quiet)) { throw 'the memory setting was not written' }
+          if (-not (Test-Path "$env:ProgramFiles\garrett-service\node_modules\@gary23w\neuron-db\neuron_core.wasm")) { throw 'neuron-db was not installed with the service' }
           $task = Get-ScheduledTask -TaskName garrett-service
           "state: $($task.State) | runs as: $($task.Principal.UserId)"
           if ($task.State -ne 'Running' -or $task.Principal.UserId -notlike '*LOCAL SERVICE') { throw 'the task is not running as expected' }

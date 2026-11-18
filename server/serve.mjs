@@ -8,12 +8,15 @@
 //   DATABASE                            path of the database file
 //   PORT                                default 8443
 //   TLS_CERT and TLS_KEY                PEM files, or TLS_PFX and TLS_PASSPHRASE
+//   MEMORY                              neuron-db to remember verdicts and recall the nearest (see src/memory.mjs); off by
+//                                       default. The same on the command line:  node serve.mjs <file> --memory neuron-db
 //   anything else                       the same settings wrangler.example.jsonc documents (RESPONSE_MODE, FLEET_BLOCK, ...)
-// Needs Node.js 22.13 or newer. No packages to install.
+// Needs Node.js 22.13 or newer. No packages to install, unless MEMORY is set: then run "npm install" in this folder.
 import https from 'node:https';
 import { readFileSync } from 'node:fs';
 import worker from './src/worker.mjs';
 import { database } from './sqlite.mjs';
+import { memoryChoice, neuronMemory } from './src/memory.mjs';
 
 const MAX_BODY = 1024 * 1024;
 const file = process.argv[2];
@@ -26,8 +29,9 @@ const tls = settings.TLS_PFX ? { pfx: readFileSync(settings.TLS_PFX), passphrase
   : settings.TLS_CERT && settings.TLS_KEY ? { cert: readFileSync(settings.TLS_CERT), key: readFileSync(settings.TLS_KEY) } : null;
 if (!tls) { console.error('Set TLS_CERT and TLS_KEY, or TLS_PFX, in ' + file + '. Agents only talk to a service over HTTPS.'); process.exit(1); }
 
-const { PORT, DATABASE, TLS_CERT, TLS_KEY, TLS_PFX, TLS_PASSPHRASE, ADDRESS, ...rest } = settings;
+const { PORT, DATABASE, TLS_CERT, TLS_KEY, TLS_PFX, TLS_PASSPHRASE, ADDRESS, MEMORY, ...rest } = settings;
 const env = { AI_PROVIDER: 'none', ...rest, DB: database(DATABASE) };
+try { if (memoryChoice(MEMORY, process.argv.slice(3))) env.SENTINEL_MEMORY = await neuronMemory(env); } catch (error) { console.error(error.message); process.exit(1); }
 const background = promise => { Promise.resolve(promise).catch(() => {}); };
 
 const server = https.createServer({ ...tls, minVersion: 'TLSv1.2' }, async (req, res) => {
@@ -44,5 +48,5 @@ server.requestTimeout = 30000; server.headersTimeout = 15000;
 // The housekeeping Cloudflare runs from a cron trigger: old closed cases out, watched addresses refreshed.
 const housekeeping = () => worker.scheduled({}, env, { waitUntil: background }).catch(() => {});
 setInterval(housekeeping, 15 * 60 * 1000).unref();
-server.listen(Number(PORT) || 8443, () => { console.log('Sentinel service listening on port ' + server.address().port); housekeeping(); });
+server.listen(Number(PORT) || 8443, () => { console.log('Sentinel service listening on port ' + server.address().port + (env.SENTINEL_MEMORY ? ', remembering verdicts with ' + env.SENTINEL_MEMORY.engine : '')); housekeeping(); });
 for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => server.close(() => { env.DB.close(); process.exit(0); }));
