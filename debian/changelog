@@ -1,3 +1,37 @@
+garrett (1.9.0) stable; urgency=medium
+
+  * The service installs from one file. The one-line installers
+    (service.sh, service.ps1) fetch garrett-sentinels-<platform> from the
+    release, check it against the SHA-256 pinned in them, and run it.
+    Inside it are the service, the Node.js runtime, the decision model
+    crivo-sentinel-v1 and the Sentinel agent for that machine: nothing
+    else is downloaded. The service and the agent run as daemons started
+    at every boot, the agent is enrolled to the service, and --remove
+    (remove on Windows) takes all of it out again. Built for Linux x86_64
+    and aarch64, and for Windows.
+  * The decision model that comes with the service runs inside it. The
+    service loads model.onnx itself, with onnxruntime and a pure-JS
+    tokenizer, and decides what happens to a frozen program without a
+    second program or anything on the network; MODEL_DIR names the
+    model's folder. The model is crivo-sentinel-v1
+    (huggingface.co/gary23w/crivo-sentinel-v1), a typed-decision encoder
+    of 68 million parameters trained from an Apache-2.0 base on cases
+    written as the service sends them; its answers match the PyTorch
+    model it was exported from. --model off installs without it.
+  * A setup wizard. sudo garrett-service setup (garrett-service.cmd setup
+    on Windows), or --wizard on the install line, asks which model
+    decides (the one that comes with it; a decision model, a chat model or
+    an analyst of your own at an address; or none), how sure it must be
+    before the service acts, whether a confident release may let a frozen
+    program go, what happens when the model does not answer in time, and
+    what machines do with a hostile program. It writes the settings, or
+    with --print shows the lines to put in by hand.
+  * AI_CA_CERT trusts a certificate of your own for a model at an
+    address.
+  * The agent is unchanged.
+
+ -- sentinels <noreply@sentinels.invalid>  Wed, 18 Nov 2026 20:57:54 +0000
+
 garrett (1.8.2) stable; urgency=medium
 
   * The service can remember its operators' verdicts and show a new case
