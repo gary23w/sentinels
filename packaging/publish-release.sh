@@ -1,6 +1,7 @@
 #!/bin/sh
-# Publish a signed garrett release: the site first (the apt repository, the installers, the update list), then the
-# GitHub release. Run it from a checkout of this repository, with git and gh signed in.
+# Publish a signed garrett release: the site first (the apt, pacman and rpm repositories, the Scoop manifest, the
+# installers, the update list), then the GitHub release, then the Homebrew tap. Run it from a checkout of this
+# repository, with git and gh signed in.
 #
 #   sh packaging/publish-release.sh <release folder>
 #
@@ -11,7 +12,7 @@ set -eu
 REL=$(CDPATH= cd -- "$1" && pwd)
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 VERSION=$(sed -n '1s/^garrett //p' "$REL/site/update.txt")
-for need in site/update.txt.sig site/dists/stable/InRelease site/garrett.gpg dist/SHA256SUMS.asc; do
+for need in site/update.txt.sig site/dists/stable/InRelease site/garrett.gpg dist/SHA256SUMS.asc site/arch/x86_64/sentinels.db.sig site/rpm/repodata/repomd.xml.asc; do
   [ -s "$REL/$need" ] || { echo "$need is missing: sign the release first (packaging/sign-release.sh)." >&2; exit 1; }
 done
 ORIGIN=$(git -C "$HERE" remote get-url origin)
@@ -36,3 +37,19 @@ NOTES="$REL/notes.md"
 [ -s "$NOTES" ] || sed -n '/^garrett ('"$VERSION"')/,/^ -- /p' debian/changelog | sed '1d;$d' | sed 's/^  //' > "$NOTES"
 gh release create "v$VERSION" --title "garrett $VERSION" --notes-file "$NOTES" "$REL"/dist/*
 echo "Released: v$VERSION"
+# The Homebrew tap, a repository of its own beside this one (brew install <owner>/sentinels/garrett), takes the
+# formula for this release. It downloads the files just released, so it goes last.
+TAP=$(printf '%s\n' "$ORIGIN" | sed -n 's#.*github\.com[:/]\([^/]*\)/.*#\1#p')/homebrew-sentinels
+if [ -s "$REL/packages/homebrew/garrett.rb" ] && gh repo view "$TAP" >/dev/null 2>&1; then
+  git clone --quiet "https://github.com/$TAP.git" "$WORK/tap" 2>/dev/null
+  mkdir -p "$WORK/tap/Formula"
+  cp "$REL/packages/homebrew/garrett.rb" "$WORK/tap/Formula/garrett.rb"
+  git -C "$WORK/tap" config user.name "$(git -C "$HERE" config user.name)"; git -C "$WORK/tap" config user.email "$(git -C "$HERE" config user.email)"
+  git -C "$WORK/tap" add Formula/garrett.rb
+  git -C "$WORK/tap" commit --quiet -m "garrett $VERSION"
+  git -C "$WORK/tap" push --quiet origin HEAD:refs/heads/main
+  echo "The Homebrew tap $TAP carries garrett $VERSION."
+else
+  echo "No Homebrew tap at $TAP: the formula is in $REL/packages/homebrew." >&2
+fi
+echo "winget, the AUR and Chocolatey keep their own copies: sh packaging/submit-packages.sh $REL winget|aur|chocolatey"

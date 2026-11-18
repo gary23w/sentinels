@@ -6,7 +6,7 @@
 #     sh packaging/sign-release.sh <release folder>
 #
 # Two keys sign two things:
-#   the package signing key (OpenPGP)   the apt repository, and SHA256SUMS
+#   the package signing key (OpenPGP)   the apt, pacman and rpm repositories, and SHA256SUMS
 #   the update key (Ed25519)            update.txt, the list an installed agent checks before it updates itself;
 #                                       its public half is compiled into the agent (rust/src/update.rs)
 # Needs gpg and OpenSSL 3.
@@ -28,6 +28,16 @@ PIN=$(grep '^APT_KEY_SHA=' install.sh | cut -d"'" -f2)
 ACTUAL=$(sha256sum garrett.gpg | cut -d' ' -f1)
 [ "$PIN" = "$ACTUAL" ] || { echo "The installer does not pin this release's apt signing key." >&2; exit 1; }
 gpg --verify dists/stable/Release.gpg dists/stable/Release 2>/dev/null
+# The pacman repository: a signature beside each package and each database. pacman fetches a package's signature
+# from beside it when the database does not carry one, and refuses the package without it.
+for file in arch/*/*.pkg.tar.zst arch/*/sentinels.db arch/*/sentinels.files; do
+  gpg --batch --yes --default-key "$KEY" --detach-sign -o "$file.sig" "$file"
+  gpg --verify "$file.sig" "$file" 2>/dev/null
+done
+cp arch/*/*.pkg.tar.zst.sig "$REL/dist/"
+# The rpm repository: its list of packages, which names each package's digest (repo_gpgcheck in garrett.repo).
+gpg --batch --yes --default-key "$KEY" --armor --detach-sign -o rpm/repodata/repomd.xml.asc rpm/repodata/repomd.xml
+gpg --verify rpm/repodata/repomd.xml.asc rpm/repodata/repomd.xml 2>/dev/null
 cd "$REL/dist"
 sha256sum -c SHA256SUMS >/dev/null
 gpg --batch --yes --default-key "$KEY" --armor --detach-sign -o SHA256SUMS.asc SHA256SUMS

@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  garrett, the Sentinel agent, as a Windows Installer package (garrett-windows.msi): what winget, Chocolatey,
+  Intune and Group Policy install. It is built by the release workflow with WiX 5:
+
+    wix build -arch x64 -ext WixToolset.Util.wixext -d Version=<x.y.z> -d ProductCode=<guid> -d Agent=<garrett.exe>
+      -d Root=<this repository> -o garrett-windows.msi packaging/windows/garrett.wxs
+
+  The package carries the same files as the release bundle and runs the same installer: it puts them in
+  C:\Program Files\Common Files\garrett, then deploy\install-windows.ps1 copies the agent to C:\Program Files\garrett,
+  locks it, and starts it as SYSTEM at every boot. Removing the package runs deploy\uninstall-windows.ps1.
+
+  An upgrade replaces the package without removing garrett: the agent's cases, what it learned and its enrolment
+  stay. The agent updates itself between packages as it does everywhere else.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="garrett" Manufacturer="sentinels" Version="$(var.Version)" ProductCode="$(var.ProductCode)"
+           UpgradeCode="{2B1D45BD-2122-4287-9038-99946685113B}" Scope="perMachine" Compressed="yes">
+    <MajorUpgrade Schedule="afterInstallInitialize" DowngradeErrorMessage="A newer garrett is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/gary23w/sentinels" />
+    <Property Id="ARPHELPLINK" Value="https://gary23w.github.io/sentinels/manual.html" />
+    <Property Id="ARPNOMODIFY" Value="1" />
+    <Property Id="ARPNOREPAIR" Value="1" />
+
+    <StandardDirectory Id="CommonFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="garrett">
+        <Directory Id="DEPLOYFOLDER" Name="deploy" />
+      </Directory>
+    </StandardDirectory>
+
+    <Feature Id="garrett">
+      <Component Directory="INSTALLFOLDER">
+        <File Id="agent" Source="$(var.Agent)" Name="garrett.exe" KeyPath="yes" />
+      </Component>
+      <Component Directory="INSTALLFOLDER">
+        <File Id="license" Source="$(var.Root)\LICENSE" Name="LICENSE" KeyPath="yes" />
+      </Component>
+      <Component Directory="INSTALLFOLDER">
+        <File Id="notices" Source="$(var.Root)\rust\NOTICES.md" Name="NOTICES.md" KeyPath="yes" />
+      </Component>
+      <Component Directory="DEPLOYFOLDER">
+        <File Id="install" Source="$(var.Root)\deploy\install-windows.ps1" Name="install-windows.ps1" KeyPath="yes" />
+      </Component>
+      <Component Directory="DEPLOYFOLDER">
+        <File Id="uninstall" Source="$(var.Root)\deploy\uninstall-windows.ps1" Name="uninstall-windows.ps1" KeyPath="yes" />
+      </Component>
+    </Feature>
+
+    <!-- Each script runs as SYSTEM, without a window; what it writes goes to the Windows Installer log. -->
+    <SetProperty Id="GarrettInstall" Before="GarrettInstall" Sequence="execute"
+                 Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[DEPLOYFOLDER]install-windows.ps1&quot;" />
+    <CustomAction Id="GarrettInstall" BinaryRef="Wix4UtilCA_X64" DllEntry="WixQuietExec" Execute="deferred" Impersonate="no" Return="check" />
+    <SetProperty Id="GarrettRemove" Before="GarrettRemove" Sequence="execute"
+                 Value="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -NonInteractive -ExecutionPolicy Bypass -File &quot;[DEPLOYFOLDER]uninstall-windows.ps1&quot;" />
+    <CustomAction Id="GarrettRemove" BinaryRef="Wix4UtilCA_X64" DllEntry="WixQuietExec" Execute="deferred" Impersonate="no" Return="check" />
+    <InstallExecuteSequence>
+      <!-- Installed, upgraded or repaired: the installer puts the agent in place and (re)starts it. -->
+      <Custom Action="GarrettInstall" Before="InstallFinalize" Condition="NOT REMOVE" />
+      <!-- Removed, and not because a newer package is replacing this one: garrett leaves the machine. -->
+      <Custom Action="GarrettRemove" Before="RemoveFiles" Condition="REMOVE~=&quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE" />
+    </InstallExecuteSequence>
+  </Package>
+</Wix>

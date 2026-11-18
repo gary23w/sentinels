@@ -1,0 +1,30 @@
+{
+    "version": "@VERSION@",
+    "description": "garrett, the Sentinel agent: a host intrusion sentinel that stops what it catches. It runs as SYSTEM, so install it from a PowerShell opened with Run as administrator.",
+    "homepage": "https://github.com/gary23w/sentinels",
+    "license": "MIT",
+    "notes": [
+        "garrett is running as SYSTEM, starts with Windows, and keeps itself up to date. See what it finds:",
+        "  & 'C:\\Program Files\\garrett\\garrett.cmd' cases"
+    ],
+    "architecture": {
+        "64bit": {
+            "url": "https://github.com/gary23w/sentinels/releases/download/v@VERSION@/garrett-windows.zip",
+            "hash": "@SHA_garrett-windows.zip@"
+        }
+    },
+    "extract_dir": "garrett",
+    "installer": {
+        "script": [
+            "# The bundle's installer copies garrett to C:\\Program Files\\garrett, locks it, and starts it as SYSTEM.",
+            "& \"$dir\\deploy\\install-windows.ps1\""
+        ]
+    },
+    "uninstaller": {
+        "script": [
+            "# Scoop runs this before every update as well ($cmd is then 'update'): garrett, its cases and its enrolment",
+            "# stay on the machine through an update, and only leave it on scoop uninstall.",
+            "if ($cmd -eq 'uninstall') { & \"$dir\\deploy\\uninstall-windows.ps1\" }"
+        ]
+    }
+}

@@ -6,6 +6,7 @@ Key facts:
 
 - Install on Linux and macOS: `curl -fsSL https://gary23w.github.io/sentinels/install.sh | sudo sh`
 - Install on Windows, from an elevated PowerShell: `irm https://gary23w.github.io/sentinels/install.ps1 | iex`
+- Package managers: signed apt, pacman and RPM repositories, Homebrew (`brew install gary23w/sentinels/garrett`), Scoop (`scoop install https://gary23w.github.io/sentinels/garrett.json`) and a Windows Installer package: https://github.com/gary23w/sentinels#with-a-package-manager
 - Response modes: `kill` (the default) ends a hostile program and everything it started; `pause` freezes it for an operator; `decide` freezes it and lets the service's configured model decide; `report` only reports.
 - The default `kill` mode does not call a model. AI case analysis and `decide` mode need a provider configured on the service.
 - No account, cloud console or kernel module is needed. Installed by itself, the agent keeps its cases on the machine.
@@ -14,7 +15,7 @@ Key facts:
 
 ## Docs
 
-- [sentinels(8)](https://gary23w.github.io/sentinels/): install, response modes, apt repository, fleet service, updates
+- [sentinels(8)](https://gary23w.github.io/sentinels/): install, response modes, apt, pacman and RPM repositories and other packages, fleet service, updates
 - [garrett(8) manual](https://gary23w.github.io/sentinels/manual.html): every command, the configuration file, learning, the privacy shield, firmware and boot checks, network checks, updates
 - [AI-operated intrusions](https://gary23w.github.io/sentinels/ai-attacks.html): what an intrusion run by an AI agent looks like on a host and how garrett ends it
 

@@ -1,0 +1,11 @@
+# garrett's rpm repository, for dnf, yum and zypper. Its list of packages carries the project's signature
+# (repo_gpgcheck), and each package is checked against the digest that signed list gives for it.
+#   sudo curl -fsSL -o /etc/yum.repos.d/garrett.repo https://gary23w.github.io/sentinels/garrett.repo
+#   sudo dnf install garrett
+[garrett]
+name=garrett
+baseurl=https://gary23w.github.io/sentinels/rpm
+enabled=1
+repo_gpgcheck=1
+gpgcheck=0
+gpgkey=https://gary23w.github.io/sentinels/garrett.asc

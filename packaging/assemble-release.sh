@@ -3,10 +3,15 @@
 #
 #   sh packaging/assemble-release.sh <folder the built program files were downloaded to> <output folder>
 #
-#   <output>/dist   for the GitHub release: Debian packages, bundles, program files, SHA256SUMS
-#   <output>/site   for the project's site: apt repository, installers, update list, manual, the same downloads
+#   <output>/dist       for the GitHub release: Debian, pacman and rpm packages, the Windows Installer package,
+#                       bundles, program files, SHA256SUMS
+#   <output>/site       for the project's site: apt, pacman and rpm repositories, the Scoop manifest, installers,
+#                       update list, manual, the same downloads
+#   <output>/packages   for the package managers that keep their own copy: the Homebrew formula, the winget
+#                       manifests, the AUR's PKGBUILD and the Chocolatey package (packaging/build-packages.sh)
 #
-# Needs a Debian or Ubuntu machine with: build-essential debhelper apt-utils mandoc python3 npm curl
+# Needs a Debian or Ubuntu machine with: build-essential debhelper apt-utils mandoc python3 npm curl docker rpm
+# createrepo-c
 # It fetches the official Node.js builds and the decision model's files, each checked against the SHA-256 here.
 set -eu
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
@@ -24,6 +29,11 @@ for name in $NAMES $STUBS; do
   # A download from the workflow puts each file in a folder of its own name.
   if [ -f "$BUILT/$name/$name" ]; then cp "$BUILT/$name/$name" "$INTO/$name"; else cp "$BUILT/$name" "$INTO/$name"; fi
 done
+# The Windows Installer package (packaging/windows/garrett.wxs) and the Chocolatey package that installs it, both
+# made on the Windows build machine, where the package was built and tested.
+cp "$BUILT/garrett-windows.msi/garrett-windows.msi" "$OUT/dist/garrett-windows.msi"
+mkdir -p "$OUT/packages/chocolatey"
+cp "$BUILT/garrett-chocolatey/garrett.$VERSION.nupkg" "$OUT/packages/chocolatey/"
 # The Node.js runtime the one-file installers carry: the official builds, checked against their published digests.
 NODE_VERSION=v24.22.3
 fetch_checked() { curl -fsSL "$1" -o "$2"; [ "$(sha256sum "$2" | cut -d' ' -f1)" = "$3" ] || { echo "$2 does not match its digest." >&2; exit 1; }; }
@@ -48,6 +58,10 @@ sed 's/\r$//' "$HERE/deploy/kubernetes-daemonset.yaml" > "$OUT/dist/kubernetes-d
 # The service's optional memory engine: the newest neuron-db release, packed into the service bundles.
 (cd "$HERE/server" && ONNXRUNTIME_NODE_INSTALL=skip npm install --omit=dev --no-audit --no-fund >/dev/null)
 python3 -B "$HERE/packaging/build-release.py" "$OUT/dist" --agents "$OUT/agents" --installers "$OUT/installers" --node "$OUT/node" --model "$OUT/model" --all
+# The pacman and rpm packages, built from the Linux bundles just made, and the other package managers' files;
+# then SHA256SUMS again, so that it lists the new packages too.
+sh "$HERE/packaging/build-packages.sh" "$OUT"
+python3 -B "$HERE/packaging/build-release.py" "$OUT/dist" --sums-only
 # The update list: the version, then the SHA-256 of each program file. An agent installs nothing this list
 # does not name, and nothing at all unless the list carries the project's signature.
 { echo "garrett $VERSION"; for name in $NAMES; do grep "  $name\$" "$OUT/dist/SHA256SUMS"; done; } > "$OUT/site/update.txt"
@@ -64,4 +78,4 @@ for name in "$HERE"/packaging/site/*; do case "${name##*/}" in index.html|manual
 { sed -n '1,/@MANUAL@/p' "$HERE/packaging/site/manual.html" | sed '$d'; mandoc -T html -O fragment "$HERE/debian/garrett.8"; sed -n '/@MANUAL@/,$p' "$HERE/packaging/site/manual.html" | sed '1d'; } > "$OUT/site/manual.html"
 : > "$OUT/site/.nojekyll"
 rm -rf "$OUT/agents" "$OUT/installers" "$OUT/node" "$OUT/model"
-echo "garrett $VERSION, unsigned:"; (cd "$OUT" && find dist site -type f | sort)
+echo "garrett $VERSION, unsigned:"; (cd "$OUT" && find dist site packages -type f | sort)

@@ -1,0 +1,38 @@
+# garrett, the Sentinel agent, for Arch Linux and its relatives (pacman).
+#
+# It packs the program files the release workflow built, from the release's Linux bundles: nothing is compiled
+# here. packaging/package-managers.py fills in the version and each bundle's SHA-256 for a release, and
+# packaging/build-packages.sh builds the project's pacman repository from the result. The same file, named
+# garrett-bin, is the one for the AUR.
+#
+# Arch packages do not start their services by themselves: after installing, systemctl enable --now garrett
+pkgname=garrett
+pkgver=@VERSION@
+pkgrel=1
+pkgdesc='Host intrusion sentinel that stops what it catches'
+arch=('x86_64' 'aarch64' 'armv7h')
+url='https://github.com/gary23w/sentinels'
+license=('MIT')
+depends=('iproute2')
+optdepends=('nftables: fleet blocking, which refuses the addresses your service names at the firewall')
+install=garrett.install
+# The program file is statically linked and already stripped.
+options=('!strip' '!debug')
+_release="https://github.com/gary23w/sentinels/releases/download/v$pkgver"
+source_x86_64=("garrett-linux-x86_64-$pkgver.tar.gz::$_release/garrett-linux-x86_64.tar.gz")
+source_aarch64=("garrett-linux-aarch64-$pkgver.tar.gz::$_release/garrett-linux-aarch64.tar.gz")
+source_armv7h=("garrett-linux-armv7-$pkgver.tar.gz::$_release/garrett-linux-armv7.tar.gz")
+sha256sums_x86_64=('@SHA_garrett-linux-x86_64.tar.gz@')
+sha256sums_aarch64=('@SHA_garrett-linux-aarch64.tar.gz@')
+sha256sums_armv7h=('@SHA_garrett-linux-armv7.tar.gz@')
+
+package() {
+  cd garrett
+  install -Dm0755 garrett-agent "$pkgdir/usr/lib/garrett/garrett-agent"
+  install -Dm0755 unblock "$pkgdir/usr/lib/garrett/unblock"
+  install -Dm0755 garrett "$pkgdir/usr/bin/garrett"
+  install -Dm0644 garrett.service "$pkgdir/usr/lib/systemd/system/garrett.service"
+  install -Dm0644 garrett.8 "$pkgdir/usr/share/man/man8/garrett.8"
+  install -Dm0644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm0644 NOTICES.md "$pkgdir/usr/share/doc/$pkgname/NOTICES.md"
+}

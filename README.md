@@ -36,6 +36,38 @@ irm https://gary23w.github.io/sentinels/install.ps1 | iex
 
 Done. The machine is protected from that moment, garrett starts again at every boot, and it keeps itself up to date.
 
+### With a package manager
+
+The same garrett, from the project's signed repositories or your package manager.
+
+| System | Install |
+|---|---|
+| Debian, Ubuntu | Add the apt repository below, then `sudo apt install garrett` |
+| Arch Linux | Add the pacman repository below, then `sudo pacman -Syu garrett && sudo systemctl enable --now garrett` |
+| Fedora, RHEL | `sudo curl -fsSL -o /etc/yum.repos.d/garrett.repo https://gary23w.github.io/sentinels/garrett.repo`, then `sudo dnf install garrett && sudo systemctl enable --now garrett` |
+| openSUSE | `sudo zypper addrepo https://gary23w.github.io/sentinels/garrett.repo`, then `sudo zypper install garrett && sudo systemctl enable --now garrett` |
+| macOS, Linux with Homebrew | `brew install gary23w/sentinels/garrett`, then the `sudo sh …/install.sh` line it prints, which starts garrett as root from a root-owned folder |
+| Windows with Scoop | `scoop install https://gary23w.github.io/sentinels/garrett.json`, from PowerShell opened with "Run as administrator" |
+| Windows Installer | [garrett-windows.msi](https://github.com/gary23w/sentinels/releases/latest/download/garrett-windows.msi): double-click it, or `msiexec /i garrett-windows.msi /qn` from Intune, Group Policy or your own tools |
+
+The apt repository:
+
+```sh
+curl -fsSL https://gary23w.github.io/sentinels/garrett.gpg | sudo tee /usr/share/keyrings/garrett.gpg >/dev/null
+echo "deb [signed-by=/usr/share/keyrings/garrett.gpg] https://gary23w.github.io/sentinels stable main" | sudo tee /etc/apt/sources.list.d/garrett.list
+sudo apt update
+```
+
+The pacman repository:
+
+```sh
+curl -fsSL https://gary23w.github.io/sentinels/garrett.asc | sudo pacman-key --add -
+sudo pacman-key --lsign-key 6857EBCBBEF51040C3F20107362688BFC238AB45
+printf '\n[sentinels]\nServer = https://gary23w.github.io/sentinels/arch/$arch\n' | sudo tee -a /etc/pacman.conf
+```
+
+All three repositories are signed with the key whose fingerprint is `6857 EBCB BEF5 1040 C3F2 0107 3626 88BF C238 AB45`.
+
 ### All your computers and servers
 
 **1. Pick one machine to be the hub.** Run this on it.
@@ -132,7 +164,7 @@ cd rust && cargo test && cargo build --release
 
 The agent lives in `rust/`, the service in `server/`, the installers in `packaging/` and `deploy/`, and the stub of the one-file service installer in `packaging/installer/`. The decision model, with the code that trains and measures it, is its own repository: [huggingface.co/gary23w/crivo-sentinel-v1](https://huggingface.co/gary23w/crivo-sentinel-v1). Clone it as `model/` inside this one to train it again.
 
-To remove it: `sudo apt purge garrett` on Debian and Ubuntu, `sudo sh install.sh --remove` from the Linux or macOS bundle, or `Uninstall garrett.cmd` from the Windows bundle. It takes its firewall rules and its files with it.
+To remove it: `sudo apt purge garrett` on Debian and Ubuntu, `sudo pacman -R garrett`, `sudo dnf remove garrett` or `sudo zypper remove garrett` where those installed it, `sudo sh install.sh --remove` from the Linux or macOS bundle (with Homebrew, the `--remove` line it printed, then `brew uninstall garrett`), `scoop uninstall garrett`, garrett in Windows' Apps and Features, or `Uninstall garrett.cmd` from the Windows bundle. It takes its firewall rules and its files with it.
 
 ## License
 

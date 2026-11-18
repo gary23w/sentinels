@@ -1,0 +1,22 @@
+# What pacman runs around installing, upgrading and removing garrett.
+
+post_install() {
+  echo "garrett is installed. Start it now and at every boot:  systemctl enable --now garrett"
+  echo "Then see what it finds:  garrett cases"
+}
+
+post_upgrade() {
+  # The new version takes over from the running one, as the Debian package does.
+  systemctl daemon-reload >/dev/null 2>&1 || true
+  systemctl try-restart garrett.service >/dev/null 2>&1 || true
+}
+
+pre_remove() {
+  # Stopped while its files are still there, so whatever addresses it refused are let through again.
+  systemctl disable --now garrett.service >/dev/null 2>&1 || true
+}
+
+post_remove() {
+  # The one firewall table garrett owns goes with it.
+  if command -v nft >/dev/null 2>&1; then nft delete table inet garrett 2>/dev/null || true; fi
+}

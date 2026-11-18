@@ -18,6 +18,14 @@
 #   garrett-windows.exe                           64-bit Windows, with no runtime to install
 #   garrett-installer-*                           the stub of the one-file service installers (packaging/installer), one for
 #                                                 Linux x86_64, Linux aarch64 and Windows; assemble-release.sh fills them
+#   garrett-windows.msi                           the Windows Installer package (packaging/windows/garrett.wxs) that
+#                                                 winget and Chocolatey install, tried on the Windows machine that built
+#                                                 it, which also packs the Chocolatey package
+#
+# assemble packs the rest, and builds the pacman and rpm packages and the files for Homebrew, Scoop, winget and the
+# AUR (packaging/build-packages.sh). Each package is installed and removed again before the release is kept: apt,
+# pacman, dnf and zypper in their systems' containers, Homebrew on a Mac, Scoop and the Windows Installer package
+# and Chocolatey on Windows.
 #
 # The folders of the build machines are not kept in the program files: they are written as `home` and `garrett`.
 name: release
@@ -128,12 +136,83 @@ jobs:
         with:
           name: garrett-windows.exe
           path: garrett-windows.exe
+      - name: Windows Installer package
+        # packaging/windows/garrett.wxs, with WiX 5. A second package one version newer is built only to check
+        # that an upgrade keeps what the agent has.
+        shell: pwsh
+        run: |
+          dotnet tool install --global wix --version 5.0.2
+          wix extension add --global WixToolset.Util.wixext/5.0.2
+          $version = (Select-String -Path rust/Cargo.toml -Pattern '^version = "(.+)"').Matches[0].Groups[1].Value
+          function Build-Package([string]$v, [string]$out) {
+            $code = python -B packaging/package-managers.py product-code $v
+            wix build -arch x64 -ext WixToolset.Util.wixext -d Version=$v -d "ProductCode={$code}" -d Agent=garrett-windows.exe -d Root=. -o $out packaging/windows/garrett.wxs
+            if ($LASTEXITCODE -ne 0) { throw "The package for $v did not build." }
+          }
+          Build-Package $version garrett-windows.msi
+          $parts = $version.Split('.')
+          Build-Package "$($parts[0]).$($parts[1]).$([int]$parts[2] + 1)" garrett-windows-next.msi
+      - name: The package installs garrett, keeps it through an upgrade, and removes it
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          function Msi([string[]]$arguments) {
+            $run = Start-Process msiexec.exe -ArgumentList ($arguments + '/qn', '/norestart', '/l*v', 'msi.log') -Wait -PassThru
+            if ($run.ExitCode -notin 0, 3010) { Get-Content msi.log | Select-Object -Last 80; throw "msiexec $arguments ended with $($run.ExitCode)" }
+          }
+          function Entries { @(Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*' | Where-Object DisplayName -eq 'garrett') }
+          $command = Join-Path $env:ProgramFiles 'garrett\garrett.cmd'
+          $state = Join-Path $env:ProgramData 'garrett'
+          Msi '/i', 'garrett-windows.msi'
+          & $command status
+          if ($LASTEXITCODE -ne 0) { throw 'garrett status failed after the install.' }
+          if ((Get-ScheduledTask -TaskName garrett).State -ne 'Running') { throw 'The scheduled task is not running.' }
+          if ((Entries).Count -ne 1) { throw 'Apps and Features has no entry for garrett.' }
+          $born = (Get-Item -LiteralPath $state -Force).CreationTimeUtc
+          Msi '/i', 'garrett-windows-next.msi'
+          & $command status
+          if ($LASTEXITCODE -ne 0) { throw 'garrett status failed after the upgrade.' }
+          if ((Get-Item -LiteralPath $state -Force).CreationTimeUtc -ne $born) { throw 'The upgrade replaced what the agent had.' }
+          if ((Entries).Count -ne 1) { throw 'The upgrade left two entries in Apps and Features.' }
+          Msi '/x', 'garrett-windows-next.msi'
+          if (Get-ScheduledTask -TaskName garrett -ErrorAction SilentlyContinue) { throw 'The scheduled task was left behind.' }
+          foreach ($left in (Join-Path $env:ProgramFiles 'garrett'), $state, (Join-Path $env:CommonProgramFiles 'garrett')) { if (Test-Path -LiteralPath $left) { throw "Left behind: $left" } }
+          if ((Entries).Count) { throw 'The Apps and Features entry was left behind.' }
+          'The package installed garrett, kept it through an upgrade, and removed it.'
+      - name: Chocolatey package
+        # The one for the release downloads the Windows Installer package from the GitHub release. A copy that
+        # installs the one built here instead shows that it installs and removes garrett.
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -B packaging/package-managers.py chocolatey choco garrett-windows.msi
+          choco pack choco/garrett.nuspec --outputdirectory chocolatey --limit-output
+          python -B packaging/package-managers.py chocolatey choco-try garrett-windows.msi --base-url ('file:///' + ($PWD.Path -replace '\\', '/'))
+          choco pack choco-try/garrett.nuspec --outputdirectory choco-try-out --limit-output
+          choco install garrett --source "$PWD\choco-try-out" --yes --no-progress
+          if ($LASTEXITCODE -ne 0) { throw 'choco install failed.' }
+          & (Join-Path $env:ProgramFiles 'garrett\garrett.cmd') status
+          if ($LASTEXITCODE -ne 0) { throw 'garrett status failed after choco install.' }
+          choco uninstall garrett --yes --no-progress
+          if ($LASTEXITCODE -ne 0) { throw 'choco uninstall failed.' }
+          if (Get-ScheduledTask -TaskName garrett -ErrorAction SilentlyContinue) { throw 'choco uninstall left the scheduled task.' }
+          if (Test-Path (Join-Path $env:ProgramFiles 'garrett')) { throw 'choco uninstall left the program folder.' }
+          Get-ChildItem chocolatey
+      - uses: actions/upload-artifact@v4
+        with:
+          name: garrett-windows.msi
+          path: garrett-windows.msi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: garrett-chocolatey
+          path: chocolatey/garrett.*.nupkg
       - uses: actions/upload-artifact@v4
         with:
           name: garrett-installer-windows.exe
           path: garrett-installer-windows.exe
 
-  # Pack what was built: Debian packages, the apt repository, the bundles, the update list, the site.
+  # Pack what was built: Debian, pacman and rpm packages and their repositories, the Windows Installer package,
+  # the bundles, the update list, the site, and the files for the other package managers.
   assemble:
     needs: [linux, linux-armv7, macos, windows]
     runs-on: ubuntu-24.04
@@ -143,7 +222,7 @@ jobs:
         with:
           path: built
       - name: Tools
-        run: sudo apt-get update -q && sudo apt-get install -y -q build-essential debhelper apt-utils lintian mandoc
+        run: sudo apt-get update -q && sudo apt-get install -y -q build-essential debhelper apt-utils lintian mandoc rpm createrepo-c
       - name: Pack
         run: sh packaging/assemble-release.sh built release
       - name: The packages are sound
@@ -156,11 +235,125 @@ jobs:
           sudo apt-get install -y -q ./release/dist/garrett_*_amd64.deb
           test "$(garrett version)" = "garrett $(sed -n 's/^version = "\(.*\)"/\1/p' rust/Cargo.toml | head -1)"
           sudo apt-get purge -y -q garrett
+      # Each one installed from its repository, the way a machine that names the repository gets it, on the systems
+      # it is for; then removed. Unsigned here: the keys sign the repositories later, off this machine.
+      - name: pacman installs and removes garrett from its repository
+        run: |
+          V=$(sed -n 's/^version = "\(.*\)"/\1/p' rust/Cargo.toml | head -1)
+          docker run --rm -v "$PWD/release:/r:ro" archlinux:base-devel-20261108.0.623074 sh -ec '
+            printf "\n[sentinels]\nSigLevel = Never\nServer = file:///r/site/arch/\$arch\n" >> /etc/pacman.conf
+            pacman -Sy --noconfirm garrett
+            test "$(garrett version)" = "garrett '"$V"'"
+            test -f /usr/lib/systemd/system/garrett.service
+            # The image leaves manual pages out of what it extracts; the package lists it all the same.
+            pacman -Ql garrett | grep -q " /usr/share/man/man8/garrett.8$"
+            pacman -R --noconfirm garrett
+            for left in /usr/lib/garrett /usr/bin/garrett /usr/lib/systemd/system/garrett.service; do if [ -e "$left" ]; then echo "left behind: $left"; exit 1; fi; done'
+      - name: dnf and zypper install and remove garrett from its repository
+        run: |
+          V=$(sed -n 's/^version = "\(.*\)"/\1/p' rust/Cargo.toml | head -1)
+          for image in fedora:45 almalinux:9; do
+            echo "== $image"
+            docker run --rm -v "$PWD/release:/r:ro" "$image" sh -ec '
+              printf "[garrett]\nname=garrett\nbaseurl=file:///r/site/rpm\ngpgcheck=0\nrepo_gpgcheck=0\n" > /etc/yum.repos.d/garrett.repo
+              dnf install -y -q garrett
+              test "$(garrett version)" = "garrett '"$V"'"
+              rpm -V garrett
+              dnf remove -y -q garrett
+              for left in /usr/lib/garrett /usr/bin/garrett; do if [ -e "$left" ]; then echo "left behind: $left"; exit 1; fi; done'
+          done
+          echo "== opensuse/tumbleweed"
+          docker run --rm -v "$PWD/release:/r:ro" opensuse/tumbleweed sh -ec '
+            zypper --non-interactive --quiet addrepo --no-gpgcheck file:///r/site/rpm garrett
+            zypper --non-interactive --quiet install garrett
+            test "$(garrett version)" = "garrett '"$V"'"
+            zypper --non-interactive --quiet remove garrett
+            test ! -e /usr/lib/garrett'
       - name: Nothing in it says where it was built
         run: |
           if grep -rIl -e "/home/runner" -e "runneradmin" -e "/Users/runner" release; then echo "a build folder is named in a published file"; exit 1; fi
-          if grep -rl -a -e "/home/runner/work" -e "D:\\a\\" release/dist/garrett-linux-* release/dist/garrett-macos release/dist/garrett-windows.exe; then echo "a build folder is named in a program file"; exit 1; fi
+          if grep -rl -a -e "/home/runner/work" -e "D:\\a\\" release/dist/garrett-linux-* release/dist/garrett-macos release/dist/garrett-windows.exe release/dist/garrett-windows.msi release/dist/*.rpm release/packages/chocolatey/*.nupkg; then echo "a build folder is named in a program file or package"; exit 1; fi
       - uses: actions/upload-artifact@v4
         with:
           name: release
           path: release
+      # What the Homebrew and Scoop checks below need: the bundles they install and the release's digests.
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package-checks
+          path: |
+            release/dist/SHA256SUMS
+            release/dist/garrett-macos.tar.gz
+            release/dist/garrett-windows.zip
+
+  # Homebrew installs garrett from the formula this release publishes to the tap, and the install line in its
+  # caveats sets garrett up as a root LaunchDaemon in a root-owned folder.
+  homebrew:
+    needs: assemble
+    runs-on: macos-latest
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: 1
+      HOMEBREW_NO_INSTALL_CLEANUP: 1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: package-checks
+          path: release/dist
+      - name: brew install, then the install line, then removal
+        run: |
+          V=$(sed -n 's/^version = "\(.*\)"/\1/p' rust/Cargo.toml | head -1)
+          python3 -B packaging/package-managers.py render release --base-url "file://$PWD/release/dist"
+          brew tap-new --no-git local/sentinels >/dev/null
+          cp release/packages/homebrew/garrett.rb "$(brew --repository)/Library/Taps/local/homebrew-sentinels/Formula/garrett.rb"
+          brew install local/sentinels/garrett
+          brew test local/sentinels/garrett
+          sudo sh "$(brew --prefix)/opt/garrett/libexec/install.sh"
+          ROOT="/Library/Application Support/Garrett"
+          test "$(stat -f %u "$ROOT/garrett-agent")" = 0
+          sleep 5
+          sudo launchctl print system/com.garrett.agent | grep -q "state = running"
+          sudo "$ROOT/garrett" status
+          test "$(sudo "$ROOT/garrett" version)" = "garrett $V"
+          sudo sh "$(brew --prefix)/opt/garrett/libexec/install.sh" --remove
+          brew uninstall garrett
+          for left in "$ROOT" /Library/LaunchDaemons/com.garrett.agent.plist; do if [ -e "$left" ]; then echo "left behind: $left"; exit 1; fi; done
+
+  # Scoop installs garrett from the manifest this release puts on the site, keeps it and what it has through an
+  # update (Scoop runs the old version's uninstaller first), and takes it off the machine on scoop uninstall.
+  scoop:
+    needs: assemble
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: package-checks
+          path: release/dist
+      - name: scoop install, update and uninstall
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -B packaging/package-managers.py render release --base-url http://127.0.0.1:8797
+          Start-Process python -ArgumentList '-m', 'http.server', '8797', '--bind', '127.0.0.1', '--directory', 'release/dist' -WindowStyle Hidden
+          Start-Sleep -Seconds 3
+          Invoke-RestMethod https://get.scoop.sh -OutFile install-scoop.ps1
+          .\install-scoop.ps1 -RunAsAdmin
+          $env:PATH = "$env:USERPROFILE\scoop\shims;$env:PATH"
+          $manifest = Resolve-Path release/site/garrett.json
+          $command = Join-Path $env:ProgramFiles 'garrett\garrett.cmd'
+          $state = Join-Path $env:ProgramData 'garrett'
+          scoop install $manifest
+          & $command status
+          if ($LASTEXITCODE -ne 0) { throw 'garrett status failed after scoop install.' }
+          if ((Get-ScheduledTask -TaskName garrett).State -ne 'Running') { throw 'The scheduled task is not running.' }
+          $born = (Get-Item -LiteralPath $state -Force).CreationTimeUtc
+          (Get-Content $manifest -Raw) -replace '"version": "([^"]+)"', '"version": "$1.1"' | Set-Content $manifest -NoNewline
+          scoop update garrett
+          if ((Get-Item -LiteralPath $state -Force).CreationTimeUtc -ne $born) { throw 'The update replaced what the agent had.' }
+          & $command status
+          if ($LASTEXITCODE -ne 0) { throw 'garrett status failed after scoop update.' }
+          scoop uninstall garrett
+          if (Get-ScheduledTask -TaskName garrett -ErrorAction SilentlyContinue) { throw 'scoop uninstall left the scheduled task.' }
+          foreach ($left in (Join-Path $env:ProgramFiles 'garrett'), $state) { if (Test-Path -LiteralPath $left) { throw "Left behind: $left" } }
+          'Scoop installed garrett, kept it through an update, and removed it.'

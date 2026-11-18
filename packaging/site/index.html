@@ -145,12 +145,24 @@
             <pre><code>curl -fsSL https://gary23w.github.io/sentinels/garrett.gpg | sudo tee /usr/share/keyrings/garrett.gpg &gt;/dev/null
 echo "deb [signed-by=/usr/share/keyrings/garrett.gpg] https://gary23w.github.io/sentinels stable main" | sudo tee /etc/apt/sources.list.d/garrett.list
 sudo apt update &amp;&amp; sudo apt install garrett</code></pre>
-            <p>On Windows, you can also unpack the <a href="garrett-windows.zip">Windows bundle</a> and run <code>Install garrett.cmd</code>.</p>
+            <p>For Arch Linux, add the signed pacman repository.</p>
+            <pre><code>curl -fsSL https://gary23w.github.io/sentinels/garrett.asc | sudo pacman-key --add -
+sudo pacman-key --lsign-key 6857EBCBBEF51040C3F20107362688BFC238AB45
+printf '\n[sentinels]\nServer = https://gary23w.github.io/sentinels/arch/$arch\n' | sudo tee -a /etc/pacman.conf
+sudo pacman -Syu garrett &amp;&amp; sudo systemctl enable --now garrett</code></pre>
+            <p>For Fedora and RHEL, add the signed RPM repository. On openSUSE, <code>sudo zypper addrepo</code> takes the same file.</p>
+            <pre><code>sudo curl -fsSL -o /etc/yum.repos.d/garrett.repo https://gary23w.github.io/sentinels/garrett.repo
+sudo dnf install garrett &amp;&amp; sudo systemctl enable --now garrett</code></pre>
+            <p>With Homebrew on macOS or Linux, then run the line it prints to start garrett as root from a root-owned folder.</p>
+            <pre><code>brew install gary23w/sentinels/garrett</code></pre>
+            <p>With Scoop on Windows, from PowerShell opened as administrator.</p>
+            <pre><code>scoop install https://gary23w.github.io/sentinels/garrett.json</code></pre>
+            <p>On Windows, you can also run the <a href="https://github.com/gary23w/sentinels/releases/latest/download/garrett-windows.msi">Windows Installer package</a> (<code>msiexec /i garrett-windows.msi /qn</code> for Intune and Group Policy), or unpack the <a href="garrett-windows.zip">Windows bundle</a> and run <code>Install garrett.cmd</code>.</p>
           </section>
           <section id="updates">
             <h3>Signed updates</h3>
             <p>Garrett verifies the project’s signature before updating. Set <code>UPDATE=off</code> to update manually.</p>
-            <p>APT key fingerprint <code>6857 EBCB BEF5 1040 C3F2 0107 3626 88BF C238 AB45</code></p>
+            <p>APT, pacman and RPM key fingerprint <code>6857 EBCB BEF5 1040 C3F2 0107 3626 88BF C238 AB45</code></p>
             <p><a href="SHA256SUMS">Checksums</a> and <a href="SHA256SUMS.asc">signature</a></p>
             <p id="benchmarks"><a href="https://github.com/gary23w/sentinels#what-you-get">Performance notes</a></p>
           </section>

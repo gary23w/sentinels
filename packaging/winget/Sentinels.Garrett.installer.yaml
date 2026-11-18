@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.12.0.schema.json
+
+PackageIdentifier: Sentinels.Garrett
+PackageVersion: @VERSION@
+Platform:
+- Windows.Desktop
+MinimumOSVersion: 10.0.0.0
+InstallerType: wix
+Scope: machine
+InstallModes:
+- silent
+- silentWithProgress
+UpgradeBehavior: install
+ElevationRequirement: elevatesSelf
+ProductCode: '{@PRODUCT_CODE@}'
+AppsAndFeaturesEntries:
+- DisplayName: garrett
+  Publisher: sentinels
+  ProductCode: '{@PRODUCT_CODE@}'
+  UpgradeCode: '{2B1D45BD-2122-4287-9038-99946685113B}'
+Installers:
+- Architecture: x64
+  InstallerUrl: https://github.com/gary23w/sentinels/releases/download/v@VERSION@/garrett-windows.msi
+  InstallerSha256: @SHA_garrett-windows.msi@
+ManifestType: installer
+ManifestVersion: 1.12.0

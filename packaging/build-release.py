@@ -139,7 +139,9 @@ def main(arguments):
     def linux_agent(processor):
         return notices + [("garrett-agent", built["garrett-linux-" + processor], 0o755), launcher, ("unblock", unix("packaging/unblock"), 0o755),
                           ("garrett.service", unix("debian/garrett.service"), 0o644), ("garrett.openrc", unix("packaging/linux/garrett.openrc"), 0o755),
-                          ("install.sh", unix("packaging/linux/install.sh"), 0o755)]
+                          ("install.sh", unix("packaging/linux/install.sh"), 0o755),
+                          # The manual page, for the pacman and rpm packages built from this bundle (build-packages.sh).
+                          ("garrett.8", unix("debian/garrett.8"), 0o644)]
     for processor in (item for item in ("x86_64", "aarch64", "armv7") if "garrett-linux-" + item in built):
         tarball(out / ("garrett-linux-%s.tar.gz" % processor), linux_agent(processor))
     if "garrett-macos" in built:
