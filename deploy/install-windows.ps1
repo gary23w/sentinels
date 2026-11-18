@@ -37,26 +37,80 @@ if (Test-Path $conf) {
   }
 }
 if (-not $Mode) { $Mode = 'kill' }
+if ($Mode -notin @('kill', 'decide', 'pause', 'report')) { throw 'The Sentinel mode is not valid.' }
 # -Clean off: stop hostile programs but leave their files and startup entries alone.
 if (-not $Clean) { $Clean = 'on' }
 if (-not $Update) { $Update = 'on' }
 if ([bool]$Server -ne [bool]$EnrollKey) { throw 'Give -Server and -EnrollKey together, or neither.' }
-$install = Join-Path $env:ProgramFiles 'garrett'
-$state = Join-Path $env:ProgramData 'garrett'
-New-Item -ItemType Directory -Force -Path $install, $state | Out-Null
+$windows = [Environment]::GetFolderPath([Environment+SpecialFolder]::Windows)
+$system32 = [Environment]::GetFolderPath([Environment+SpecialFolder]::System)
+$programFiles = [Environment]::GetFolderPath([Environment+SpecialFolder]::ProgramFiles)
+$programData = [Environment]::GetFolderPath([Environment+SpecialFolder]::CommonApplicationData)
+if (-not $windows -or -not $system32 -or -not $programFiles -or -not $programData) { throw 'The Windows system folders are not available.' }
+$env:PATH = $system32 + ';' + $windows + ';' + (Join-Path $system32 'WindowsPowerShell\v1.0')
+$icacls = Join-Path $system32 'icacls.exe'
+$install = Join-Path $programFiles 'garrett'
+$state = Join-Path $programData 'garrett'
+
+function Lock-Directory([string]$path, [bool]$readable) {
+  if ((Test-Path -LiteralPath $path) -and ((Get-Item -LiteralPath $path -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'A Sentinel directory is a reparse point.' }
+  New-Item -ItemType Directory -Force -Path $path | Out-Null
+  $grants = @('*S-1-5-18:(OI)(CI)F', '*S-1-5-32-544:(OI)(CI)F')
+  if ($readable) { $grants += '*S-1-5-32-545:(OI)(CI)RX' }
+  & $icacls $path /inheritance:r /grant:r $grants | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw 'A Sentinel directory could not be locked.' }
+  & $icacls $path /setowner '*S-1-5-32-544' | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw 'A Sentinel directory owner could not be locked.' }
+  $acl = Get-Acl -LiteralPath $path
+  if ($acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -ne 'S-1-5-32-544') { throw 'A Sentinel directory owner is not protected.' }
+  $allowed = @('S-1-5-18', 'S-1-5-32-544') + $(if ($readable) { 'S-1-5-32-545' })
+  $rules = $acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])
+  if (@($rules | Where-Object { $_.AccessControlType -eq 'Allow' -and $_.IdentityReference.Value -notin $allowed }).Count) { throw 'A Sentinel directory allows another account to modify it.' }
+}
+
+function Lock-File([string]$path) {
+  if ((Get-Item -LiteralPath $path -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'A Sentinel program file is a reparse point.' }
+  & $icacls $path /inheritance:r /grant:r '*S-1-5-18:F' '*S-1-5-32-544:F' '*S-1-5-32-545:RX' | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw 'A Sentinel program file could not be locked.' }
+  & $icacls $path /setowner '*S-1-5-32-544' | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw 'A Sentinel program file owner could not be locked.' }
+  $acl = Get-Acl -LiteralPath $path
+  if ($acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -ne 'S-1-5-32-544') { throw 'A Sentinel program file owner is not protected.' }
+  $rules = $acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier])
+  if (@($rules | Where-Object { $_.AccessControlType -eq 'Allow' -and $_.IdentityReference.Value -notin @('S-1-5-18', 'S-1-5-32-544', 'S-1-5-32-545') }).Count) { throw 'A Sentinel program file allows another account to modify it.' }
+}
 # The agent: beside the installer in the release bundle, or built in this checkout.
 $source = @((Join-Path $root 'garrett.exe'), (Join-Path $root 'rust\target\release\garrett.exe')) | Where-Object { Test-Path $_ } | Select-Object -First 1
 if (-not $source) { throw 'garrett.exe was not found. Use the release bundle, or build it first: cd rust; cargo build --release --locked' }
+if ((Get-Item -LiteralPath $source -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'The Sentinel program source is a reparse point.' }
+Lock-Directory $install $true
+Lock-Directory $state $false
+$known = @('garrett.exe', 'garrett.cmd', 'garrett-old.exe', 'garrett-new.exe', 'LICENSE', 'NOTICES.md')
+foreach ($item in Get-ChildItem -LiteralPath $install -Force) {
+  if ($item.PSIsContainer -or ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $item.Name -notin $known) { throw 'The Sentinel program directory contains an unexpected file.' }
+}
 if (Get-ScheduledTask -TaskName 'garrett' -ErrorAction SilentlyContinue) { Stop-ScheduledTask -TaskName 'garrett' -ErrorAction SilentlyContinue; Start-Sleep -Seconds 2 }
 $agent = Join-Path $install 'garrett.exe'
-Copy-Item -Force $source $agent
-foreach ($notice in 'LICENSE', 'NOTICES.md') { if (Test-Path (Join-Path $root $notice)) { Copy-Item -Force (Join-Path $root $notice) $install } }
-# What an earlier update moved aside.
-Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $install 'garrett-old.exe'), (Join-Path $install 'garrett-new.exe')
+foreach ($name in $known) {
+  $old = Join-Path $install $name
+  if (Test-Path -LiteralPath $old) { Remove-Item -LiteralPath $old -Force }
+}
+Copy-Item -LiteralPath $source -Destination $agent
+Lock-File $agent
+foreach ($notice in 'LICENSE', 'NOTICES.md') {
+  $sourceNotice = Join-Path $root $notice
+  if (Test-Path -LiteralPath $sourceNotice) {
+    $targetNotice = Join-Path $install $notice
+    Copy-Item -LiteralPath $sourceNotice -Destination $targetNotice
+    Lock-File $targetNotice
+  }
+}
 # The command people type: "C:\Program Files\garrett\garrett.cmd" cases
 Set-Content -Path (Join-Path $install 'garrett.cmd') -Encoding ascii -Value ('@"' + $agent + '" --state-dir "' + $state + '" %*')
-# Only SYSTEM and Administrators may read the device credential.
-icacls $state /inheritance:r /grant:r 'SYSTEM:(OI)(CI)F' 'Administrators:(OI)(CI)F' | Out-Null
+Lock-File (Join-Path $install 'garrett.cmd')
+# This binary locks and checks every existing state entry before it reads the saved credential.
+& $agent --state-dir $state status
+if ($LASTEXITCODE -ne 0) { throw 'The Sentinel state could not be protected.' }
 if ($Server -and -not (Test-Path (Join-Path $state 'agent.json'))) {
   $env:SENTINEL_ENROLL_KEY = $EnrollKey
   $arguments = @('--state-dir', $state, 'enroll', '--patient', '--server', $Server, '--mode', $Mode)

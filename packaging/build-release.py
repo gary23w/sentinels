@@ -10,7 +10,7 @@
   garrett-windows.zip             for Windows: unpack, double-click "Install garrett.cmd"
   garrett-service.tar.gz          the Sentinel service for your own Linux machine (packaging/service.sh installs it)
   garrett-service-windows.zip     the same for Windows (packaging/service.ps1 installs it)
-  SHA256SUMS              what the one-line installers check a download against
+  SHA256SUMS              release file digests; the Windows installer pins its bundle hash at build time
 
 The agent is one program file for each system. They are built and tested on hosted machines by
 .github/workflows/release.yml; --agents names the folder they were downloaded to:
