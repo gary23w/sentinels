@@ -240,13 +240,13 @@ jobs:
       - name: pacman installs and removes garrett from its repository
         run: |
           V=$(sed -n 's/^version = "\(.*\)"/\1/p' rust/Cargo.toml | head -1)
-          docker run --rm -v "$PWD/release:/r:ro" archlinux:base-devel-20261108.0.623074 sh -ec '
+          docker run --rm -v "$PWD/release:/r:ro" archlinux:base-devel-20261108.0.623074 sh -exc '
             printf "\n[sentinels]\nSigLevel = Never\nServer = file:///r/site/arch/\$arch\n" >> /etc/pacman.conf
             pacman -Sy --noconfirm garrett
             test "$(garrett version)" = "garrett '"$V"'"
             test -f /usr/lib/systemd/system/garrett.service
-            # The image leaves manual pages out of what it extracts; the package lists it all the same.
-            pacman -Ql garrett | grep -q " /usr/share/man/man8/garrett.8$"
+            # The image leaves manual pages out of what it extracts; the package lists it all the same (makepkg gzips it).
+            pacman -Ql garrett | grep -Eq " /usr/share/man/man8/garrett\.8(\.gz)?$"
             mkdir -p /var/lib/garrett /etc/garrett && : > /var/lib/garrett/agent.json && : > /etc/garrett/garrett.conf
             pacman -R --noconfirm garrett
             for left in /usr/lib/garrett /usr/bin/garrett /usr/lib/systemd/system/garrett.service /var/lib/garrett /etc/garrett; do if [ -e "$left" ]; then echo "left behind: $left"; exit 1; fi; done'
@@ -255,7 +255,7 @@ jobs:
           V=$(sed -n 's/^version = "\(.*\)"/\1/p' rust/Cargo.toml | head -1)
           for image in fedora:45 almalinux:9; do
             echo "== $image"
-            docker run --rm -v "$PWD/release:/r:ro" "$image" sh -ec '
+            docker run --rm -v "$PWD/release:/r:ro" "$image" sh -exc '
               printf "[garrett]\nname=garrett\nbaseurl=file:///r/site/rpm\ngpgcheck=0\nrepo_gpgcheck=0\n" > /etc/yum.repos.d/garrett.repo
               dnf install -y -q garrett
               test "$(garrett version)" = "garrett '"$V"'"
@@ -265,7 +265,7 @@ jobs:
               for left in /usr/lib/garrett /usr/bin/garrett /var/lib/garrett /etc/garrett; do if [ -e "$left" ]; then echo "left behind: $left"; exit 1; fi; done'
           done
           echo "== opensuse/tumbleweed"
-          docker run --rm -v "$PWD/release:/r:ro" opensuse/tumbleweed sh -ec '
+          docker run --rm -v "$PWD/release:/r:ro" opensuse/tumbleweed sh -exc '
             zypper --non-interactive --quiet addrepo --no-gpgcheck file:///r/site/rpm garrett
             zypper --non-interactive --quiet install garrett
             test "$(garrett version)" = "garrett '"$V"'"
