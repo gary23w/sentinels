@@ -1,3 +1,56 @@
+garrett (1.8.0) stable; urgency=medium
+
+  * Installing and running, made harder to tamper with.
+    - The one-line installers carry the SHA-256 of the bundle they install
+      and of the apt signing key, and install nothing that does not match.
+      The apt install asks for this release by its version number.
+    - The Windows installers take a release site over HTTPS only and unpack
+      in a folder only the system and administrators can change. The
+      agent's state folder on Windows is kept private the same way.
+    - On a Mac, garrett lives in /Library/Application Support/Garrett, a
+      folder only root can change, and its command is no longer on the
+      PATH: sudo "/Library/Application Support/Garrett/garrett". The
+      installer stops when an earlier install is still under /usr/local:
+      remove that one first.
+    - The agent starts system tools by their full path, never by a name
+      looked up on the PATH.
+    - The service reads a request only up to its size limit, sends case
+      alerts and model requests over HTTPS only, and follows no redirect
+      with them.
+  * A web server's shell. A shell with no arguments of its own, started by
+    a web server whose own command line shows a download-and-run command,
+    is ended like one that carries the command itself. A web server that
+    is replaced by a shell under the same process number is judged as that
+    shell. On Linux a start the kernel reports goes to the responder at
+    once.
+  * On Windows, a script handed to Windows Script Host straight out of a
+    downloads folder or a just-opened archive is reported, and so is a
+    program that runs from a folder named like the Windows folder with a
+    space after its name.
+  * A program that tries many machines on the network on
+    remote-administration ports within a minute is reported.
+  * At the network card. IPv6 neighbours are read too. A gateway whose
+    hardware address goes back and forth between two machines is reported.
+    A neighbour trying port after port is now seen on macOS as well as
+    Linux. On Linux and Windows, a keyboard the machine has never had,
+    followed within seconds by a command window, is reported.
+  * Below the system: a firmware boot entry that was removed, and a
+    changed boot order or one-time boot selection, are reported.
+  * An enrolled machine runs in the lower of the mode its service allowed
+    and MODE= in its configuration file. garrett status shows the mode it
+    runs in.
+  * garrett cases on an enrolled machine shows the cases the machine saw
+    and says which service judges them.
+  * Trusting a case keeps what was cleaned up under it from being cleaned
+    up again, and every clean-up is said, on the machine and on the
+    service.
+  * Confirming an attack no longer shares addresses that answer for many
+    sites (Cloudflare's and Fastly's published networks) across the fleet.
+  * Purging the Debian package removes the apt source and signing key the
+    installer added.
+
+ -- sentinels <noreply@sentinels.invalid>  Wed, 18 Nov 2026 11:30:00 +0000
+
 garrett (1.7.0) stable; urgency=medium
 
   * At the network card. Two things on the wire that no program on the
