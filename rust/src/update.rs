@@ -192,7 +192,8 @@ pub fn bring_current(base: &str) -> Result<Outcome, String> {
 /// True where the agent runs as the scheduled task its installer makes.
 #[cfg(windows)]
 pub fn as_task() -> bool {
-    std::process::Command::new("schtasks.exe").args(["/Query", "/TN", "garrett"]).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status().is_ok_and(|status| status.success())
+    let Ok(program) = crate::windows_system::executable("schtasks.exe") else { return false };
+    std::process::Command::new(program).args(["/Query", "/TN", "garrett"]).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status().is_ok_and(|status| status.success())
 }
 
 /// Start the program file that is in place now, with the arguments this one was started with. Called as the last
@@ -213,7 +214,19 @@ pub fn start_again(exe: &Path) {
         // As the scheduled task: the task is started again a moment after this process has ended, so the new
         // agent runs under the task like the old one. Otherwise the new program is started directly.
         let started = if as_task() {
-            std::process::Command::new("cmd.exe").args(["/c", "ping -n 4 127.0.0.1 >nul & schtasks /Run /TN garrett"]).creation_flags(NO_WINDOW | NEW_GROUP).spawn()
+            let cmd = crate::windows_system::executable("cmd.exe");
+            let ping = crate::windows_system::executable("ping.exe");
+            let task = crate::windows_system::executable("schtasks.exe");
+            match (cmd, ping, task) {
+                (Ok(cmd), Ok(ping), Ok(task)) => {
+                    let script = format!("\"{}\" -n 4 127.0.0.1 >nul & \"{}\" /Run /TN garrett", ping.display(), task.display());
+                    std::process::Command::new(cmd).args(["/d", "/c", &script]).creation_flags(NO_WINDOW | NEW_GROUP).spawn()
+                }
+                _ => {
+                    eprintln!("garrett: Windows system tools could not be located for restart");
+                    return;
+                }
+            }
         } else {
             std::process::Command::new(exe).args(&arguments).creation_flags(NEW_GROUP).spawn()
         };

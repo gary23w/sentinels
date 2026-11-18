@@ -12,7 +12,15 @@ use std::time::{Duration, Instant};
 
 /// Run one fixed operating-system query: no shell, bounded output, enforced timeout. `None` when it fails.
 pub fn run(arguments: &[&str], input: Option<&[u8]>, timeout: Duration) -> Option<String> {
-    let mut command = Command::new(arguments[0]);
+    #[cfg(windows)]
+    let program = match arguments[0] {
+        "powershell.exe" | "netsh" | "netsh.exe" | "route.exe" | "bcdedit.exe" =>
+            crate::windows_system::executable(arguments[0]).ok()?,
+        other => std::path::PathBuf::from(other),
+    };
+    #[cfg(not(windows))]
+    let program = arguments[0];
+    let mut command = Command::new(program);
     command.args(&arguments[1..]).stdin(if input.is_some() { Stdio::piped() } else { Stdio::null() }).stdout(Stdio::piped()).stderr(Stdio::null());
     #[cfg(windows)]
     {
