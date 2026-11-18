@@ -283,7 +283,7 @@ jobs:
           tar -xzf node.tar.gz node-v24.22.3-linux-x64/bin/node && mv node-v24.22.3-linux-x64/bin/node node/node-linux-x64
           # The decision model, from its repository; the installer is built without it when that is not reachable.
           for name in model.onnx tokenizer.json tokenizer_config.json config.json; do curl -fsSL "https://huggingface.co/gary23w/crivo-sentinel-v1/resolve/main/$name" -o "model/$name" || { rm -f model/*; echo "no model: the service is tested without it"; break; }; done
-          (cd server && npm install --omit=dev --no-audit --no-fund >/dev/null)
+          (cd server && ONNXRUNTIME_NODE_INSTALL=skip npm install --omit=dev --no-audit --no-fund >/dev/null)
           python3 -B packaging/build-release.py site --agents agents --installers installers --node node --model model
           cp packaging/install.sh site/
           # The one-line installer carries the hash of the file it runs: give it this build's, as a release does.
@@ -372,7 +372,7 @@ jobs:
           # The decision model, from its repository; the installer is built without it when that is not reachable.
           try { foreach ($name in 'model.onnx', 'tokenizer.json', 'tokenizer_config.json', 'config.json') { Invoke-WebRequest -UseBasicParsing -Uri "https://huggingface.co/gary23w/crivo-sentinel-v1/resolve/main/$name" -OutFile "model/$name" } }
           catch { Remove-Item -Force model/*; 'no model: the service is tested without it' }
-          Push-Location server; npm install --omit=dev --no-audit --no-fund | Out-Null; if ($LASTEXITCODE -ne 0) { throw 'npm install failed' }; Pop-Location
+          Push-Location server; $env:ONNXRUNTIME_NODE_INSTALL = 'skip'; npm install --omit=dev --no-audit --no-fund | Out-Null; if ($LASTEXITCODE -ne 0) { throw 'npm install failed' }; Pop-Location
           python -B packaging/build-release.py site --agents agents --installers installers --node node --model model
           # The one-line installers carry the hash of what they install: give them this build's, as a release does.
           $sums = @{}; Get-Content site/SHA256SUMS | ForEach-Object { $hash, $name = $_ -split '  ', 2; $sums[$name] = $hash }

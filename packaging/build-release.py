@@ -108,7 +108,10 @@ def package_files(platforms):
     if (modules / "onnxruntime-node" / "package.json").is_file() and (modules / "@huggingface" / "tokenizers" / "package.json").is_file():
         tree("@huggingface/tokenizers", lambda rel: rel in ("package.json", "LICENSE") or rel.startswith("dist/"))
         tree("onnxruntime-common", lambda rel: rel in ("package.json", "LICENSE") or rel.startswith("dist/"))
-        tree("onnxruntime-node", lambda rel: rel in ("package.json", "LICENSE", "README.md") or rel.startswith("dist/") or any(rel.startswith("bin/napi-v6/%s/" % platform) for platform in platforms))
+        # Only the CPU build: the package's install step may have fetched the CUDA and TensorRT providers (hundreds
+        # of MB) into the same folders, and the service never uses them.
+        tree("onnxruntime-node", lambda rel: rel in ("package.json", "LICENSE", "README.md") or rel.startswith("dist/")
+             or (any(rel.startswith("bin/napi-v6/%s/" % platform) for platform in platforms) and not any(word in rel.lower() for word in ("cuda", "tensorrt", "cudnn", "cublas", "nvrtc"))))
     return files
 
 

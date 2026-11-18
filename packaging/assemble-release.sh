@@ -46,7 +46,7 @@ sh "$HERE/packaging/make-apt-repo.sh" "$OUT/dist" "$OUT/site"
 for name in $NAMES; do cp "$OUT/agents/$name" "$OUT/dist/$name"; done
 sed 's/\r$//' "$HERE/deploy/kubernetes-daemonset.yaml" > "$OUT/dist/kubernetes-daemonset.yaml"
 # The service's optional memory engine: the newest neuron-db release, packed into the service bundles.
-(cd "$HERE/server" && npm install --omit=dev --no-audit --no-fund >/dev/null)
+(cd "$HERE/server" && ONNXRUNTIME_NODE_INSTALL=skip npm install --omit=dev --no-audit --no-fund >/dev/null)
 python3 -B "$HERE/packaging/build-release.py" "$OUT/dist" --agents "$OUT/agents" --installers "$OUT/installers" --node "$OUT/node" --model "$OUT/model" --all
 # The update list: the version, then the SHA-256 of each program file. An agent installs nothing this list
 # does not name, and nothing at all unless the list carries the project's signature.

@@ -1,3 +1,13 @@
+garrett (1.9.1) stable; urgency=medium
+
+  * The release files carry only the CPU build of onnxruntime. On the
+    machine that built 1.9.0, the runtime package's install step had
+    fetched the CUDA and TensorRT providers as well, and they went into
+    the service bundle and the Linux installer; 1.9.0 was never published.
+  * Otherwise as 1.9.0.
+
+ -- sentinels <noreply@sentinels.invalid>  Wed, 18 Nov 2026 21:34:58 +0000
+
 garrett (1.9.0) stable; urgency=medium
 
   * The service installs from one file. The one-line installers
