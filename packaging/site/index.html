@@ -1,154 +1,263 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>sentinels(8) - host intrusion response</title>
-<meta name="description" content="Open-source host intrusion detection and response for Linux, macOS and Windows. One command installs garrett, which ends a break-in while it is still starting.">
-<link rel="canonical" href="https://gary23w.github.io/sentinels/">
-<meta property="og:type" content="website">
-<meta property="og:site_name" content="sentinels">
-<meta property="og:title" content="sentinels(8) - host intrusion response">
-<meta property="og:description" content="garrett ends a break-in while it is still starting, cleans up after it and tells you why in plain sentences. One program file for Linux, macOS and Windows. MIT licensed.">
-<meta property="og:url" content="https://gary23w.github.io/sentinels/">
-<meta property="og:image" content="https://gary23w.github.io/sentinels/og.png">
-<meta property="og:image:width" content="1200">
-<meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="sentinels: ends a break-in while it is still starting. One program file, one command to install, Linux, macOS and Windows, MIT licensed.">
-<meta name="twitter:card" content="summary_large_image">
-<script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "SoftwareApplication",
-  "name": "sentinels",
-  "alternateName": "garrett",
-  "description": "Host intrusion detection and response. The garrett agent ends a break-in while it is still starting, cleans up after it and explains why.",
-  "applicationCategory": "SecurityApplication",
-  "operatingSystem": "Linux, macOS, Windows",
-  "softwareVersion": "@VERSION@",
-  "license": "https://opensource.org/licenses/MIT",
-  "isAccessibleForFree": true,
-  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
-  "url": "https://gary23w.github.io/sentinels/",
-  "installUrl": "https://gary23w.github.io/sentinels/install.sh",
-  "downloadUrl": "https://github.com/gary23w/sentinels/releases",
-  "image": "https://gary23w.github.io/sentinels/og.png",
-  "sameAs": "https://github.com/gary23w/sentinels"
-}
-</script>
-<style>
-:root { color-scheme: light; }
-* { box-sizing: border-box; }
-html { background: #f6f5f0; }
-body { max-width: 80ch; margin: 0 auto; padding: 1rem 1.25rem 3rem; color: #1c1c1b; font: 16px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-a { color: #165278; text-decoration: underline; text-underline-offset: 2px; }
-a:hover, a:focus-visible { color: #0b334c; }
-.masthead, .foot { display: flex; justify-content: space-between; gap: 1rem; font-size: .92rem; }
-.masthead { padding-bottom: .45rem; border-bottom: 1px solid #8a8a83; }
-h1.name { font: inherit; margin: .5rem 0 .7rem 2ch; }
-.jump { display: flex; flex-wrap: wrap; gap: .25rem 1rem; margin: 1rem 0 1.5rem; font-size: .88rem; }
-h2 { margin: 1.65rem 0 .45rem; font-size: 1rem; line-height: inherit; letter-spacing: .02em; }
-p, dl, pre { margin: .5rem 0 .7rem 2ch; }
-dt { font-weight: 700; margin-top: .6rem; }
-dd { margin: .1rem 0 .6rem 2ch; }
-pre { padding: .55rem 0; border-top: 1px solid #c4c4bd; border-bottom: 1px solid #c4c4bd; white-space: pre-wrap; overflow-wrap: anywhere; }
-code { font: inherit; }
-.note { color: #494944; font-size: .92rem; }
-.foot { margin-top: 2.4rem; padding-top: .4rem; border-top: 1px solid #8a8a83; }
-section { scroll-margin-top: 1rem; }
-@media (max-width: 38rem) { .masthead .middle { display: none; } body { font-size: 15px; } }
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101218">
+  <meta name="google-site-verification" content="iXq4EhK7zId0XQ35wLwAf5WQVl1K02RYzZ45YvVl0xM">
+  <meta name="msvalidate.01" content="516DA6D5207D74384CA25DF3B808F4B1">
+  <title>Sentinels | Open-source host intrusion detection and response</title>
+  <meta name="description" content="Detect and respond to suspicious activity on Linux, macOS and Windows with Sentinels. An open-source agent that runs on the host and records why it acted.">
+  <link rel="canonical" href="https://gary23w.github.io/sentinels/">
+  <link rel="icon" href="sentinels-icon.png" type="image/png" sizes="64x64">
+  <link rel="stylesheet" href="sentinels.css">
+  <script src="sentinels.js" defer></script>
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Sentinels">
+  <meta property="og:title" content="Sentinels | Open-source host defense">
+  <meta property="og:description" content="Catch intrusions as they start. Respond on the host and see why the agent acted. Available for Linux, macOS and Windows.">
+  <meta property="og:url" content="https://gary23w.github.io/sentinels/">
+  <meta property="og:image" content="https://gary23w.github.io/sentinels/sentinels-share.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Sentinels, open-source host intrusion detection and response">
+  <meta name="twitter:card" content="summary_large_image">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Sentinels",
+    "alternateName": "garrett",
+    "description": "Open-source host intrusion detection and response for Linux, macOS and Windows.",
+    "applicationCategory": "SecurityApplication",
+    "operatingSystem": "Linux, macOS, Windows",
+    "softwareVersion": "@VERSION@",
+    "author": { "@type": "Person", "name": "Garrett Stimpson", "url": "https://garrettstimpson.ca/" },
+    "license": "https://opensource.org/licenses/MIT",
+    "isAccessibleForFree": true,
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+    "url": "https://gary23w.github.io/sentinels/",
+    "installUrl": "https://gary23w.github.io/sentinels/install.sh",
+    "downloadUrl": "https://github.com/gary23w/sentinels/releases",
+    "image": "https://gary23w.github.io/sentinels/sentinels-share.jpg",
+    "sameAs": "https://github.com/gary23w/sentinels"
+  }
+  </script>
 </head>
 <body id="top">
-<header class="masthead">
-  <strong>SENTINELS(8)</strong><span class="middle">System Administration</span><span>SENTINELS(8)</span>
-</header>
-<nav class="jump" aria-label="Sections">
-  <a href="#name">NAME</a><a href="#description">DESCRIPTION</a><a href="#benchmarks">BENCHMARKS</a><a href="#installation">INSTALLATION</a><a href="#fleet">FLEET</a><a href="#see-also">SEE ALSO</a><a href="https://github.com/gary23w/sentinels">Star the Repo</a>
-</nav>
-<main>
-<section id="name">
-<h2>NAME</h2>
-<h1 class="name"><strong>sentinels</strong> - host intrusion detection and response</h1>
-</section>
+  <a class="skip" href="#name">Skip to content</a>
+  <header class="site-header">
+    <div class="wrap header-inner">
+      <a class="brand" href="#top" aria-label="Sentinels home">
+        <span class="brand-mark" aria-hidden="true"></span>sentinels
+      </a>
+      <nav class="site-nav" aria-label="Main">
+        <a href="#description">How it works</a>
+        <a href="#installation">Install</a>
+        <a href="#projects">Projects</a>
+      </nav>
+      <a class="source-link" href="https://github.com/gary23w/sentinels">GitHub <span aria-hidden="true">↗</span></a>
+    </div>
+  </header>
 
-<section id="synopsis">
-<h2>SYNOPSIS</h2>
-<pre><code>garrett status
-garrett cases
-garrett trust|stop|release|restore &lt;case&gt;
-garrett update [--check]</code></pre>
-<p>Supported hosts: Linux, macOS, Windows.</p>
-</section>
+  <main>
+    <section class="hero wrap" id="name" aria-labelledby="hero-title" tabindex="-1">
+      <div class="hero-copy">
+        <p class="eyebrow"><span class="signal" aria-hidden="true"></span> Open-source host defense</p>
+        <h1 id="hero-title">Catch intrusions <em>as they start.</em></h1>
+        <p class="hero-intro">Sentinels runs on your servers and workstations. Its <code>garrett</code> agent detects suspicious activity, can stop the process, and records why it acted.</p>
+        <div class="actions">
+          <a class="button primary" href="#installation">Install Sentinels <span aria-hidden="true">↓</span></a>
+          <a class="button secondary" href="#modes">Explore a sample case</a>
+        </div>
+        <ul class="hero-facts" aria-label="License and platforms">
+          <li>MIT licensed</li>
+          <li>Linux, macOS &amp; Windows</li>
+        </ul>
+      </div>
+      <figure class="hero-visual">
+        <img class="hero-image" src="sentinel-core.webp" width="1280" height="854" alt="" fetchpriority="high">
+        <div class="visual-label" aria-hidden="true"><span class="signal"></span> garrett / on-host agent</div>
+        <figcaption class="visual-caption">
+          <span class="visual-icon" aria-hidden="true">✓</span>
+          <div><strong>Process stopped</strong><small>Sample case · default kill mode</small></div>
+          <a href="#modes" aria-label="Explore the sample case"><span aria-hidden="true">↘</span></a>
+        </figcaption>
+      </figure>
+    </section>
 
-<section id="description">
-<h2>DESCRIPTION</h2>
-<p><strong>garrett</strong> watches running programs and their connections on the host. It scores activity locally and can pause or end a program it judges hostile. A web server starting a shell that downloads a script is one behavior it looks for.</p>
-<p>A case records the signals and the action taken. The agent can quarantine dropped files and disable a cron job, Run key or service used for persistence. <code>garrett restore &lt;case&gt;</code> reverses cleanup after a mistaken stop.</p>
-<p>The local agent is one program file and needs no account or kernel module.</p>
-<p>An intrusion that an AI agent runs leaves marks of its own, such as commands started at machine pace. See <a href="ai-attacks.html">how garrett ends one</a>.</p>
-</section>
+    <section class="section wrap" id="description" aria-labelledby="response-title">
+      <div class="section-head">
+        <p class="eyebrow">Detection and response</p>
+        <h2 id="response-title">See why it acted.</h2>
+        <p>Garrett watches processes and their connections on the host. Each case shows the activity it saw, the response mode in use, and the action it took.</p>
+      </div>
+      <div class="response-layout" id="modes">
+        <div class="case-console" data-tabs>
+          <div class="console-head">
+            <span><span class="signal" aria-hidden="true"></span> Sample case</span>
+            <code>garrett cases</code>
+          </div>
+          <div class="tab-list" data-tab-list aria-label="Response mode" hidden>
+            <button type="button" data-panel="case-kill">Kill</button>
+            <button type="button" data-panel="case-pause">Pause</button>
+            <button type="button" data-panel="case-decide">Decide</button>
+            <button type="button" data-panel="case-report">Report</button>
+          </div>
+          <div class="console-body">
+            <p class="sample-signal"><span>Signal</span> A web server started a shell that tried to download a script.</p>
+            <div class="mode-panel" id="case-kill">
+              <h3><code>kill</code> <span class="outcome">Process ended</span></h3>
+              <p>In the default mode, Garrett ends the shell and any child processes it started.</p>
+            </div>
+            <div class="mode-panel" id="case-pause">
+              <h3><code>pause</code> <span class="outcome">Awaiting operator</span></h3>
+              <p>Garrett freezes the process. An operator can review the case and decide whether to stop or release it.</p>
+            </div>
+            <div class="mode-panel" id="case-decide">
+              <h3><code>decide</code> <span class="outcome">Awaiting model</span></h3>
+              <p>Garrett freezes the process and asks the fleet service’s configured model to stop, release, or hold it.</p>
+            </div>
+            <div class="mode-panel" id="case-report">
+              <h3><code>report</code> <span class="outcome">Case recorded</span></h3>
+              <p>Garrett records the signal and lets the process continue. Use this mode to observe what it flags.</p>
+            </div>
+          </div>
+          <p class="console-foot">Illustrative case · Runs entirely in this page</p>
+        </div>
+        <dl class="response-notes">
+          <div>
+            <dt>Local by default</dt>
+            <dd>The agent is a single executable. It scores activity and keeps case records on the host when run standalone.</dd>
+          </div>
+          <div>
+            <dt>Reversible cleanup</dt>
+            <dd>Garrett can quarantine dropped files and disable persistence. Use <code>garrett restore &lt;case&gt;</code> to reverse cleanup.</dd>
+          </div>
+          <div id="ai">
+            <dt>Signals for automated intrusions</dt>
+            <dd>Garrett looks for patterns such as fast command bursts and repeated attempts. <a href="ai-attacks.html">Read about AI-operated intrusions <span aria-hidden="true">↗</span></a></dd>
+          </div>
+        </dl>
+      </div>
+      <details class="detail" id="benchmarks">
+        <summary>Performance notes</summary>
+        <p>Internal tests put stopping time at about 20 ms for rapid process-chain scenarios and under 5 ms for selected tool-driven scenarios. These are preliminary figures from those scenarios. <a href="https://github.com/gary23w/sentinels#what-you-get">See the project notes</a> for context.</p>
+      </details>
+    </section>
 
-<section id="benchmarks">
-<h2>BENCHMARKS</h2>
-<p>Current internal stopping-time figures: about 20 ms for rapid process-chain scenarios; under 5 ms for selected tool-driven scenarios. The test setup, clock boundaries, sample size and raw results have not yet been added to the <a href="https://github.com/gary23w/sentinels#what-you-get">README</a>. These figures are not a guarantee for every host or attack.</p>
-</section>
-
-<section id="modes">
-<h2>RESPONSE MODES</h2>
-<dl>
-  <dt>kill</dt><dd>End the program and its child processes. Default.</dd>
-  <dt>pause</dt><dd>Freeze the program until an operator decides.</dd>
-  <dt>decide</dt><dd>Freeze the program, then ask the service's configured model to stop, release or hold it.</dd>
-  <dt>report</dt><dd>Record the case without stopping the program.</dd>
-</dl>
-</section>
-
-<section id="ai">
-<h2>AI ANALYSIS</h2>
-<p>Optional. A configured service model can summarize a case or decide what happens to a frozen program in <code>decide</code> mode. The default local <code>kill</code> path does not call a model.</p>
-</section>
-
-<section id="installation">
-<h2>INSTALLATION</h2>
-<p>Linux and macOS:</p>
-<pre><code>curl -fsSL https://gary23w.github.io/sentinels/install.sh | sudo sh</code></pre>
-<p>Windows, from an elevated PowerShell:</p>
-<pre><code>irm https://gary23w.github.io/sentinels/install.ps1 | iex</code></pre>
-<p>Or download <a href="garrett-windows.zip">garrett-windows.zip</a>, unpack it and run <code>Install garrett.cmd</code>.</p>
-<p>To start with alerts only:</p>
-<pre><code>curl -fsSL https://gary23w.github.io/sentinels/install.sh | sudo sh -s -- --mode report</code></pre>
-</section>
-
-<section id="packages">
-<h2>APT REPOSITORY</h2>
-<pre><code>curl -fsSL https://gary23w.github.io/sentinels/garrett.gpg | sudo tee /usr/share/keyrings/garrett.gpg &gt;/dev/null
+    <section class="section install-section" id="installation" aria-labelledby="install-title">
+      <div class="wrap">
+        <div class="section-head">
+          <p class="eyebrow">Get started</p>
+          <h2 id="install-title">Install Sentinels.</h2>
+          <p>Install the agent on one host, then run <code>garrett status</code> to check it. The default <code>kill</code> mode can end processes it judges hostile.</p>
+        </div>
+        <div class="install-grid">
+          <div class="install-console" data-tabs>
+            <div class="tab-list" data-tab-list aria-label="Operating system" hidden>
+              <button type="button" data-panel="install-unix">Linux &amp; macOS</button>
+              <button type="button" data-panel="install-windows">Windows</button>
+            </div>
+            <div class="install-panel" id="install-unix">
+              <h3>Linux &amp; macOS</h3>
+              <div class="command">
+                <pre><code id="unix-command">curl -fsSL https://gary23w.github.io/sentinels/install.sh | sudo sh</code></pre>
+                <button class="copy" type="button" data-copy="unix-command" aria-label="Copy Linux and macOS install command" hidden>Copy</button>
+              </div>
+              <p>To start in report mode, use <code>sudo sh -s -- --mode report</code> after the pipe.</p>
+            </div>
+            <div class="install-panel" id="install-windows">
+              <h3>Windows PowerShell as administrator</h3>
+              <div class="command">
+                <pre><code id="windows-command">irm https://gary23w.github.io/sentinels/install.ps1 | iex</code></pre>
+                <button class="copy" type="button" data-copy="windows-command" aria-label="Copy Windows install command" hidden>Copy</button>
+              </div>
+              <p>Or unpack the <a href="garrett-windows.zip">Windows bundle</a> and run <code>Install garrett.cmd</code>.</p>
+            </div>
+            <p class="copy-status" role="status" aria-atomic="true"></p>
+          </div>
+          <aside class="quick-links" id="synopsis" aria-labelledby="quick-links-title">
+            <h3 id="quick-links-title">After installation</h3>
+            <ul>
+              <li><code>garrett status</code> <span>Check the agent</span></li>
+              <li><code>garrett cases</code> <span>Review recorded cases</span></li>
+            </ul>
+            <a href="manual.html">Read the garrett(8) manual <span aria-hidden="true">↗</span></a>
+          </aside>
+        </div>
+        <div class="install-details">
+          <details class="detail" id="packages">
+            <summary>Debian &amp; Ubuntu APT repository</summary>
+            <pre><code>curl -fsSL https://gary23w.github.io/sentinels/garrett.gpg | sudo tee /usr/share/keyrings/garrett.gpg &gt;/dev/null
 echo "deb [signed-by=/usr/share/keyrings/garrett.gpg] https://gary23w.github.io/sentinels stable main" | sudo tee /etc/apt/sources.list.d/garrett.list
 sudo apt update &amp;&amp; sudo apt install garrett</code></pre>
-</section>
+          </details>
+          <details class="detail" id="updates">
+            <summary>Signed updates and checksums</summary>
+            <p>Garrett checks the project’s signature before installing an update. Set <code>UPDATE=off</code> to update manually.</p>
+            <p>APT key fingerprint <code>6857 EBCB BEF5 1040 C3F2 0107 3626 88BF C238 AB45</code></p>
+            <p><a href="SHA256SUMS">Checksums</a> · <a href="SHA256SUMS.asc">Checksum signature</a> · <a href="https://github.com/gary23w/sentinels/releases">Release downloads</a></p>
+          </details>
+        </div>
+      </div>
+    </section>
 
-<section id="fleet">
-<h2>FLEET SERVICE</h2>
-<p>Run the service on your own hardware to collect cases and share learned attack patterns across enrolled hosts. Cases stay on your service.</p>
-<pre><code>curl -fsSL https://gary23w.github.io/sentinels/service.sh | sudo sh</code></pre>
-<p>Windows service installation, from an elevated PowerShell:</p>
-<pre><code>irm https://gary23w.github.io/sentinels/service.ps1 | iex</code></pre>
-<p>Enrol another host:</p>
-<pre><code>curl -fsSL https://gary23w.github.io/sentinels/install.sh | sudo sh -s -- --server https://your-service --key &lt;enrolment key&gt;</code></pre>
-<p>For managed hosting, email <a href="mailto:info@garrettstimpson.ca?subject=Sentinels%20managed%20hosting">info@garrettstimpson.ca</a>.</p>
-</section>
+    <section class="section wrap fleet-section" id="fleet" aria-labelledby="fleet-title">
+      <div class="section-head">
+        <p class="eyebrow">Fleet service</p>
+        <h2 id="fleet-title">Manage cases across hosts.</h2>
+        <p>Run the optional service on your own hardware to collect cases and share learned patterns among enrolled hosts. A configured model can summarize cases and help with decisions in <code>decide</code> mode.</p>
+        <a href="mailto:info@garrettstimpson.ca?subject=Sentinels%20managed%20hosting">Ask about managed hosting <span aria-hidden="true">↗</span></a>
+      </div>
+      <div class="fleet-setup">
+        <details class="detail">
+          <summary>Set up the fleet service</summary>
+          <h3>Linux &amp; macOS</h3>
+          <pre><code>curl -fsSL https://gary23w.github.io/sentinels/service.sh | sudo sh</code></pre>
+          <h3>Windows PowerShell as administrator</h3>
+          <pre><code>irm https://gary23w.github.io/sentinels/service.ps1 | iex</code></pre>
+          <h3>Enroll a host</h3>
+          <pre><code>curl -fsSL https://gary23w.github.io/sentinels/install.sh | sudo sh -s -- --server https://your-service --key &lt;enrollment key&gt;</code></pre>
+        </details>
+        <div class="docs-links" id="see-also">
+          <a href="manual.html">Commands &amp; configuration <span aria-hidden="true">↗</span></a>
+          <a href="https://github.com/gary23w/sentinels#readme">README &amp; source <span aria-hidden="true">↗</span></a>
+        </div>
+      </div>
+    </section>
 
-<section id="updates">
-<h2>UPDATES</h2>
-<p>The agent checks for new versions and verifies the project's signature before installing one. Set <code>UPDATE=off</code> in its configuration file to update by hand. The package signing key is <code>6857 EBCB BEF5 1040 C3F2 0107 3626 88BF C238 AB45</code>. See <a href="SHA256SUMS">checksums</a> and the <a href="SHA256SUMS.asc">signed checksum file</a>.</p>
-</section>
+    <section class="project-section" id="projects" aria-labelledby="projects-title">
+      <div class="wrap">
+        <div class="section-head">
+          <p class="eyebrow">Project family</p>
+          <h2 id="projects-title">More open-source projects.</h2>
+        </div>
+        <div class="project-grid">
+          <a class="project-card project-veil" href="https://veil.garrettstimpson.ca/">
+            <span class="project-icon" aria-hidden="true">&gt;_</span>
+            <div><h3>NL-VEIL</h3><p>A coding desktop app for working with parallel AI agents and persistent project memory.</p></div>
+            <span class="project-arrow" aria-hidden="true">↗</span>
+          </a>
+          <a class="project-card project-neuron" href="https://gary23w.github.io/neuron-db/">
+            <span class="project-icon" aria-hidden="true">∷</span>
+            <div><h3>neuron-db</h3><p>An associative memory in Rust. Write facts in plain language and recall them by meaning.</p></div>
+            <span class="project-arrow" aria-hidden="true">↗</span>
+          </a>
+        </div>
+      </div>
+    </section>
+  </main>
 
-<section id="see-also">
-<h2>SEE ALSO</h2>
-<p><a href="manual.html">garrett(8) manual</a>, <a href="ai-attacks.html">AI-operated intrusions</a>, <a href="https://github.com/gary23w/sentinels">source and README</a>, <a href="https://github.com/gary23w/sentinels/releases">releases</a>.</p>
-<p class="note">The default mode can end a program it judges hostile. Read the manual before installing on a production host.</p>
-</section>
-</main>
-<footer class="foot"><span>Sentinels</span><a href="#top">Back to top</a></footer>
+  <footer class="site-footer">
+    <div class="wrap footer-inner">
+      <p>Built by <a href="https://garrettstimpson.ca/">Garrett Stimpson</a> and contributors.</p>
+      <nav aria-label="Footer">
+        <a href="https://github.com/gary23w/sentinels/blob/main/LICENSE">MIT license</a>
+        <a href="sitemap.xml">Sitemap</a>
+        <a href="#top">Back to top <span aria-hidden="true">↑</span></a>
+      </nav>
+    </div>
+  </footer>
 </body>
 </html>
