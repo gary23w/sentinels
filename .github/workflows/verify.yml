@@ -4,6 +4,8 @@
 #                               harmless stand-in for an attack; check that it is ended and recorded; check fleet
 #                               blocking; remove it and check nothing is left. These three run only when the
 #                               workflow is started by hand, which is done after every release
+#   packages-*                  the same, from the published packages: pacman, dnf and zypper from the signed
+#                               repositories, Homebrew from the tap, the Windows Installer package and Scoop
 #   service-linux, -windows     the one-line service install from the one-file installer built here (service, model
 #                               runtime, agent); the agent it installed reports to it
 #   rust, rust-agent-*          the agent built from this commit: its recorded decisions, then the real thing
@@ -259,6 +261,80 @@ jobs:
           & .\garrett\deploy\uninstall-windows.ps1
           if (Get-ScheduledTask -TaskName garrett -ErrorAction SilentlyContinue) { throw 'the task is still there' }
           foreach ($folder in "$env:ProgramFiles\garrett", "$env:ProgramData\garrett") { if (Test-Path $folder) { throw "left behind: $folder" } }
+
+  # The published packages, installed the way their instructions say, from the signed repositories on the site,
+  # the project's Homebrew tap and the latest release: each one checks the project's signature or digest. Run by
+  # hand after a release, like the three above.
+  packages-linux:
+    if: github.event_name == 'workflow_dispatch' && !inputs.windows_macos_only
+    runs-on: ubuntu-latest
+    steps:
+      - name: pacman, from the signed repository
+        run: |
+          docker run --rm archlinux:base-devel-20261108.0.623074 sh -exc '
+            curl -fsSL '"$BASE"'/garrett.asc | pacman-key --add -
+            pacman-key --lsign-key 6857EBCBBEF51040C3F20107362688BFC238AB45
+            printf "\n[sentinels]\nServer = '"$BASE"'/arch/\$arch\n" >> /etc/pacman.conf
+            pacman -Syu --noconfirm garrett
+            garrett version
+            pacman -R --noconfirm garrett'
+      - name: dnf and zypper, from the signed repository
+        run: |
+          for image in fedora:45 almalinux:9; do
+            docker run --rm "$image" sh -exc '
+              curl -fsSL -o /etc/yum.repos.d/garrett.repo '"$BASE"'/garrett.repo
+              dnf install -y garrett
+              garrett version
+              dnf remove -y garrett'
+          done
+          docker run --rm opensuse/tumbleweed sh -exc '
+            zypper --non-interactive --gpg-auto-import-keys addrepo '"$BASE"'/garrett.repo
+            zypper --non-interactive --gpg-auto-import-keys install garrett
+            garrett version
+            zypper --non-interactive remove garrett'
+
+  packages-macos:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: macos-latest
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: 1
+    steps:
+      - name: Homebrew, from the tap, then its install line, then removal
+        run: |
+          brew install gary23w/sentinels/garrett
+          sudo sh "$(brew --prefix)/opt/garrett/libexec/install.sh"
+          sleep 5
+          sudo launchctl print system/com.garrett.agent | grep -q "state = running"
+          sudo "/Library/Application Support/Garrett/garrett" status
+          sudo sh "$(brew --prefix)/opt/garrett/libexec/install.sh" --remove
+          brew uninstall garrett
+          test ! -e "/Library/Application Support/Garrett"
+
+  packages-windows:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    steps:
+      - name: The Windows Installer package from the latest release
+        shell: pwsh
+        run: |
+          Invoke-WebRequest https://github.com/gary23w/sentinels/releases/latest/download/garrett-windows.msi -OutFile garrett-windows.msi
+          foreach ($arguments in @('/i', 'garrett-windows.msi'), @('/x', 'garrett-windows.msi')) {
+            $run = Start-Process msiexec.exe -ArgumentList ($arguments + '/qn', '/norestart') -Wait -PassThru
+            if ($run.ExitCode -notin 0, 3010) { throw "msiexec $arguments ended with $($run.ExitCode)" }
+            if ($arguments[0] -eq '/i') { & "$env:ProgramFiles\garrett\garrett.cmd" status; if ($LASTEXITCODE -ne 0) { throw 'garrett status failed' } }
+          }
+          if (Test-Path "$env:ProgramFiles\garrett") { throw 'the package left the program folder' }
+      - name: Scoop, from the manifest on the site
+        shell: pwsh
+        run: |
+          Invoke-RestMethod https://get.scoop.sh -OutFile install-scoop.ps1
+          .\install-scoop.ps1 -RunAsAdmin
+          $env:PATH = "$env:USERPROFILE\scoop\shims;$env:PATH"
+          scoop install "$env:BASE/garrett.json"
+          & "$env:ProgramFiles\garrett\garrett.cmd" status
+          if ($LASTEXITCODE -ne 0) { throw 'garrett status failed' }
+          scoop uninstall garrett
+          if (Test-Path "$env:ProgramFiles\garrett") { throw 'scoop uninstall left the program folder' }
 
   # The self-hosted service, built from this checkout and served the way the site serves it: one line makes the
   # machine a Sentinel service, a machine joins with the printed command, its case reaches the service.

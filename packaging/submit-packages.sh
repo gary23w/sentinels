@@ -7,7 +7,7 @@
 #       the GitHub account gh is signed in to. Its commits are made as sentinels, not as that account's name.
 #   sh packaging/submit-packages.sh <release folder> aur
 #       Pushes PKGBUILD, garrett.install and .SRCINFO (packages/aur) to the AUR's garrett-bin, with the SSH key the
-#       AUR account holds: ssh aur@aur.archlinux.org must work.
+#       AUR account holds: ssh aur@aur.archlinux.org must work (GIT_SSH_COMMAND="ssh -i <key>" picks the key).
 #   CHOCOLATEY_API_KEY=<key> sh packaging/submit-packages.sh <release folder> chocolatey
 #       Pushes the package (packages/chocolatey) to community.chocolatey.org, where it waits for moderation.
 set -eu
@@ -38,7 +38,9 @@ case "$2" in
     ;;
   aur)
     git clone --quiet ssh://aur@aur.archlinux.org/garrett-bin.git "$WORK/aur" 2>/dev/null
-    cp "$REL/packages/aur/PKGBUILD" "$REL/packages/aur/garrett.install" "$REL/packages/aur/.SRCINFO" "$WORK/aur/"
+    [ -s "$REL/packages/aur/SRCINFO" ] || { echo "No $REL/packages/aur/SRCINFO (build-packages.sh writes it)." >&2; exit 1; }
+    cp "$REL/packages/aur/PKGBUILD" "$REL/packages/aur/garrett.install" "$WORK/aur/"
+    cp "$REL/packages/aur/SRCINFO" "$WORK/aur/.SRCINFO"
     git -C "$WORK/aur" add PKGBUILD garrett.install .SRCINFO
     git -C "$WORK/aur" -c user.name="$NAME" -c user.email="$EMAIL" commit --quiet -m "garrett $VERSION"
     git -C "$WORK/aur" push --quiet origin HEAD:master

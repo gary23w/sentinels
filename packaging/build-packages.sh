@@ -58,7 +58,9 @@ docker run --rm -e SOURCE_DATE_EPOCH="$WHEN" -e OWNER="$(id -u):$(id -g)" -v "$W
 mkdir -p "$REL/site/arch"
 cp -R "$WORK/out/arch/." "$REL/site/arch/"
 cp "$WORK"/out/arch/*/garrett-*.pkg.tar.zst "$REL/dist/"
+# Kept without its leading dot as well: the workflow's artifacts leave out files whose names start with one.
 cp "$WORK/out/aur.SRCINFO" "$REL/packages/aur/.SRCINFO"
+cp "$WORK/out/aur.SRCINFO" "$REL/packages/aur/SRCINFO"
 
 # rpm: one package for each processor, and the repository's metadata. gzip, which every dnf, yum and zypper reads.
 sed 's/\r$//' "$HERE/packaging/rpm/garrett.spec" > "$WORK/garrett.spec"
