@@ -36,6 +36,8 @@ def pinned(source, assignments, separator):
 
 
 windows = pinned("packaging/install.ps1", {"$pinnedWindowsZip": "garrett-windows.zip"}, " = ")
+service_windows = pinned("packaging/service.ps1", {"$pinnedServiceZip": "garrett-service-windows.zip"}, " = ")
+service_unix = pinned("packaging/service.sh", {"SERVICE_SHA": "garrett-service.tar.gz"}, "=")
 unix = pinned("packaging/install.sh", {
     "LINUX_X86_SHA": "garrett-linux-x86_64.tar.gz",
     "LINUX_ARM64_SHA": "garrett-linux-aarch64.tar.gz",
@@ -55,4 +57,6 @@ if count != 1:
 
 (site / "install.ps1").write_bytes(windows.encode("utf-8"))
 (site / "install.sh").write_bytes(unix.encode("utf-8"))
-print("Pinned Windows, Linux and macOS release bundles in first-install scripts.")
+(site / "service.ps1").write_bytes(service_windows.encode("utf-8"))
+(site / "service.sh").write_bytes(service_unix.encode("utf-8"))
+print("Pinned agent and service release bundles in first-install scripts.")
