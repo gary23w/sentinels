@@ -1,4 +1,4 @@
-garrett (1.8.0) stable; urgency=medium
+garrett (1.8.1) stable; urgency=medium
 
   * Installing and running, made harder to tamper with.
     - The one-line installers carry the SHA-256 of the bundle they install
