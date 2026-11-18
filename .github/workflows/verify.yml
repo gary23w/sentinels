@@ -272,6 +272,8 @@ jobs:
       - name: pacman, from the signed repository
         run: |
           docker run --rm archlinux:base-devel-20261108.0.623074 sh -exc '
+            # The image comes without the keyring an installed Arch Linux has; from here on, the instructions.
+            pacman-key --init && pacman-key --populate archlinux
             curl -fsSL '"$BASE"'/garrett.asc | pacman-key --add -
             pacman-key --lsign-key 6857EBCBBEF51040C3F20107362688BFC238AB45
             printf "\n[sentinels]\nServer = '"$BASE"'/arch/\$arch\n" >> /etc/pacman.conf
