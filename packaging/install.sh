@@ -20,6 +20,13 @@ set -eu
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
 export PATH
 BASE=${GARRETT_BASE:-https://gary23w.github.io/sentinels}
+# The release build updates these bundle hashes before publishing install.sh. The apt key is
+# pinned separately so a replacement signing key on the download site cannot authorize a package.
+LINUX_X86_SHA='d8517bc2863e330cc14d76dd073541ef6dc01b29ae80ddbdc61fe6fcf66596c1'
+LINUX_ARM64_SHA='08519efa923c2b4df066106f1e9757bea5393744454e013bf8be346fdff5ce41'
+LINUX_ARMV7_SHA='1a3086599648d20af4c289687be4ff73a4d884d97834869c2930fd9257ce1488'
+MACOS_SHA='4a172601421de9dd9421450284abda6bfda8aad56db7aff6ac0af8a0c87c34d6'
+APT_KEY_SHA='1f298d4106a58461a4a16d8976db87e8c5f581a20df180de1f69b73f1a69fa9d'
 SERVER=""; KEY=""; MODE=""; LABEL=""
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -33,6 +40,7 @@ done
 [ "$(id -u)" = 0 ] || { echo "Run this as root (put sudo before sh)." >&2; exit 1; }
 if [ -n "$SERVER" ] && [ -z "$KEY" ] || [ -z "$SERVER" ] && [ -n "$KEY" ]; then echo "Give --server and --key together, or neither." >&2; exit 1; fi
 fetch() { if command -v curl >/dev/null 2>&1; then curl -fsSL "$1" -o "$2"; else wget -q "$1" -O "$2"; fi; }
+hash_file() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi; }
 SYSTEM=$(uname -s)
 CONF=/etc/garrett/garrett.conf
 [ "$SYSTEM" = Darwin ] && CONF=/usr/local/etc/garrett.conf
@@ -73,14 +81,11 @@ if [ -n "$SERVER$MODE$LABEL" ]; then
 fi
 
 bundle() {
-  # $1 = bundle name. Downloads it, checks it against the published SHA-256, unpacks it, runs its installer.
+  # $1 = bundle name, $2 = this script's pinned hash.
   WORK=$(mktemp -d)
   trap 'rm -rf "$WORK"' EXIT
   fetch "$BASE/$1" "$WORK/$1"
-  fetch "$BASE/SHA256SUMS" "$WORK/SHA256SUMS"
-  WANT=$(grep " $1\$" "$WORK/SHA256SUMS" | cut -d' ' -f1)
-  if command -v sha256sum >/dev/null 2>&1; then HAVE=$(sha256sum "$WORK/$1" | cut -d' ' -f1); else HAVE=$(shasum -a 256 "$WORK/$1" | cut -d' ' -f1); fi
-  [ -n "$WANT" ] && [ "$WANT" = "$HAVE" ] || { echo "The download does not match its published checksum. Nothing was installed." >&2; exit 1; }
+  [ "$(hash_file "$WORK/$1")" = "$2" ] || { echo "The bundle failed its pinned hash check. Nothing was installed." >&2; exit 1; }
   tar -xzf "$WORK/$1" -C "$WORK"
   sh "$WORK/garrett/install.sh"
 }
@@ -92,20 +97,24 @@ if [ "$SYSTEM" = Linux ] && command -v apt-get >/dev/null 2>&1 && command -v dpk
 fi
 if [ "$PACKAGED" = yes ]; then
   mkdir -p /usr/share/keyrings
-  fetch "$BASE/garrett.gpg" /usr/share/keyrings/garrett.gpg
+  WORK=$(mktemp -d)
+  trap 'rm -rf "$WORK"' EXIT
+  fetch "$BASE/garrett.gpg" "$WORK/garrett.gpg"
+  [ "$(hash_file "$WORK/garrett.gpg")" = "$APT_KEY_SHA" ] || { echo "The apt signing key failed its pinned hash check. Nothing was installed." >&2; exit 1; }
+  install -m 0644 "$WORK/garrett.gpg" /usr/share/keyrings/garrett.gpg
   echo "deb [signed-by=/usr/share/keyrings/garrett.gpg] $BASE stable main" > /etc/apt/sources.list.d/garrett.list
   chmod 0644 /usr/share/keyrings/garrett.gpg /etc/apt/sources.list.d/garrett.list
   apt-get update -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/garrett.list -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0 >/dev/null
   DEBIAN_FRONTEND=noninteractive apt-get install -y garrett
 elif [ "$SYSTEM" = Linux ]; then
   case "$(uname -m)" in
-    x86_64|amd64) bundle garrett-linux-x86_64.tar.gz ;;
-    aarch64|arm64) bundle garrett-linux-aarch64.tar.gz ;;
-    armv7l|armv8l) bundle garrett-linux-armv7.tar.gz ;;
+    x86_64|amd64) bundle garrett-linux-x86_64.tar.gz "$LINUX_X86_SHA" ;;
+    aarch64|arm64) bundle garrett-linux-aarch64.tar.gz "$LINUX_ARM64_SHA" ;;
+    armv7l|armv8l) bundle garrett-linux-armv7.tar.gz "$LINUX_ARMV7_SHA" ;;
     *) echo "garrett is built for 64-bit Intel/AMD, 64-bit ARM and 32-bit ARMv7 machines. This one is $(uname -m)." >&2; exit 1 ;;
   esac
 elif [ "$SYSTEM" = Darwin ]; then
-  bundle garrett-macos.tar.gz
+  bundle garrett-macos.tar.gz "$MACOS_SHA"
 else
   echo "This installer covers Linux and macOS. For Windows, download garrett-windows.zip from the releases page." >&2
   exit 1

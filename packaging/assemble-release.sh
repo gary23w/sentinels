@@ -32,25 +32,10 @@ python3 -B "$HERE/packaging/build-release.py" "$OUT/dist" --agents "$OUT/agents"
 { echo "garrett $VERSION"; for name in $NAMES; do grep "  $name\$" "$OUT/dist/SHA256SUMS"; done; } > "$OUT/site/update.txt"
 [ "$(wc -l < "$OUT/site/update.txt")" = 6 ] || { echo "The update list is incomplete." >&2; exit 1; }
 for name in $NAMES garrett-linux-x86_64.tar.gz garrett-linux-aarch64.tar.gz garrett-linux-armv7.tar.gz garrett-macos.tar.gz garrett-windows.zip garrett-service.tar.gz garrett-service-windows.zip SHA256SUMS; do cp "$OUT/dist/$name" "$OUT/site/$name"; done
-for name in install.sh service.sh service.ps1; do sed 's/\r$//' "$HERE/packaging/$name" > "$OUT/site/$name"; done
-# The first-install script must pin the exact Windows bundle in this release. A checksum fetched beside
-# the bundle would only prove that the same site supplied both files.
-WINDOWS_SUM=$(awk '$2 == "garrett-windows.zip" {print $1}' "$OUT/dist/SHA256SUMS")
-python3 - "$HERE/packaging/install.ps1" "$OUT/site/install.ps1" "$WINDOWS_SUM" <<'PY'
-import re
-import sys
-from pathlib import Path
-
-source, target, digest = sys.argv[1:]
-if not re.fullmatch(r"[0-9a-f]{64}", digest):
-    raise SystemExit("The Windows bundle hash is missing or invalid.")
-text = Path(source).read_text(encoding="utf-8").replace("\r\n", "\n")
-text, count = re.subn(r"(?m)^\$pinnedWindowsZip = '[0-9a-f]{64}'$",
-                      "$pinnedWindowsZip = '" + digest + "'", text)
-if count != 1:
-    raise SystemExit("The Windows installer has no single pinned hash to update.")
-Path(target).write_bytes(text.encode("utf-8"))
-PY
+for name in service.sh service.ps1; do sed 's/\r$//' "$HERE/packaging/$name" > "$OUT/site/$name"; done
+# A checksum fetched beside a bundle cannot authenticate it. Give the first-install scripts the
+# exact bundle hashes from this release before the site is signed and published.
+python3 -B "$HERE/packaging/pin-release-installers.py" "$OUT/dist/SHA256SUMS" "$OUT/site"
 # The site's front page, and the manual as a page.
 sed "s/@VERSION@/$VERSION/g" "$HERE/packaging/site/index.html" > "$OUT/site/index.html"
 # The site's other pages and the files that help it be found, as they are.

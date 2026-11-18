@@ -24,6 +24,9 @@ gpg --batch --yes --default-key "$KEY" --armor --detach-sign -o dists/stable/Rel
 gpg --batch --yes --default-key "$KEY" --clearsign -o dists/stable/InRelease dists/stable/Release
 gpg --batch --yes --export "$KEY" > garrett.gpg
 gpg --batch --yes --armor --export "$KEY" > garrett.asc
+PIN=$(grep '^APT_KEY_SHA=' install.sh | cut -d"'" -f2)
+ACTUAL=$(sha256sum garrett.gpg | cut -d' ' -f1)
+[ "$PIN" = "$ACTUAL" ] || { echo "The installer does not pin this release's apt signing key." >&2; exit 1; }
 gpg --verify dists/stable/Release.gpg dists/stable/Release 2>/dev/null
 cd "$REL/dist"
 sha256sum -c SHA256SUMS >/dev/null
