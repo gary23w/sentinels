@@ -346,6 +346,7 @@ jobs:
           $command = Join-Path $env:ProgramFiles 'garrett\garrett.cmd'
           $state = Join-Path $env:ProgramData 'garrett'
           scoop install $manifest
+          if (-not (Get-Command scoop -ErrorAction SilentlyContinue)) { throw 'Installing changed the PATH of the shell Scoop ran in.' }
           & $command status
           if ($LASTEXITCODE -ne 0) { throw 'garrett status failed after scoop install.' }
           if ((Get-ScheduledTask -TaskName garrett).State -ne 'Running') { throw 'The scheduled task is not running.' }

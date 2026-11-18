@@ -16,15 +16,20 @@
     "extract_dir": "garrett",
     "installer": {
         "script": [
-            "# The bundle's installer copies garrett to C:\\Program Files\\garrett, locks it, and starts it as SYSTEM.",
-            "& \"$dir\\deploy\\install-windows.ps1\""
+            "# The bundle's installer copies garrett to C:\\Program Files\\garrett, locks it, and starts it as SYSTEM. It runs in",
+            "# a PowerShell of its own: it sets its own PATH, which must not become the PATH of the shell Scoop runs in.",
+            "& (Join-Path $env:SystemRoot 'System32\\WindowsPowerShell\\v1.0\\powershell.exe') -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"$dir\\deploy\\install-windows.ps1\"",
+            "if ($LASTEXITCODE -ne 0) { throw 'garrett was not installed.' }"
         ]
     },
     "uninstaller": {
         "script": [
             "# Scoop runs this before every update as well ($cmd is then 'update'): garrett, its cases and its enrolment",
             "# stay on the machine through an update, and only leave it on scoop uninstall.",
-            "if ($cmd -eq 'uninstall') { & \"$dir\\deploy\\uninstall-windows.ps1\" }"
+            "if ($cmd -eq 'uninstall') {",
+            "    & (Join-Path $env:SystemRoot 'System32\\WindowsPowerShell\\v1.0\\powershell.exe') -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"$dir\\deploy\\uninstall-windows.ps1\"",
+            "    if ($LASTEXITCODE -ne 0) { throw 'garrett was not removed.' }",
+            "}"
         ]
     }
 }
