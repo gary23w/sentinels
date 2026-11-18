@@ -3,24 +3,24 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#101218">
+  <meta name="theme-color" content="#fdfdfc">
   <meta name="google-site-verification" content="iXq4EhK7zId0XQ35wLwAf5WQVl1K02RYzZ45YvVl0xM">
   <meta name="msvalidate.01" content="516DA6D5207D74384CA25DF3B808F4B1">
   <title>Sentinels | Open-source host intrusion detection and response</title>
-  <meta name="description" content="Detect and respond to suspicious activity on Linux, macOS and Windows with Sentinels. An open-source agent that runs on the host and records why it acted.">
+  <meta name="description" content="Sentinels is an open-source intrusion detection and response agent for Linux, macOS and Windows. Detect activity locally and review why the agent acted.">
   <link rel="canonical" href="https://gary23w.github.io/sentinels/">
-  <link rel="icon" href="sentinels-icon.png" type="image/png" sizes="64x64">
-  <link rel="stylesheet" href="sentinels.css">
-  <script src="sentinels.js" defer></script>
+  <link rel="icon" href="sentinels-icon.png?v=2" type="image/png" sizes="64x64">
+  <link rel="stylesheet" href="sentinels.css?v=2">
+  <script src="sentinels.js?v=2" defer></script>
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Sentinels">
   <meta property="og:title" content="Sentinels | Open-source host defense">
-  <meta property="og:description" content="Catch intrusions as they start. Respond on the host and see why the agent acted. Available for Linux, macOS and Windows.">
+  <meta property="og:description" content="Detect and respond to intrusions on Linux, macOS and Windows.">
   <meta property="og:url" content="https://gary23w.github.io/sentinels/">
-  <meta property="og:image" content="https://gary23w.github.io/sentinels/sentinels-share.jpg">
+  <meta property="og:image" content="https://gary23w.github.io/sentinels/sentinels-share.jpg?v=2">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="Sentinels, open-source host intrusion detection and response">
+  <meta property="og:image:alt" content="Sentinels. Stop intrusions at the host. Linux, macOS and Windows.">
   <meta name="twitter:card" content="summary_large_image">
   <script type="application/ld+json">
   {
@@ -39,7 +39,7 @@
     "url": "https://gary23w.github.io/sentinels/",
     "installUrl": "https://gary23w.github.io/sentinels/install.sh",
     "downloadUrl": "https://github.com/gary23w/sentinels/releases",
-    "image": "https://gary23w.github.io/sentinels/sentinels-share.jpg",
+    "image": "https://gary23w.github.io/sentinels/sentinels-share.jpg?v=2",
     "sameAs": "https://github.com/gary23w/sentinels"
   }
   </script>
@@ -48,214 +48,125 @@
   <a class="skip" href="#name">Skip to content</a>
   <header class="site-header">
     <div class="wrap header-inner">
-      <a class="brand" href="#top" aria-label="Sentinels home">
-        <span class="brand-mark" aria-hidden="true"></span>sentinels
-      </a>
+      <a class="wordmark" href="./">sentinels</a>
       <nav class="site-nav" aria-label="Main">
         <a href="#description">How it works</a>
-        <a href="#installation">Install</a>
-        <a href="#projects">Projects</a>
+        <a href="manual.html">Manual</a>
+        <a href="https://github.com/gary23w/sentinels">GitHub</a>
       </nav>
-      <a class="source-link" href="https://github.com/gary23w/sentinels">GitHub <span aria-hidden="true">↗</span></a>
     </div>
   </header>
 
   <main>
-    <section class="hero wrap" id="name" aria-labelledby="hero-title" tabindex="-1">
-      <div class="hero-copy">
-        <p class="eyebrow"><span class="signal" aria-hidden="true"></span> Open-source host defense</p>
-        <h1 id="hero-title">Catch intrusions <em>as they start.</em></h1>
-        <p class="hero-intro">Sentinels runs on your servers and workstations. Its <code>garrett</code> agent detects suspicious activity, can stop the process, and records why it acted.</p>
-        <div class="actions">
-          <a class="button primary" href="#installation">Install Sentinels <span aria-hidden="true">↓</span></a>
-          <a class="button secondary" href="#modes">Explore a sample case</a>
-        </div>
-        <ul class="hero-facts" aria-label="License and platforms">
-          <li>MIT licensed</li>
-          <li>Linux, macOS &amp; Windows</li>
-        </ul>
+    <section class="wrap hero" id="name" aria-labelledby="hero-title" tabindex="-1">
+      <div>
+        <h1 id="hero-title">Stop intrusions at the host.</h1>
+        <p class="hero-intro">Sentinels is an open-source agent for Linux, macOS and Windows. It detects suspicious processes and records why it acted.</p>
+        <a class="primary" href="#installation">Install Sentinels</a>
       </div>
-      <figure class="hero-visual">
-        <img class="hero-image" src="sentinel-core.webp" width="1280" height="854" alt="" fetchpriority="high">
-        <div class="visual-label" aria-hidden="true"><span class="signal"></span> garrett / on-host agent</div>
-        <figcaption class="visual-caption">
-          <span class="visual-icon" aria-hidden="true">✓</span>
-          <div><strong>Process stopped</strong><small>Sample case · default kill mode</small></div>
-          <a href="#modes" aria-label="Explore the sample case"><span aria-hidden="true">↘</span></a>
-        </figcaption>
-      </figure>
+      <section class="quickstart" id="installation" aria-labelledby="install-title" tabindex="-1">
+        <h2 id="install-title">Quick install</h2>
+        <div data-tabs>
+          <div class="tab-list" data-tab-list aria-label="Operating system" hidden>
+            <button type="button" data-panel="install-unix">Linux &amp; macOS</button>
+            <button type="button" data-panel="install-windows">Windows</button>
+          </div>
+          <div class="install-panel" id="install-unix">
+            <h3 class="platform-title">Linux &amp; macOS</h3>
+            <div class="command">
+              <pre><code id="unix-command">curl -fsSL https://gary23w.github.io/sentinels/install.sh | sudo sh</code></pre>
+              <button class="copy" type="button" data-copy="unix-command" aria-label="Copy Linux and macOS install command" hidden>Copy</button>
+            </div>
+          </div>
+          <div class="install-panel" id="install-windows">
+            <h3 class="platform-title">Windows</h3>
+            <p class="platform-note">Run in PowerShell as administrator.</p>
+            <div class="command">
+              <pre><code id="windows-command">irm https://gary23w.github.io/sentinels/install.ps1 | iex</code></pre>
+              <button class="copy" type="button" data-copy="windows-command" aria-label="Copy Windows install command" hidden>Copy</button>
+            </div>
+          </div>
+          <p class="copy-status" role="status" aria-atomic="true"></p>
+        </div>
+        <p class="install-note" id="synopsis">Run <code>garrett status</code> to check the agent. The default <code>kill</code> mode can stop processes. Use <a href="#report-mode">report mode</a> to evaluate alerts first.</p>
+      </section>
     </section>
 
-    <section class="section wrap" id="description" aria-labelledby="response-title">
-      <div class="section-head">
-        <p class="eyebrow">Detection and response</p>
-        <h2 id="response-title">See why it acted.</h2>
-        <p>Garrett watches processes and their connections on the host. Each case shows the activity it saw, the response mode in use, and the action it took.</p>
-      </div>
-      <div class="response-layout" id="modes">
-        <div class="case-console" data-tabs>
-          <div class="console-head">
-            <span><span class="signal" aria-hidden="true"></span> Sample case</span>
-            <code>garrett cases</code>
-          </div>
-          <div class="tab-list" data-tab-list aria-label="Response mode" hidden>
-            <button type="button" data-panel="case-kill">Kill</button>
-            <button type="button" data-panel="case-pause">Pause</button>
-            <button type="button" data-panel="case-decide">Decide</button>
-            <button type="button" data-panel="case-report">Report</button>
-          </div>
-          <div class="console-body">
-            <p class="sample-signal"><span>Signal</span> A web server started a shell that tried to download a script.</p>
-            <div class="mode-panel" id="case-kill">
-              <h3><code>kill</code> <span class="outcome">Process ended</span></h3>
-              <p>In the default mode, Garrett ends the shell and any child processes it started.</p>
-            </div>
-            <div class="mode-panel" id="case-pause">
-              <h3><code>pause</code> <span class="outcome">Awaiting operator</span></h3>
-              <p>Garrett freezes the process. An operator can review the case and decide whether to stop or release it.</p>
-            </div>
-            <div class="mode-panel" id="case-decide">
-              <h3><code>decide</code> <span class="outcome">Awaiting model</span></h3>
-              <p>Garrett freezes the process and asks the fleet service’s configured model to stop, release, or hold it.</p>
-            </div>
-            <div class="mode-panel" id="case-report">
-              <h3><code>report</code> <span class="outcome">Case recorded</span></h3>
-              <p>Garrett records the signal and lets the process continue. Use this mode to observe what it flags.</p>
-            </div>
-          </div>
-          <p class="console-foot">Illustrative case · Runs entirely in this page</p>
+    <section class="wrap overview" id="description" aria-labelledby="overview-title">
+      <h2 id="overview-title">From detection to recovery</h2>
+      <dl class="features">
+        <div>
+          <dt>Detect locally</dt>
+          <dd>One executable watches processes and their connections. Case records stay on the host when it runs standalone.</dd>
         </div>
-        <dl class="response-notes">
-          <div>
-            <dt>Local by default</dt>
-            <dd>The agent is a single executable. It scores activity and keeps case records on the host when run standalone.</dd>
-          </div>
-          <div>
-            <dt>Reversible cleanup</dt>
-            <dd>Garrett can quarantine dropped files and disable persistence. Use <code>garrett restore &lt;case&gt;</code> to reverse cleanup.</dd>
-          </div>
-          <div id="ai">
-            <dt>Signals for automated intrusions</dt>
-            <dd>Garrett looks for patterns such as fast command bursts and repeated attempts. <a href="ai-attacks.html">Read about AI-operated intrusions <span aria-hidden="true">↗</span></a></dd>
-          </div>
-        </dl>
-      </div>
-      <details class="detail" id="benchmarks">
-        <summary>Performance notes</summary>
-        <p>Internal tests put stopping time at about 20 ms for rapid process-chain scenarios and under 5 ms for selected tool-driven scenarios. These are preliminary figures from those scenarios. <a href="https://github.com/gary23w/sentinels#what-you-get">See the project notes</a> for context.</p>
-      </details>
-    </section>
+        <div>
+          <dt>Choose the response</dt>
+          <dd>Stop a suspicious process, pause it for review, or keep it running and record a case.</dd>
+        </div>
+        <div>
+          <dt>Review and restore</dt>
+          <dd>Run <code>garrett cases</code> to see why it acted. <code>garrett restore &lt;case&gt;</code> can reverse cleanup after a stop.</dd>
+        </div>
+      </dl>
+      <nav class="documentation" id="see-also" aria-label="Documentation and downloads">
+        <a href="manual.html">Commands and configuration</a>
+        <a id="ai" href="ai-attacks.html">AI-operated intrusion guide</a>
+        <a href="https://github.com/gary23w/sentinels/releases">Release downloads</a>
+      </nav>
 
-    <section class="section install-section" id="installation" aria-labelledby="install-title">
-      <div class="wrap">
-        <div class="section-head">
-          <p class="eyebrow">Get started</p>
-          <h2 id="install-title">Install Sentinels.</h2>
-          <p>Install the agent on one host, then run <code>garrett status</code> to check it. The default <code>kill</code> mode can end processes it judges hostile.</p>
-        </div>
-        <div class="install-grid">
-          <div class="install-console" data-tabs>
-            <div class="tab-list" data-tab-list aria-label="Operating system" hidden>
-              <button type="button" data-panel="install-unix">Linux &amp; macOS</button>
-              <button type="button" data-panel="install-windows">Windows</button>
-            </div>
-            <div class="install-panel" id="install-unix">
-              <h3>Linux &amp; macOS</h3>
-              <div class="command">
-                <pre><code id="unix-command">curl -fsSL https://gary23w.github.io/sentinels/install.sh | sudo sh</code></pre>
-                <button class="copy" type="button" data-copy="unix-command" aria-label="Copy Linux and macOS install command" hidden>Copy</button>
-              </div>
-              <p>To start in report mode, use <code>sudo sh -s -- --mode report</code> after the pipe.</p>
-            </div>
-            <div class="install-panel" id="install-windows">
-              <h3>Windows PowerShell as administrator</h3>
-              <div class="command">
-                <pre><code id="windows-command">irm https://gary23w.github.io/sentinels/install.ps1 | iex</code></pre>
-                <button class="copy" type="button" data-copy="windows-command" aria-label="Copy Windows install command" hidden>Copy</button>
-              </div>
-              <p>Or unpack the <a href="garrett-windows.zip">Windows bundle</a> and run <code>Install garrett.cmd</code>.</p>
-            </div>
-            <p class="copy-status" role="status" aria-atomic="true"></p>
-          </div>
-          <aside class="quick-links" id="synopsis" aria-labelledby="quick-links-title">
-            <h3 id="quick-links-title">After installation</h3>
-            <ul>
-              <li><code>garrett status</code> <span>Check the agent</span></li>
-              <li><code>garrett cases</code> <span>Review recorded cases</span></li>
-            </ul>
-            <a href="manual.html">Read the garrett(8) manual <span aria-hidden="true">↗</span></a>
-          </aside>
-        </div>
-        <div class="install-details">
-          <details class="detail" id="packages">
-            <summary>Debian &amp; Ubuntu APT repository</summary>
+      <details class="operating-notes">
+        <summary>Deployment and operating notes</summary>
+        <div class="notes-grid">
+          <section id="modes">
+            <h3>Response modes</h3>
+            <dl class="mode-list">
+              <div><dt><code>kill</code></dt><dd>End the process and its children.</dd></div>
+              <div><dt><code>pause</code></dt><dd>Freeze the process for an operator to review.</dd></div>
+              <div><dt><code>decide</code></dt><dd>Freeze the process and ask the fleet service’s configured model what to do.</dd></div>
+              <div><dt><code>report</code></dt><dd>Record the activity and leave the process running.</dd></div>
+            </dl>
+            <p id="report-mode">On Linux and macOS, install in report mode to review alerts before enabling automatic response.</p>
+            <pre><code>curl -fsSL https://gary23w.github.io/sentinels/install.sh | sudo sh -s -- --mode report</code></pre>
+          </section>
+          <section id="fleet">
+            <h3>Fleet service</h3>
+            <p>Run the optional service on your hardware to collect cases and share learned patterns across enrolled hosts.</p>
+            <p>Linux and macOS</p>
+            <pre><code>curl -fsSL https://gary23w.github.io/sentinels/service.sh | sudo sh</code></pre>
+            <p>Windows PowerShell as administrator</p>
+            <pre><code>irm https://gary23w.github.io/sentinels/service.ps1 | iex</code></pre>
+            <p>Enroll a host</p>
+            <pre><code>curl -fsSL https://gary23w.github.io/sentinels/install.sh | sudo sh -s -- --server https://your-service --key &lt;enrollment key&gt;</code></pre>
+            <p><a href="mailto:info@garrettstimpson.ca?subject=Sentinels%20managed%20hosting">Ask about managed hosting</a></p>
+          </section>
+          <section id="packages">
+            <h3>Packages</h3>
+            <p>For Debian and Ubuntu, add the signed APT repository.</p>
             <pre><code>curl -fsSL https://gary23w.github.io/sentinels/garrett.gpg | sudo tee /usr/share/keyrings/garrett.gpg &gt;/dev/null
 echo "deb [signed-by=/usr/share/keyrings/garrett.gpg] https://gary23w.github.io/sentinels stable main" | sudo tee /etc/apt/sources.list.d/garrett.list
 sudo apt update &amp;&amp; sudo apt install garrett</code></pre>
-          </details>
-          <details class="detail" id="updates">
-            <summary>Signed updates and checksums</summary>
-            <p>Garrett checks the project’s signature before installing an update. Set <code>UPDATE=off</code> to update manually.</p>
+            <p>On Windows, you can also unpack the <a href="garrett-windows.zip">Windows bundle</a> and run <code>Install garrett.cmd</code>.</p>
+          </section>
+          <section id="updates">
+            <h3>Signed updates</h3>
+            <p>Garrett verifies the project’s signature before updating. Set <code>UPDATE=off</code> to update manually.</p>
             <p>APT key fingerprint <code>6857 EBCB BEF5 1040 C3F2 0107 3626 88BF C238 AB45</code></p>
-            <p><a href="SHA256SUMS">Checksums</a> · <a href="SHA256SUMS.asc">Checksum signature</a> · <a href="https://github.com/gary23w/sentinels/releases">Release downloads</a></p>
-          </details>
+            <p><a href="SHA256SUMS">Checksums</a> and <a href="SHA256SUMS.asc">signature</a></p>
+            <p id="benchmarks"><a href="https://github.com/gary23w/sentinels#what-you-get">Performance notes</a></p>
+          </section>
         </div>
-      </div>
-    </section>
-
-    <section class="section wrap fleet-section" id="fleet" aria-labelledby="fleet-title">
-      <div class="section-head">
-        <p class="eyebrow">Fleet service</p>
-        <h2 id="fleet-title">Manage cases across hosts.</h2>
-        <p>Run the optional service on your own hardware to collect cases and share learned patterns among enrolled hosts. A configured model can summarize cases and help with decisions in <code>decide</code> mode.</p>
-        <a href="mailto:info@garrettstimpson.ca?subject=Sentinels%20managed%20hosting">Ask about managed hosting <span aria-hidden="true">↗</span></a>
-      </div>
-      <div class="fleet-setup">
-        <details class="detail">
-          <summary>Set up the fleet service</summary>
-          <h3>Linux &amp; macOS</h3>
-          <pre><code>curl -fsSL https://gary23w.github.io/sentinels/service.sh | sudo sh</code></pre>
-          <h3>Windows PowerShell as administrator</h3>
-          <pre><code>irm https://gary23w.github.io/sentinels/service.ps1 | iex</code></pre>
-          <h3>Enroll a host</h3>
-          <pre><code>curl -fsSL https://gary23w.github.io/sentinels/install.sh | sudo sh -s -- --server https://your-service --key &lt;enrollment key&gt;</code></pre>
-        </details>
-        <div class="docs-links" id="see-also">
-          <a href="manual.html">Commands &amp; configuration <span aria-hidden="true">↗</span></a>
-          <a href="https://github.com/gary23w/sentinels#readme">README &amp; source <span aria-hidden="true">↗</span></a>
-        </div>
-      </div>
-    </section>
-
-    <section class="project-section" id="projects" aria-labelledby="projects-title">
-      <div class="wrap">
-        <div class="section-head">
-          <p class="eyebrow">Project family</p>
-          <h2 id="projects-title">More open-source projects.</h2>
-        </div>
-        <div class="project-grid">
-          <a class="project-card project-veil" href="https://veil.garrettstimpson.ca/">
-            <span class="project-icon" aria-hidden="true">&gt;_</span>
-            <div><h3>NL-VEIL</h3><p>A coding desktop app for working with parallel AI agents and persistent project memory.</p></div>
-            <span class="project-arrow" aria-hidden="true">↗</span>
-          </a>
-          <a class="project-card project-neuron" href="https://gary23w.github.io/neuron-db/">
-            <span class="project-icon" aria-hidden="true">∷</span>
-            <div><h3>neuron-db</h3><p>An associative memory in Rust. Write facts in plain language and recall them by meaning.</p></div>
-            <span class="project-arrow" aria-hidden="true">↗</span>
-          </a>
-        </div>
-      </div>
+      </details>
     </section>
   </main>
 
   <footer class="site-footer">
     <div class="wrap footer-inner">
       <p>Built by <a href="https://garrettstimpson.ca/">Garrett Stimpson</a> and contributors.</p>
-      <nav aria-label="Footer">
+      <nav id="projects" aria-label="Project links">
+        <a href="https://veil.garrettstimpson.ca/">NL-VEIL</a>
+        <a href="https://gary23w.github.io/neuron-db/">neuron-db</a>
         <a href="https://github.com/gary23w/sentinels/blob/main/LICENSE">MIT license</a>
         <a href="sitemap.xml">Sitemap</a>
-        <a href="#top">Back to top <span aria-hidden="true">↑</span></a>
       </nav>
     </div>
   </footer>
