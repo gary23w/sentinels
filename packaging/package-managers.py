@@ -80,13 +80,15 @@ def write(path, text):
 
 
 def aur(pkgbuild):
-    """The AUR names a package built from released program files with -bin, beside one built from source."""
-    body = pkgbuild.split("pkgname=garrett\n", 1)[1]
+    """The AUR names a package built from released program files with -bin, beside one built from source. It is the
+    one package, garrett-bin, without the repository's alias: the AUR finds it by "sentinels" in its description."""
+    body = pkgbuild.split("pkgname=('garrett' 'sentinels')\n", 1)[1].split("\n# The alias:", 1)[0] + "\n"
     head = ("# Maintainer: sentinels <noreply at sentinels dot invalid>\n"
-            "# garrett, the Sentinel agent, from the program files of its signed GitHub release.\n"
+            "# garrett, the agent of sentinels, from the program files of its signed GitHub release.\n"
             "# After installing: systemctl enable --now garrett\n"
             "pkgname=garrett-bin\n")
-    return head + body.replace("depends=('iproute2')\n", "depends=('iproute2')\nprovides=('garrett')\nconflicts=('garrett')\n", 1)
+    body = body.replace("options=('!strip' '!debug')\n", "options=('!strip' '!debug')\nprovides=('garrett')\nconflicts=('garrett')\n", 1)
+    return head + body.replace("package_garrett() {", "package() {", 1)
 
 
 def render(release, base_url):
@@ -119,7 +121,9 @@ def chocolatey(out, msi, base_url):
     write(out / "garrett.nuspec", fill("packaging/chocolatey/garrett.nuspec", version, sums, base_url))
     for name in ("chocolateyinstall.ps1", "chocolateyuninstall.ps1"):
         write(out / "tools" / name, fill("packaging/chocolatey/tools/" + name, version, sums, base_url))
-    print("Chocolatey package files for garrett %s in %s" % (version, out))
+    # The alias sentinels: a package of its own, beside garrett's files, that installs garrett.
+    write(out.parent / (out.name + "-sentinels") / "sentinels.nuspec", fill("packaging/chocolatey/sentinels.nuspec", version, sums, base_url))
+    print("Chocolatey package files for garrett %s in %s, and for its alias sentinels in %s-sentinels" % (version, out, out))
 
 
 def main(arguments):

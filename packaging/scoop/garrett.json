@@ -1,6 +1,6 @@
 {
     "version": "@VERSION@",
-    "description": "garrett, the Sentinel agent: a host intrusion sentinel that stops what it catches. It runs as SYSTEM, so install it from a PowerShell opened with Run as administrator.",
+    "description": "garrett, the agent of sentinels: a host intrusion sentinel that stops what it catches. It runs as SYSTEM, so install it from a PowerShell opened with Run as administrator.",
     "homepage": "https://github.com/gary23w/sentinels",
     "license": "MIT",
     "notes": [

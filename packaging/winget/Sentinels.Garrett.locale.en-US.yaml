@@ -10,13 +10,15 @@ PackageName: garrett
 PackageUrl: https://github.com/gary23w/sentinels
 License: MIT
 LicenseUrl: https://github.com/gary23w/sentinels/blob/main/LICENSE
-ShortDescription: Host intrusion sentinel that stops what it catches.
+ShortDescription: The agent of sentinels, a host intrusion sentinel that stops what it catches.
 Description: |-
-  garrett watches this machine's running programs and their connections, scores them on the machine, and pauses or ends a program it judges hostile.
+  garrett, the agent of sentinels, watches this machine's running programs and their connections, scores them on the machine, and pauses or ends a program it judges hostile.
   It reports cases to a Sentinel service you run yourself, applies what that service learned from earlier attacks, and shares what one machine learns with the rest of your machines.
   It runs as SYSTEM and starts with Windows. See what it finds with "C:\Program Files\garrett\garrett.cmd" cases
-Moniker: garrett
+Moniker: sentinels
 Tags:
+- sentinels
+- garrett
 - security
 - intrusion-detection
 - agent

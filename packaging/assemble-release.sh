@@ -33,7 +33,7 @@ done
 # made on the Windows build machine, where the package was built and tested.
 cp "$BUILT/garrett-windows.msi/garrett-windows.msi" "$OUT/dist/garrett-windows.msi"
 mkdir -p "$OUT/packages/chocolatey"
-cp "$BUILT/garrett-chocolatey/garrett.$VERSION.nupkg" "$OUT/packages/chocolatey/"
+cp "$BUILT/garrett-chocolatey/garrett.$VERSION.nupkg" "$BUILT/garrett-chocolatey/sentinels.$VERSION.nupkg" "$OUT/packages/chocolatey/"
 # The Node.js runtime the one-file installers carry: the official builds, checked against their published digests.
 NODE_VERSION=v24.22.3
 fetch_checked() { curl -fsSL "$1" -o "$2"; [ "$(sha256sum "$2" | cut -d' ' -f1)" = "$3" ] || { echo "$2 does not match its digest." >&2; exit 1; }; }

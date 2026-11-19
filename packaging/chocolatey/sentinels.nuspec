@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- sentinels for Chocolatey: the alias that installs the garrett package, sentinels' agent, at the same version.
+     packaging/package-managers.py fills in the version; choco pack makes the package from the result. -->
+<package xmlns="http://schemas.microsoft.com/packaging/2015/06/nuspec.xsd">
+  <metadata>
+    <id>sentinels</id>
+    <version>@VERSION@</version>
+    <packageSourceUrl>https://github.com/gary23w/sentinels/tree/main/packaging/chocolatey</packageSourceUrl>
+    <owners>sentinels</owners>
+    <title>sentinels</title>
+    <authors>sentinels contributors</authors>
+    <projectUrl>https://github.com/gary23w/sentinels</projectUrl>
+    <licenseUrl>https://github.com/gary23w/sentinels/blob/main/LICENSE</licenseUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <projectSourceUrl>https://github.com/gary23w/sentinels</projectSourceUrl>
+    <docsUrl>https://gary23w.github.io/sentinels/manual.html</docsUrl>
+    <bugTrackerUrl>https://github.com/gary23w/sentinels/issues</bugTrackerUrl>
+    <tags>sentinels garrett security intrusion-detection</tags>
+    <summary>sentinels host intrusion detection and response: installs garrett, its agent.</summary>
+    <description>sentinels is open-source host intrusion detection and response. Its agent, garrett, watches this machine's running programs and their connections and ends a program it judges hostile.
+
+This package installs the garrett package, which does the work. The manual: https://gary23w.github.io/sentinels/manual.html</description>
+    <releaseNotes>https://github.com/gary23w/sentinels/releases/tag/v@VERSION@</releaseNotes>
+    <dependencies>
+      <dependency id="garrett" version="[@VERSION@]" />
+    </dependencies>
+  </metadata>
+  <!-- No files of its own: only the dependency on garrett. -->
+  <files />
+</package>

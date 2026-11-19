@@ -11,10 +11,23 @@ Package: garrett
 Architecture: amd64 arm64
 Depends: ${misc:Depends}, iproute2
 Recommends: nftables
-Description: host intrusion sentinel that stops what it catches
- garrett watches this machine's running programs and their connections,
- scores them on the machine, and pauses or ends a program it judges hostile.
+Description: sentinels agent: host intrusion sentinel that stops what it catches
+ garrett, the agent of sentinels, watches this machine's running programs and
+ their connections, scores them on the machine, and pauses or ends a program
+ it judges hostile.
  .
  It reports cases to a Sentinel service you run yourself, applies what that
  service learned from earlier attacks, and shares what one machine learns
  with the rest of your machines.
+
+Package: sentinels
+Architecture: all
+Section: metapackages
+Depends: garrett (>= ${source:Version}), ${misc:Depends}
+Description: sentinels host intrusion detection and response (installs garrett)
+ sentinels is open-source host intrusion detection and response. Its agent,
+ garrett, watches this machine's running programs and their connections and
+ ends a program it judges hostile.
+ .
+ This package installs garrett, which does the work: remove garrett to remove
+ both.

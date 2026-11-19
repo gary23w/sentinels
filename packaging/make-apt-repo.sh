@@ -4,14 +4,14 @@
 # With a key id the repository is signed (Release.gpg and InRelease) and machines can verify it:
 #   curl -fsSL https://your-host/garrett.gpg | sudo tee /usr/share/keyrings/garrett.gpg >/dev/null
 #   echo "deb [signed-by=/usr/share/keyrings/garrett.gpg] https://your-host stable main" | sudo tee /etc/apt/sources.list.d/garrett.list
-#   sudo apt update && sudo apt install garrett
+#   sudo apt update && sudo apt install garrett      (or sentinels, the alias that installs it)
 # Without a key the repository is unsigned and only suitable for testing with [trusted=yes].
 set -eu
 [ $# -ge 2 ] || { echo "Usage: $0 <folder with .deb files> <repository folder> [gpg key id]" >&2; exit 1; }
 DEBS=$1; REPO=$2; KEY=${3:-}
 command -v apt-ftparchive >/dev/null || { echo "apt-ftparchive (package apt-utils) is required." >&2; exit 1; }
 mkdir -p "$REPO/pool/main"
-cp "$DEBS"/garrett_*.deb "$REPO/pool/main/"
+cp "$DEBS"/garrett_*.deb "$DEBS"/sentinels_*.deb "$REPO/pool/main/"
 cd "$REPO"
 for arch in all amd64 arm64; do
   mkdir -p "dists/stable/main/binary-$arch"

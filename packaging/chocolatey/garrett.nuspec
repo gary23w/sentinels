@@ -7,7 +7,7 @@
     <version>@VERSION@</version>
     <packageSourceUrl>https://github.com/gary23w/sentinels/tree/main/packaging/chocolatey</packageSourceUrl>
     <owners>sentinels</owners>
-    <title>garrett (Sentinel agent)</title>
+    <title>garrett (sentinels agent)</title>
     <authors>sentinels contributors</authors>
     <projectUrl>https://github.com/gary23w/sentinels</projectUrl>
     <licenseUrl>https://github.com/gary23w/sentinels/blob/main/LICENSE</licenseUrl>
@@ -15,9 +15,9 @@
     <projectSourceUrl>https://github.com/gary23w/sentinels</projectSourceUrl>
     <docsUrl>https://gary23w.github.io/sentinels/manual.html</docsUrl>
     <bugTrackerUrl>https://github.com/gary23w/sentinels/issues</bugTrackerUrl>
-    <tags>security intrusion-detection agent</tags>
-    <summary>Host intrusion sentinel that stops what it catches.</summary>
-    <description>garrett watches this machine's running programs and their connections, scores them on the machine, and pauses or ends a program it judges hostile.
+    <tags>sentinels garrett security intrusion-detection agent</tags>
+    <summary>The agent of sentinels: a host intrusion sentinel that stops what it catches.</summary>
+    <description>garrett, the agent of sentinels, watches this machine's running programs and their connections, scores them on the machine, and pauses or ends a program it judges hostile.
 
 It reports cases to a Sentinel service you run yourself, applies what that service learned from earlier attacks, and shares what one machine learns with the rest of your machines.
 

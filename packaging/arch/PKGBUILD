@@ -1,21 +1,20 @@
-# garrett, the Sentinel agent, for Arch Linux and its relatives (pacman).
+# garrett, the agent of sentinels, for Arch Linux and its relatives (pacman); and sentinels, the alias that
+# installs it, so that pacman -S sentinels works as well as pacman -S garrett.
 #
 # It packs the program files the release workflow built, from the release's Linux bundles: nothing is compiled
 # here. packaging/package-managers.py fills in the version and each bundle's SHA-256 for a release, and
-# packaging/build-packages.sh builds the project's pacman repository from the result. The same file, named
-# garrett-bin, is the one for the AUR.
+# packaging/build-packages.sh builds the project's pacman repository from the result. The same file, as a single
+# package named garrett-bin, is the one for the AUR.
 #
 # Arch packages do not start their services by themselves: after installing, systemctl enable --now garrett
-pkgname=garrett
+pkgbase=garrett
+pkgname=('garrett' 'sentinels')
 pkgver=@VERSION@
 pkgrel=1
-pkgdesc='Host intrusion sentinel that stops what it catches'
+pkgdesc='sentinels agent: host intrusion sentinel that stops what it catches'
 arch=('x86_64' 'aarch64' 'armv7h')
 url='https://github.com/gary23w/sentinels'
 license=('MIT')
-depends=('iproute2')
-optdepends=('nftables: fleet blocking, which refuses the addresses your service names at the firewall')
-install=garrett.install
 # The program file is statically linked and already stripped.
 options=('!strip' '!debug')
 _release="https://github.com/gary23w/sentinels/releases/download/v$pkgver"
@@ -26,7 +25,10 @@ sha256sums_x86_64=('@SHA_garrett-linux-x86_64.tar.gz@')
 sha256sums_aarch64=('@SHA_garrett-linux-aarch64.tar.gz@')
 sha256sums_armv7h=('@SHA_garrett-linux-armv7.tar.gz@')
 
-package() {
+package_garrett() {
+  depends=('iproute2')
+  optdepends=('nftables: fleet blocking, which refuses the addresses your service names at the firewall')
+  install=garrett.install
   cd garrett
   install -Dm0755 garrett-agent "$pkgdir/usr/lib/garrett/garrett-agent"
   install -Dm0755 unblock "$pkgdir/usr/lib/garrett/unblock"
@@ -35,4 +37,11 @@ package() {
   install -Dm0644 garrett.8 "$pkgdir/usr/share/man/man8/garrett.8"
   install -Dm0644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
   install -Dm0644 NOTICES.md "$pkgdir/usr/share/doc/$pkgname/NOTICES.md"
+}
+
+# The alias: no files of its own, only garrett.
+package_sentinels() {
+  pkgdesc='sentinels host intrusion detection and response (installs garrett, its agent)'
+  arch=('any')
+  depends=("garrett>=$pkgver")
 }
