@@ -38,7 +38,7 @@ Done. The machine is protected from that moment, garrett starts again at every b
 
 ### With a package manager
 
-The same garrett, from the project's signed repositories or your package manager.
+The same garrett, from the project's signed repositories or your package manager. The packages are named garrett, after the program they install; the name sentinels works as well, and installs garrett with apt, pacman, dnf and zypper (`sudo apt install sentinels`).
 
 | System | Install |
 |---|---|
