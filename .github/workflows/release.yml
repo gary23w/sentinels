@@ -6,8 +6,13 @@
 #   dist/   what goes on the GitHub release: the Debian packages, the bundles, the program files, SHA256SUMS
 #   site/   what goes on the project's site: the apt repository, the installers, the update list, the manual
 #
-# Then, on the machine that holds the keys:   sh packaging/sign-release.sh <folder>
+# Then, on the machine that holds the keys:   powershell -File packaging\sign-windows.ps1 -Thumbprint <thumbprint> <folder>
+#                                             sh packaging/sign-release.sh <folder>
 #                                             sh packaging/publish-release.sh <folder>
+#
+# The first signs the Windows agent (Authenticode) with the project's code-signing certificate and puts the signed
+# file into the zip, the one-file installer, SHA256SUMS, the update list and the pins; it is skipped while there is
+# no certificate. The other two sign the release with the project's keys and publish it.
 #
 # It runs for every tag that starts with v, or by hand:   gh workflow run release.yml --ref <tag or branch>
 #
