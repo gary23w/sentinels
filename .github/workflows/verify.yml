@@ -13,6 +13,8 @@
 #                               running on each system
 #   small-devices               the agent built for 32-bit ARM with its tests run under an emulated processor, and
 #                               the bundle installed as an OpenRC service on a system with no systemd
+#   nix                         the agent built from this commit by the Nix flake on each kind of machine it is for,
+#                               and the flake's lock file committed and current
 #   update-*                    an installed agent brings itself up to a newer version, and refuses one that is
 #                               not signed or does not match its signed list
 #   tests                       the service's own tests
@@ -1106,3 +1108,48 @@ jobs:
             if pgrep -f "[g]arrett-agent" > /dev/null; then echo "the agent is still running after removal"; exit 1; fi
             for left in /usr/lib/garrett /usr/bin/garrett /etc/init.d/garrett /var/lib/garrett; do if [ -e "$left" ]; then echo "left behind: $left"; exit 1; fi; done
           '
+
+  # garrett from the Nix flake (flake.nix), built from this commit on each kind of machine the flake is for: x86-64
+  # and ARM Linux, Apple silicon and Intel Macs. It builds, the flake passes nix flake check, and the program
+  # says the version Cargo.toml names. flake.lock can only be written by Nix itself: when it is missing, or does not
+  # lock every input flake.nix names, the job fails and keeps the one nix flake lock wrote as the artifact
+  # flake.lock, to be committed as it is.
+  nix:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(inputs.windows_macos_only && '["macos-latest", "macos-15-intel"]' || '["ubuntu-latest", "ubuntu-24.04-arm", "macos-latest", "macos-15-intel"]') }}
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+      - name: The lock file
+        id: lock
+        run: |
+          nix flake lock
+          # Nix reads only the files git knows about: the lock it may have just written is staged, so the steps
+          # below build with it.
+          git add flake.lock
+          if git diff --cached --quiet HEAD -- flake.lock; then echo "changed=false" >> "$GITHUB_OUTPUT"; else echo "changed=true" >> "$GITHUB_OUTPUT"; fi
+      - name: garrett builds from source
+        run: nix build .#garrett --print-build-logs
+      - name: The flake passes its checks
+        run: nix flake check --print-build-logs
+      - name: The program is the version Cargo.toml names, run directly and by nix run
+        run: |
+          V=$(sed -n 's/^version = "\(.*\)"/\1/p' rust/Cargo.toml | head -1)
+          ./result/bin/garrett version
+          test "$(./result/bin/garrett version)" = "garrett $V"
+          test "$(nix run . -- version)" = "garrett $V"
+      # One copy is enough: it is kept from macos-latest, which runs in every case.
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() && steps.lock.outputs.changed == 'true' && matrix.os == 'macos-latest' }}
+        with:
+          name: flake.lock
+          path: flake.lock
+      - name: flake.lock is committed and current
+        if: ${{ !cancelled() && steps.lock.outputs.changed == 'true' }}
+        run: |
+          git diff --cached HEAD -- flake.lock | head -80
+          echo "::error::flake.lock is missing or out of date: commit the one in this run's artifact flake.lock."
+          exit 1

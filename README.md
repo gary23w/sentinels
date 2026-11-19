@@ -47,6 +47,7 @@ The same garrett, from the project's signed repositories or your package manager
 | Fedora, RHEL | `sudo curl -fsSL -o /etc/yum.repos.d/garrett.repo https://gary23w.github.io/sentinels/garrett.repo`, then `sudo dnf install garrett && sudo systemctl enable --now garrett` |
 | openSUSE | `sudo zypper addrepo https://gary23w.github.io/sentinels/garrett.repo`, then `sudo zypper install garrett && sudo systemctl enable --now garrett` |
 | macOS, Linux with Homebrew | `brew install gary23w/sentinels/garrett`, then the `sudo sh …/install.sh` line it prints, which starts garrett as root from a root-owned folder |
+| Linux, macOS with Nix | `nix profile install github:gary23w/sentinels`, or `github:gary23w/sentinels/v<version>` for one release: Nix builds garrett from source and puts the program on your PATH, with no service set up |
 | Windows with Scoop | `scoop install https://gary23w.github.io/sentinels/garrett.json`, from PowerShell opened with "Run as administrator" |
 | Windows Installer | [garrett-windows.msi](https://github.com/gary23w/sentinels/releases/latest/download/garrett-windows.msi): double-click it, or `msiexec /i garrett-windows.msi /qn` from Intune, Group Policy or your own tools |
 
