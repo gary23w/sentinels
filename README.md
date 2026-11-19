@@ -47,6 +47,9 @@ The same garrett, from the project's signed repositories or your package manager
 | Fedora, RHEL | `sudo curl -fsSL -o /etc/yum.repos.d/garrett.repo https://gary23w.github.io/sentinels/garrett.repo`, then `sudo dnf install garrett && sudo systemctl enable --now garrett` |
 | openSUSE | `sudo zypper addrepo https://gary23w.github.io/sentinels/garrett.repo`, then `sudo zypper install garrett && sudo systemctl enable --now garrett` |
 | Alpine Linux | As root, add the apk repository below, then `apk add garrett && rc-update add garrett default && rc-service garrett start` |
+| Fedora, RHEL 9 and later, from COPR | `sudo dnf copr enable gary23w/garrett`, then `sudo dnf install garrett && sudo systemctl enable --now garrett` |
+| openSUSE, from the openSUSE Build Service | `sudo zypper addrepo https://download.opensuse.org/repositories/home:/gary23w/openSUSE_Tumbleweed/home:gary23w.repo` (on Leap 16.0, `openSUSE_Leap_16.0` in place of `openSUSE_Tumbleweed`), then `sudo zypper install garrett && sudo systemctl enable --now garrett` |
+| Fedora, from the openSUSE Build Service | `sudo curl -fsSL -o /etc/yum.repos.d/home_gary23w.repo https://download.opensuse.org/repositories/home:/gary23w/Fedora_$(rpm -E %fedora)/home:gary23w.repo`, then `sudo dnf install garrett && sudo systemctl enable --now garrett` |
 | macOS, Linux with Homebrew | `brew install gary23w/sentinels/garrett`, then the `sudo sh …/install.sh` line it prints, which starts garrett as root from a root-owned folder |
 | Linux, macOS with Nix | `nix profile install github:gary23w/sentinels`, or `github:gary23w/sentinels/v<version>` for one release: Nix builds garrett from source and puts the program on your PATH, with no service set up |
 | Windows with Scoop | `scoop install https://gary23w.github.io/sentinels/garrett.json`, from PowerShell opened with "Run as administrator" |
