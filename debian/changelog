@@ -1,3 +1,17 @@
+garrett (1.9.3) stable; urgency=medium
+
+  * The name sentinels finds garrett. Every package's description says it
+    is the agent of sentinels, and an alias package named sentinels installs
+    it: apt install sentinels, pacman -S sentinels, dnf install sentinels
+    and zypper install sentinels all bring in garrett. Removing garrett
+    removes the alias with it. Chocolatey gets a sentinels package that
+    installs garrett too, and the winget manifest's short name (moniker) is
+    sentinels. Homebrew's tap is already named sentinels
+    (brew install gary23w/sentinels/garrett).
+  * Otherwise as 1.9.2.
+
+ -- sentinels <noreply@sentinels.invalid>  Thu, 19 Nov 2026 00:43:12 +0000
+
 garrett (1.9.2) stable; urgency=medium
 
   * garrett comes from more package managers. Beside the apt repository,

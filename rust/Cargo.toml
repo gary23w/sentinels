@@ -1,6 +1,6 @@
 [package]
 name = "garrett"
-version = "1.9.2"
+version = "1.9.3"
 edition = "2021"
 license = "MIT"
 description = "garrett: the Sentinel agent. A host intrusion sentinel that stops what it catches."
