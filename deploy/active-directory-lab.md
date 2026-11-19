@@ -9,7 +9,7 @@ Set up two tenant DNS names that the guests can reach. For guests using VirtualB
 Use this layout for the host service configuration.
 
 ```ini
-ADDRESS=127.0.0.1
+BIND=127.0.0.1
 PORT=18443
 TLS_CERT=C:/garrett-lab/service/tls.crt
 TLS_KEY=C:/garrett-lab/service/tls.key

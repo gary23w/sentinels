@@ -7,7 +7,9 @@
 //   ENROLL_KEY, ADMIN_TOKEN, DATA_KEY   required, 32+ characters each (see the README)
 //   DATABASE                            path of the database file
 //   PORT                                default 8443
-//   ADDRESS                             bind address, defaults to all interfaces
+//   ADDRESS                             the name or address machines call this service by; the installers put it in
+//                                       the join command. It does not choose what the service listens on.
+//   BIND                                the address to listen on; all interfaces when it is not set
 //   TLS_CERT and TLS_KEY                PEM files, or TLS_PFX and TLS_PASSPHRASE
 //   MEMORY                              neuron-db to remember verdicts and recall the nearest (see src/memory.mjs); off by
 //                                       default. The same on the command line:  node serve.mjs <file> --memory neuron-db
@@ -51,7 +53,7 @@ const tls = settings.TLS_PFX ? { pfx: readFileSync(settings.TLS_PFX), passphrase
   : settings.TLS_CERT && settings.TLS_KEY ? { cert: readFileSync(settings.TLS_CERT), key: readFileSync(settings.TLS_KEY) } : null;
 if (!tls) { console.error('Set TLS_CERT and TLS_KEY, or TLS_PFX, in ' + file + '. Agents only talk to a service over HTTPS.'); process.exit(1); }
 
-const { PORT, DATABASE, TLS_CERT, TLS_KEY, TLS_PFX, TLS_PASSPHRASE, ADDRESS, TENANTS, MEMORY, LOG, AI_CA_CERT, MODEL_DIR, ...rest } = settings;
+const { PORT, DATABASE, TLS_CERT, TLS_KEY, TLS_PFX, TLS_PASSPHRASE, ADDRESS, BIND, TENANTS, MEMORY, LOG, AI_CA_CERT, MODEL_DIR, ...rest } = settings;
 if (AI_CA_CERT) {
   if (typeof setDefaultCACertificates !== 'function') { console.error('This Node.js cannot be given an extra certificate for AI_CA_CERT. Start it with NODE_EXTRA_CA_CERTS=' + AI_CA_CERT + ' instead, or use a newer Node.js.'); process.exit(1); }
   try { setDefaultCACertificates([...getCACertificates('default'), readFileSync(AI_CA_CERT, 'utf8')]); } catch (error) { console.error('AI_CA_CERT could not be read: ' + error.message); process.exit(1); }
@@ -127,7 +129,7 @@ const sweep = async () => {
   }
 };
 setInterval(sweep, 15 * 60 * 1000).unref();
-server.listen(Number(PORT) || 8443, ADDRESS || undefined, () => {
+server.listen(Number(PORT) || 8443, BIND || undefined, () => {
   const hosts = many ? [...environments.keys()] : null;
   const deciding = [...environments.values()].find(env => env.AI?.answer);
   const memory = single?.SENTINEL_MEMORY;
