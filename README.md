@@ -133,6 +133,17 @@ The decision model is [crivo-sentinel-v1](https://huggingface.co/gary23w/crivo-s
 
 To plug in a model of your own, or your own reasoning, run `sudo garrett-service setup` (`garrett-service.cmd setup` on Windows): a few questions, then it writes the settings and restarts the service. Add `--wizard` (`$env:GARRETT_WIZARD = '1'`) to the install line to answer them during the install instead. Or edit `/etc/garrett-service/service.conf` by hand: the lines are `AI_PROVIDER` (`decision`, `chat`, `custom` or `none`), `AI_BASE_URL`, `AI_MODEL`, `AI_API_KEY`, `AI_HIGH_CONFIDENCE`, `DECISION_RELEASE` and `DECISION_FALLBACK`, and `MODEL_DIR` for the model that came with it, described in `server/serve.mjs` and `server/wrangler.example.jsonc`. Restart the service after a change.
 
+### Fleets with Ansible or Puppet
+
+If Ansible or Puppet already manages your machines, let it install garrett. The Ansible collection covers Debian, Ubuntu, Fedora, RHEL, openSUSE and Windows; the Puppet module covers the Linux systems. Both install the package from the project's signed repositories (on Windows, the Windows Installer package) and enrol each machine with your hub when you give them its address and key.
+
+```sh
+ansible-galaxy collection install gary23w.sentinels    # then use the role gary23w.sentinels.garrett
+puppet module install gary23w-garrett                  # then include the class garrett
+```
+
+Their settings are in [deploy/ansible](deploy/ansible/README.md) and [deploy/puppet](deploy/puppet/README.md).
+
 ### Windows domain rollout
 
 From the unpacked Windows bundle, run the rollout script in an elevated Windows PowerShell session with the Group Policy and Active Directory modules. Start with a pilot OU and use the enrolment key exactly as the service supplied it, including the certificate fingerprint if present.

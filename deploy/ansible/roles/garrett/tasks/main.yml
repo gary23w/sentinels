@@ -1,0 +1,26 @@
+---
+- name: Check the settings
+  ansible.builtin.assert:
+    that:
+      - (garrett_server | length > 0) == (garrett_enroll_key | length > 0)
+      - garrett_mode in ['', 'kill', 'decide', 'pause', 'report']
+      - '"\n" not in (garrett_server ~ garrett_enroll_key ~ garrett_mode ~ garrett_label)'
+    fail_msg: >-
+      Give garrett_server and garrett_enroll_key together, or neither. garrett_mode is kill, decide, pause or report.
+      No setting may span lines.
+    quiet: true
+
+- name: Refuse a system garrett has no package for here
+  ansible.builtin.fail:
+    msg: >-
+      This role installs garrett on Debian, Ubuntu, Fedora, RHEL, openSUSE and Windows. For macOS and other Linux
+      systems, see https://github.com/gary23w/sentinels#setup.
+  when: ansible_facts.os_family not in ['Debian', 'RedHat', 'Suse', 'Windows']
+
+- name: Install garrett on Linux
+  ansible.builtin.include_tasks: linux.yml
+  when: ansible_facts.os_family in ['Debian', 'RedHat', 'Suse']
+
+- name: Install garrett on Windows
+  ansible.builtin.include_tasks: windows.yml
+  when: ansible_facts.os_family == 'Windows'

@@ -1,0 +1,17 @@
+<%- |
+  Optional[String] $server,
+  Optional[String] $enroll_key,
+  Optional[String] $mode,
+  Optional[String] $label
+| -%>
+# Managed by Puppet (class garrett).
+<% if $server { -%>
+SERVER=<%= $server %>
+ENROLL_KEY=<%= $enroll_key %>
+<% } -%>
+<% if $mode { -%>
+MODE=<%= $mode %>
+<% } -%>
+<% if $label { -%>
+LABEL=<%= $label %>
+<% } -%>

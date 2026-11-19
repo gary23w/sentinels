@@ -1,0 +1,7 @@
+---
+# garrett reads its configuration as it starts; a machine that is not enrolled yet enrols then.
+- name: Restart garrett
+  ansible.builtin.systemd_service:
+    name: garrett
+    state: restarted
+  when: garrett_manage_service | bool

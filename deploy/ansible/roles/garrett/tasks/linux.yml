@@ -1,0 +1,122 @@
+---
+# The configuration goes down first, as packaging/install.sh writes it, so that garrett finds it the moment it starts:
+# with SERVER and ENROLL_KEY in it, "garrett auto" enrols the machine before the service runs (debian/garrett.service).
+- name: Write garrett's configuration
+  when: (garrett_server ~ garrett_mode ~ garrett_label) | length > 0
+  block:
+    - name: Create garrett's configuration folder
+      ansible.builtin.file:
+        path: /etc/garrett
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Create the configuration file, readable by root only, before a key is written to it
+      ansible.builtin.copy:
+        content: ""
+        dest: /etc/garrett/garrett.conf
+        force: false
+        owner: root
+        group: root
+        mode: "0600"
+
+    - name: Write the settings
+      ansible.builtin.template:
+        src: garrett.conf.j2
+        dest: /etc/garrett/garrett.conf
+        owner: root
+        group: root
+        mode: "0600"
+      no_log: true
+      notify: Restart garrett
+
+# Debian and Ubuntu: the apt repository, as the README adds it, with the key checked against the installer's pin.
+- name: Add the apt repository
+  when: ansible_facts.os_family == 'Debian'
+  block:
+    - name: Fetch the apt signing key
+      ansible.builtin.get_url:
+        url: "{{ garrett_repository }}/garrett.gpg"
+        dest: /usr/share/keyrings/garrett.gpg
+        checksum: "sha256:{{ garrett_apt_key_sha256 }}"
+        owner: root
+        group: root
+        mode: "0644"
+      register: garrett_apt_key
+
+    - name: Name the repository
+      ansible.builtin.copy:
+        content: "deb [signed-by=/usr/share/keyrings/garrett.gpg] {{ garrett_repository }} stable main\n"
+        dest: /etc/apt/sources.list.d/garrett.list
+        owner: root
+        group: root
+        mode: "0644"
+      register: garrett_apt_list
+
+    - name: Read the repository's package lists
+      ansible.builtin.apt:
+        update_cache: true
+      when: garrett_apt_key is changed or garrett_apt_list is changed
+
+    - name: Install garrett with apt
+      ansible.builtin.apt:
+        name: garrett
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+# Fedora, RHEL and openSUSE: the rpm repository, as packaging/rpm/garrett.repo defines it. Its list of packages carries
+# the project's signature; the key is imported only if its fingerprint is the project's.
+- name: Add the rpm repository
+  when: ansible_facts.os_family in ['RedHat', 'Suse']
+  block:
+    - name: Import the signing key, checked against its fingerprint
+      ansible.builtin.rpm_key:
+        key: "{{ garrett_repository }}/garrett.asc"
+        fingerprint: "{{ garrett_key_fingerprint }}"
+        state: present
+
+    - name: Name the repository
+      ansible.builtin.template:
+        src: garrett.repo.j2
+        dest: "{{ '/etc/zypp/repos.d/garrett.repo' if ansible_facts.os_family == 'Suse' else '/etc/yum.repos.d/garrett.repo' }}"
+        owner: root
+        group: root
+        mode: "0644"
+      register: garrett_rpm_repo
+
+    - name: Install garrett with dnf
+      ansible.builtin.package:
+        name: garrett
+        state: present
+      when: ansible_facts.os_family == 'RedHat'
+
+    # Ansible's zypper module lives in community.general; zypper itself keeps this role free of that dependency.
+    - name: Look for the garrett package  # noqa: command-instead-of-module
+      ansible.builtin.command:
+        argv: [rpm, -q, garrett]
+      register: garrett_rpm_query
+      changed_when: false
+      failed_when: garrett_rpm_query.rc not in [0, 1]
+      when: ansible_facts.os_family == 'Suse'
+
+    # The key the repository names is the one checked against its fingerprint above: zypper may take it.
+    - name: Read the repository with zypper
+      ansible.builtin.command:
+        argv: [zypper, --non-interactive, --gpg-auto-import-keys, refresh, garrett]
+      changed_when: false
+      when: ansible_facts.os_family == 'Suse' and (garrett_rpm_repo is changed or garrett_rpm_query.rc == 1)
+
+    - name: Install garrett with zypper
+      ansible.builtin.command:
+        argv: [zypper, --non-interactive, install, --name, garrett]
+      changed_when: true
+      when: ansible_facts.os_family == 'Suse' and garrett_rpm_query.rc == 1
+
+- name: Start garrett now and at every boot
+  ansible.builtin.systemd_service:
+    name: garrett
+    enabled: true
+    state: started
+  when: garrett_manage_service | bool

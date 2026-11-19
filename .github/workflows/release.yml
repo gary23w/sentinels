@@ -6,7 +6,8 @@
 #
 # For a tag (v1.2.3), once every check has passed, "publish" signs it with the project's keys and publishes it: the
 # site (apt, pacman, rpm, Scoop's manifest, the installers, the update list agents follow), the GitHub release, the
-# Homebrew tap and the Scoop bucket, then winget, Chocolatey and the AUR; "container" then publishes the image.
+# Homebrew tap and the Scoop bucket, then winget, Chocolatey, the AUR, Ansible Galaxy (the collection gary23w.sentinels)
+# and the Puppet Forge (the module gary23w-garrett), which "fleet" built and ran; "container" then publishes the image.
 # The keys are secrets of the GitHub environment "release", which only tags v* may use. Whoever can push such a tag
 # or change those secrets can put a program on every machine that updates itself from the site.
 #
@@ -34,7 +35,7 @@
 # assemble packs the rest, and builds the pacman and rpm packages and the files for Homebrew, Scoop, winget and the
 # AUR (packaging/build-packages.sh). Each package is installed and removed again before the release is kept: apt,
 # pacman, dnf and zypper in their systems' containers, Homebrew on a Mac, Scoop and the Windows Installer package
-# and Chocolatey on Windows.
+# and Chocolatey on Windows. "fleet" builds the Ansible collection and the Puppet module and has each install garrett.
 #
 # The folders of the build machines are not kept in the program files: they are written as `home` and `garrett`.
 name: release
@@ -389,6 +390,173 @@ jobs:
           foreach ($left in (Join-Path $env:ProgramFiles 'garrett'), $state) { if (Test-Path -LiteralPath $left) { throw "Left behind: $left" } }
           'Scoop installed garrett, kept it through an update, and removed it.'
 
+  # The Ansible collection (deploy/ansible) and the Puppet module (deploy/puppet) that put garrett on a fleet, built
+  # with this release's version (deploy/stage-fleet.sh) and checked. Then each installs garrett from this release's
+  # own repositories, signed here with a throwaway key as "publish" signs them with the project's: the collection on
+  # this machine, where systemd starts garrett, and in Fedora, AlmaLinux and openSUSE containers; the module in a
+  # Debian container. Each runs twice, and the second run changes nothing. A stand-in enrolment key must never show
+  # in their output. The Windows half of the role is checked by ansible-lint only.
+  fleet:
+    needs: assemble
+    runs-on: ubuntu-24.04
+    env:
+      PDK_IMAGE: puppet/pdk:3.4.0.1@sha256:a669eb79f41375b115480ef0540ffcd5cc6d80d567dbb109f5d4e4e15ba57b34
+      PUPPET_VERSION: 8.10.0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: release
+          path: release
+      - name: Tools
+        run: |
+          python3 -m venv "$RUNNER_TEMP/ansible"
+          "$RUNNER_TEMP/ansible/bin/pip" install --quiet ansible-core==2.21.6 ansible-lint==26.11.0
+          echo "$RUNNER_TEMP/ansible/bin" >> "$GITHUB_PATH"
+          echo "V=$(sed -n 's/^version = "\(.*\)"/\1/p' rust/Cargo.toml | head -1)" >> "$GITHUB_ENV"
+      - name: Build the collection and the module
+        run: |
+          sh deploy/stage-fleet.sh fleet
+          mkdir -p fleet/out
+          (cd fleet/ansible && ansible-galaxy collection build --output-path ../out)
+          docker run --rm -v "$PWD/fleet/garrett:/module" -v "$PWD/fleet/out:/out" -w /module "$PDK_IMAGE" build --force --target-dir=/out
+          test -s "fleet/out/gary23w-sentinels-$V.tar.gz"
+          test -s "fleet/out/gary23w-garrett-$V.tar.gz"
+          ls -l fleet/out
+      - name: The collection and the module are sound
+        run: |
+          # They trust the key the one-line installer pins and the README names.
+          PIN=$(sed -n "s/^APT_KEY_SHA='\([0-9a-f]\{64\}\)'$/\1/p" packaging/install.sh)
+          FPR=$(sed -n 's/.*pacman-key --lsign-key \([0-9A-F]\{40\}\)$/\1/p' README.md)
+          [ -n "$PIN" ] && [ -n "$FPR" ]
+          grep -qx "garrett_apt_key_sha256: $PIN" deploy/ansible/roles/garrett/defaults/main.yml
+          grep -qx "garrett_key_fingerprint: $FPR" deploy/ansible/roles/garrett/defaults/main.yml
+          grep -q "\$apt_key_sha256 = '$PIN'," deploy/puppet/manifests/init.pp
+          grep -q "\$key_fingerprint = '$FPR'," deploy/puppet/manifests/init.pp
+          # Installed with what it needs (ansible.windows), as Galaxy will install it, then linted where it was staged.
+          # What it installs keeps its changelog in debian/changelog.
+          ansible-galaxy collection install "fleet/out/gary23w-sentinels-$V.tar.gz"
+          (cd fleet/ansible && ansible-lint --project-dir . --skip-list 'galaxy[no-changelog]')
+          docker run --rm -v "$PWD/fleet/garrett:/modules/garrett:ro" ruby:3.2-bookworm sh -ec '
+            gem install --no-document puppet -v '"$PUPPET_VERSION"' >/dev/null
+            puppet parser validate /modules/garrett/manifests/init.pp
+            for template in /modules/garrett/templates/*.epp; do puppet epp validate "$template"; done'
+      - name: Sign this release's repositories with a throwaway key and serve them
+        run: |
+          export GNUPGHOME="$RUNNER_TEMP/gnupg"
+          mkdir -m 700 "$GNUPGHOME"
+          gpg --batch --quiet --pinentry-mode loopback --passphrase '' --quick-gen-key 'garrett fleet check' rsa3072 sign 1d
+          FPR=$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr/ {print $10; exit}')
+          cd release/site
+          gpg --batch --yes --default-key "$FPR" --armor --detach-sign -o dists/stable/Release.gpg dists/stable/Release
+          gpg --batch --yes --default-key "$FPR" --clearsign -o dists/stable/InRelease dists/stable/Release
+          gpg --batch --yes --export "$FPR" > garrett.gpg
+          gpg --batch --yes --armor --export "$FPR" > garrett.asc
+          gpg --batch --yes --default-key "$FPR" --armor --detach-sign -o rpm/repodata/repomd.xml.asc rpm/repodata/repomd.xml
+          echo "CHECK_FINGERPRINT=$FPR" >> "$GITHUB_ENV"
+          echo "CHECK_PIN=$(sha256sum garrett.gpg | cut -d' ' -f1)" >> "$GITHUB_ENV"
+          nohup python3 -m http.server 8797 --bind 127.0.0.1 --directory "$PWD" >/dev/null 2>&1 &
+          for try in 1 2 3 4 5 6 7 8 9 10; do curl -fsS -o /dev/null http://127.0.0.1:8797/dists/stable/InRelease && exit 0; sleep 1; done
+          exit 1
+      - name: The collection installs garrett here and in Fedora, AlmaLinux and openSUSE, twice
+        run: |
+          set -o pipefail
+          ansible-galaxy collection install community.docker:==5.4.0
+          docker run -d --name fleet-fedora --network host fedora:45 sleep infinity
+          docker run -d --name fleet-alma --network host almalinux:9 sleep infinity
+          docker run -d --name fleet-suse --network host opensuse/tumbleweed sleep infinity
+          # What Ansible needs on a machine it manages: Python, and on Fedora the Python bindings of dnf5.
+          docker exec fleet-fedora dnf install -y -q python3 python3-libdnf5
+          docker exec fleet-alma dnf install -y -q python3
+          docker exec fleet-suse zypper --non-interactive --quiet install python3
+          # The containers get a service and a stand-in key, which must never show in the output; no service runs there.
+          KEY=stand-in-$(openssl rand -hex 16)
+          cat > fleet/inventory.yml <<EOF
+          all:
+            vars:
+              garrett_repository: http://127.0.0.1:8797
+              garrett_apt_key_sha256: $CHECK_PIN
+              garrett_key_fingerprint: $CHECK_FINGERPRINT
+              garrett_mode: report
+            children:
+              here:
+                hosts:
+                  localhost:
+                    ansible_connection: local
+                    ansible_become: true
+                    ansible_python_interpreter: /usr/bin/python3
+              containers:
+                vars:
+                  ansible_connection: community.docker.docker
+                  garrett_manage_service: false
+                  garrett_server: https://sentinel.example.invalid
+                  garrett_enroll_key: $KEY
+                  garrett_label: fleet-check
+                hosts:
+                  fleet-fedora:
+                  fleet-alma:
+                  fleet-suse:
+          EOF
+          cat > fleet/site.yml <<'EOF'
+          - name: Put garrett on every machine
+            hosts: all
+            roles:
+              - role: gary23w.sentinels.garrett
+          EOF
+          ansible-playbook -i fleet/inventory.yml fleet/site.yml --syntax-check
+          ansible-playbook -i fleet/inventory.yml fleet/site.yml --diff -v | tee fleet/first.log
+          ansible-playbook -i fleet/inventory.yml fleet/site.yml --diff -v | tee fleet/second.log
+          if grep -E 'changed=[1-9]' fleet/second.log; then echo "The second run changed something."; exit 1; fi
+          if grep -qF "$KEY" fleet/first.log fleet/second.log; then echo "The enrolment key was printed."; exit 1; fi
+          test "$(garrett version)" = "garrett $V"
+          systemctl is-active --quiet garrett
+          sudo grep -qx 'MODE=report' /etc/garrett/garrett.conf
+          test "$(sudo stat -c %a /etc/garrett/garrett.conf)" = 600
+          for name in fleet-fedora fleet-alma fleet-suse; do
+            echo "== $name"
+            docker exec -e V="$V" -e KEY="$KEY" "$name" sh -ec '
+              test "$(garrett version)" = "garrett $V"
+              grep -qx "SERVER=https://sentinel.example.invalid" /etc/garrett/garrett.conf
+              grep -qx "ENROLL_KEY=$KEY" /etc/garrett/garrett.conf
+              grep -qx "MODE=report" /etc/garrett/garrett.conf
+              grep -qx "LABEL=fleet-check" /etc/garrett/garrett.conf
+              test "$(stat -c %a /etc/garrett/garrett.conf)" = 600'
+          done
+          sudo apt-get purge -y -q garrett
+          docker rm -f fleet-fedora fleet-alma fleet-suse
+      - name: The module installs garrett in Debian, twice
+        run: |
+          KEY=stand-in-$(openssl rand -hex 16)
+          cat > fleet/check.pp <<EOF
+          class { 'garrett':
+            repository     => 'http://127.0.0.1:8797',
+            apt_key_sha256 => '$CHECK_PIN',
+            server         => 'https://sentinel.example.invalid',
+            enroll_key     => '$KEY',
+            mode           => 'report',
+            label          => 'fleet-check',
+            manage_service => false,
+          }
+          EOF
+          docker run --rm --network host -e V="$V" -e KEY="$KEY" -v "$PWD/fleet/garrett:/modules/garrett:ro" -v "$PWD/fleet/check.pp:/check.pp:ro" ruby:3.2-bookworm sh -ec '
+            gem install --no-document puppet -v '"$PUPPET_VERSION"' >/dev/null
+            # A Debian machine knows its own package lists; the image comes without them.
+            apt-get update -qq
+            code=0; puppet apply --detailed-exitcodes --modulepath /modules /check.pp > /first.log 2>&1 || code=$?
+            cat /first.log; [ "$code" = 2 ]
+            code=0; puppet apply --detailed-exitcodes --modulepath /modules /check.pp > /second.log 2>&1 || code=$?
+            cat /second.log; [ "$code" = 0 ]
+            if grep -qF "$KEY" /first.log /second.log; then echo "The enrolment key was printed."; exit 1; fi
+            test "$(garrett version)" = "garrett $V"
+            grep -qx "SERVER=https://sentinel.example.invalid" /etc/garrett/garrett.conf
+            grep -qx "ENROLL_KEY=$KEY" /etc/garrett/garrett.conf
+            grep -qx "MODE=report" /etc/garrett/garrett.conf
+            test "$(stat -c %a /etc/garrett/garrett.conf)" = 600'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fleet
+          path: fleet/out/*.tar.gz
+
   # Sign and publish, for a tag only and only after every check above passed. The secrets belong to the environment
   # "release", which only tags v* may use:
   #   PACKAGE_SIGNING_KEY   the OpenPGP package signing key, armored (apt, pacman, rpm, SHA256SUMS)
@@ -396,10 +564,12 @@ jobs:
   #   RELEASE_TOKEN         a GitHub token of the project's account: the site, the release, the tap, the bucket, winget
   #   CHOCOLATEY_API_KEY    the community.chocolatey.org account's API key
   #   AUR_SSH_KEY           the private SSH key of the AUR account that keeps garrett-bin
+  #   GALAXY_API_KEY        the API token of the Ansible Galaxy account that owns the namespace gary23w
+  #   FORGE_API_KEY         an API key of the Puppet Forge account gary23w
   # A registry whose secret is not set is left out, with a warning; the release goes ahead without it.
   publish:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    needs: [assemble, homebrew, scoop]
+    needs: [assemble, homebrew, scoop, fleet]
     runs-on: ubuntu-24.04
     environment: release
     concurrency:
@@ -415,6 +585,10 @@ jobs:
         with:
           name: release
           path: release
+      - uses: actions/download-artifact@v4
+        with:
+          name: fleet
+          path: fleet
       - name: The tag names the version that was built
         run: test "$GITHUB_REF_NAME" = "v$(sed -n '1s/^garrett //p' release/site/update.txt)"
       - name: Sign
@@ -462,6 +636,45 @@ jobs:
           # The AUR's own host key, kept in the repository: the push goes nowhere else.
           export GIT_SSH_COMMAND="ssh -i $KEYS/aur -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$PWD/packaging/arch/aur-known-hosts"
           sh packaging/submit-packages.sh release aur
+      # The collection and the module "fleet" built and ran. A version either registry has already is never replaced,
+      # so a run of this job again, for another registry, leaves them be.
+      - name: Ansible Galaxy (gary23w.sentinels)
+        if: ${{ !cancelled() && steps.publish.outcome == 'success' }}
+        env:
+          GALAXY_API_KEY: ${{ secrets.GALAXY_API_KEY }}
+        run: |
+          [ -n "$GALAXY_API_KEY" ] || { echo "::warning::No GALAXY_API_KEY: Ansible Galaxy left out."; exit 0; }
+          V=$(sed -n '1s/^garrett //p' release/site/update.txt)
+          if curl -fsS -o /dev/null "https://galaxy.ansible.com/api/v3/plugin/ansible/content/published/collections/index/gary23w/sentinels/versions/$V/"; then
+            echo "Ansible Galaxy has gary23w.sentinels $V already."; exit 0
+          fi
+          python3 -m venv "$RUNNER_TEMP/ansible"
+          "$RUNNER_TEMP/ansible/bin/pip" install --quiet ansible-core==2.21.6
+          # The token reaches ansible-galaxy as the configuration of a server, through the environment, not on its
+          # command line.
+          export ANSIBLE_GALAXY_SERVER_LIST=release_galaxy
+          export ANSIBLE_GALAXY_SERVER_RELEASE_GALAXY_URL=https://galaxy.ansible.com/
+          export ANSIBLE_GALAXY_SERVER_RELEASE_GALAXY_TOKEN="$GALAXY_API_KEY"
+          "$RUNNER_TEMP/ansible/bin/ansible-galaxy" collection publish "fleet/gary23w-sentinels-$V.tar.gz"
+      - name: Puppet Forge (gary23w-garrett)
+        if: ${{ !cancelled() && steps.publish.outcome == 'success' }}
+        env:
+          FORGE_API_KEY: ${{ secrets.FORGE_API_KEY }}
+        run: |
+          [ -n "$FORGE_API_KEY" ] || { echo "::warning::No FORGE_API_KEY: the Puppet Forge left out."; exit 0; }
+          V=$(sed -n '1s/^garrett //p' release/site/update.txt)
+          if curl -fsS -o /dev/null "https://forgeapi.puppet.com/v3/releases/gary23w-garrett-$V"; then
+            echo "The Puppet Forge has gary23w-garrett $V already."; exit 0
+          fi
+          umask 077
+          KEYS=$(mktemp -d)
+          trap 'rm -rf "$KEYS"' EXIT
+          printf 'Authorization: Bearer %s\n' "$FORGE_API_KEY" > "$KEYS/header"
+          # The Forge API's upload of a release (POST /v3/releases, the tarball as the form field "file"), with the key
+          # read from a file rather than given on the command line.
+          curl -sS --fail-with-body -H @"$KEYS/header" -F "file=@fleet/gary23w-garrett-$V.tar.gz" https://forgeapi.puppet.com/v3/releases
+          echo
+          echo "The Puppet Forge has gary23w-garrett $V."
 
   # The container image for each processor, with the release's own program in it (packaging/container/Dockerfile):
   # ghcr.io/<owner>/garrett:<version> and :latest, published with this repository's own token.

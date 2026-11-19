@@ -1,0 +1,23 @@
+{
+  "name": "gary23w-garrett",
+  "version": "@VERSION@",
+  "author": "sentinels contributors",
+  "summary": "garrett, the agent of sentinels, from the project's signed apt and rpm repositories, enrolled with your own Sentinel service.",
+  "license": "MIT",
+  "source": "https://github.com/gary23w/sentinels",
+  "project_page": "https://garrettstimpson.ca/",
+  "issues_url": "https://github.com/gary23w/sentinels/issues",
+  "dependencies": [],
+  "requirements": [
+    {
+      "name": "puppet",
+      "version_requirement": ">= 8.0.0 < 9.0.0"
+    }
+  ],
+  "tags": [
+    "security",
+    "sentinels",
+    "garrett",
+    "agent"
+  ]
+}

@@ -1,0 +1,12 @@
+<%- | String $repository | -%>
+# Managed by Puppet (class garrett).
+# garrett's rpm repository, for dnf, yum and zypper, as packaging/rpm/garrett.repo defines it. Its list of packages
+# carries the project's signature (repo_gpgcheck), and each package is checked against the digest that signed list
+# gives for it.
+[garrett]
+name=garrett
+baseurl=<%= $repository %>/rpm
+enabled=1
+repo_gpgcheck=1
+gpgcheck=0
+gpgkey=<%= $repository %>/garrett.asc
