@@ -6,6 +6,8 @@
 #   sh packaging/build-packages.sh <release folder>
 #
 #   dist/garrett-<version>-1-<x86_64|aarch64|armv7h>.pkg.tar.zst   pacman: Arch Linux and its relatives
+#   dist/sentinels-<version>-1-any.pkg.tar.zst, sentinels-<version>-1.noarch.rpm
+#                                                                   the alias that installs garrett
 #   dist/garrett-<version>-1.<x86_64|aarch64|armv7hl>.rpm          dnf, yum and zypper: Fedora, RHEL, openSUSE
 #   site/arch/<processor>/                                          the pacman repository "sentinels"
 #   site/rpm/, site/garrett.repo                                    the rpm repository and its definition
@@ -46,8 +48,12 @@ docker run --rm -e SOURCE_DATE_EPOCH="$WHEN" -e OWNER="$(id -u):$(id -g)" -v "$W
     su builder -c "cd ~/arch && PACKAGER=\"sentinels <noreply@sentinels.invalid>\" makepkg --config ~/makepkg-$carch.conf --nodeps --noconfirm --force >/dev/null"
     mkdir -p /work/out/arch/$carch
     cp /home/builder/arch/garrett-*-$carch.pkg.tar.zst /work/out/arch/$carch/
+  done
+  # The alias sentinels is the same for every processor ("any"): the one package, in each repository.
+  for carch in x86_64 aarch64 armv7h; do
+    cp /home/builder/arch/sentinels-*-any.pkg.tar.zst /work/out/arch/$carch/
     cd /work/out/arch/$carch
-    repo-add --quiet sentinels.db.tar.gz garrett-*.pkg.tar.zst
+    repo-add --quiet sentinels.db.tar.gz *.pkg.tar.zst
     rm sentinels.db sentinels.files
     mv sentinels.db.tar.gz sentinels.db
     mv sentinels.files.tar.gz sentinels.files
@@ -57,7 +63,8 @@ docker run --rm -e SOURCE_DATE_EPOCH="$WHEN" -e OWNER="$(id -u):$(id -g)" -v "$W
 '
 mkdir -p "$REL/site/arch"
 cp -R "$WORK/out/arch/." "$REL/site/arch/"
-cp "$WORK"/out/arch/*/garrett-*.pkg.tar.zst "$REL/dist/"
+# garrett once for each processor, and the alias (the same file in every repository) once.
+cp "$WORK"/out/arch/*/garrett-*.pkg.tar.zst "$WORK"/out/arch/x86_64/sentinels-*-any.pkg.tar.zst "$REL/dist/"
 # Kept without its leading dot as well: the workflow's artifacts leave out files whose names start with one.
 cp "$WORK/out/aur.SRCINFO" "$REL/packages/aur/.SRCINFO"
 cp "$WORK/out/aur.SRCINFO" "$REL/packages/aur/SRCINFO"
@@ -72,8 +79,8 @@ for pair in x86_64:x86_64 aarch64:aarch64 armv7:armv7hl; do
     "$WORK/garrett.spec"
 done
 mkdir -p "$REL/site/rpm"
-cp "$WORK"/rpm/RPMS/*/garrett-*.rpm "$REL/site/rpm/"
-cp "$WORK"/rpm/RPMS/*/garrett-*.rpm "$REL/dist/"
+cp "$WORK"/rpm/RPMS/*/*.rpm "$REL/site/rpm/"
+cp "$WORK"/rpm/RPMS/*/*.rpm "$REL/dist/"
 createrepo_c --quiet --general-compress-type=gz "$REL/site/rpm"
 echo "garrett $VERSION for pacman and rpm:"
 (cd "$REL" && ls dist/*.pkg.tar.zst dist/*.rpm site/arch/*/sentinels.db site/rpm/repodata/repomd.xml)

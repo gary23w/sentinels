@@ -38,7 +38,8 @@ NOTES="$REL/notes.md"
 gh release create "v$VERSION" --title "garrett $VERSION" --notes-file "$NOTES" "$REL"/dist/*
 echo "Released: v$VERSION"
 # The Homebrew tap, a repository of its own beside this one (brew install <owner>/sentinels/garrett), takes the
-# formula for this release. It downloads the files just released, so it goes last.
+# formula for this release. It downloads the files just released, so it goes last. It has no alias: Homebrew 6 loads
+# a third-party tap's formula only by its full name or once it is trusted, and trust does not follow an alias.
 TAP=$(printf '%s\n' "$ORIGIN" | sed -n 's#.*github\.com[:/]\([^/]*\)/.*#\1#p')/homebrew-sentinels
 if [ -s "$REL/packages/homebrew/garrett.rb" ] && gh repo view "$TAP" >/dev/null 2>&1; then
   git clone --quiet "https://github.com/$TAP.git" "$WORK/tap" 2>/dev/null

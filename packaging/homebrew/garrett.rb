@@ -1,4 +1,4 @@
-# garrett, the Sentinel agent, for Homebrew on macOS and Linux.
+# garrett, the agent of sentinels, for Homebrew on macOS and Linux.
 #
 # packaging/package-managers.py fills in the version and each bundle's SHA-256 for a release, and the release
 # publishes the result to the project's tap:  brew install gary23w/sentinels/garrett
@@ -7,7 +7,7 @@
 # never from Homebrew's, which the user who installed it can write to: the install line in the caveats copies it
 # there (the same installer as the release bundle) and starts it now and at every boot.
 class Garrett < Formula
-  desc "Host intrusion sentinel that stops what it catches"
+  desc "Agent of sentinels: host intrusion sentinel that stops what it catches"
   homepage "https://github.com/gary23w/sentinels"
   version "@VERSION@"
   license "MIT"

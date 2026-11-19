@@ -36,7 +36,9 @@ for file in arch/*/*.pkg.tar.zst arch/*/sentinels.db arch/*/sentinels.files; do
   gpg --batch --yes --default-key "$KEY" --detach-sign -o "$file.sig" "$file"
   gpg --verify "$file.sig" "$file" 2>/dev/null
 done
-cp arch/*/*.pkg.tar.zst.sig "$REL/dist/"
+# garrett's signature for each processor, and the alias's once: it is one file in every repository, and dist has
+# the x86_64 repository's copy (build-packages.sh).
+cp arch/*/garrett-*.pkg.tar.zst.sig arch/x86_64/sentinels-*-any.pkg.tar.zst.sig "$REL/dist/"
 # The rpm repository: its list of packages, which names each package's digest (repo_gpgcheck in garrett.repo).
 gpg --batch --yes --default-key "$KEY" --armor --detach-sign -o rpm/repodata/repomd.xml.asc rpm/repodata/repomd.xml
 gpg --verify rpm/repodata/repomd.xml.asc rpm/repodata/repomd.xml 2>/dev/null

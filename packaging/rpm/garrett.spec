@@ -1,4 +1,4 @@
-# garrett, the Sentinel agent, for Fedora, RHEL and their relatives, and openSUSE (dnf, yum, zypper).
+# garrett, the agent of sentinels, for Fedora, RHEL and their relatives, and openSUSE (dnf, yum, zypper).
 #
 # It packs the program files the release workflow built, from the release's Linux bundles: nothing is compiled
 # here. packaging/build-packages.sh builds one package for each processor, on any machine with rpmbuild:
@@ -9,7 +9,7 @@
 Name:           garrett
 Version:        %{garrett_version}
 Release:        1
-Summary:        Host intrusion sentinel that stops what it catches
+Summary:        sentinels agent: host intrusion sentinel that stops what it catches
 License:        MIT
 URL:            https://github.com/gary23w/sentinels
 Source0:        %{garrett_bundle}
@@ -23,9 +23,22 @@ Recommends:     nftables
 %global __os_install_post %{nil}
 %global _build_id_links none
 
+# The alias: dnf install sentinels (and zypper install sentinels) installs garrett. It has no files of its own.
+%package -n sentinels
+Summary:        sentinels host intrusion detection and response (installs garrett)
+BuildArch:      noarch
+Requires:       garrett >= %{version}
+
+%description -n sentinels
+sentinels is open-source host intrusion detection and response. Its agent,
+garrett, watches this machine's running programs and their connections and
+ends a program it judges hostile. This package installs garrett, which does
+the work: remove garrett to remove both.
+
 %description
-garrett watches this machine's running programs and their connections,
-scores them on the machine, and pauses or ends a program it judges hostile.
+garrett, the agent of sentinels, watches this machine's running programs and
+their connections, scores them on the machine, and pauses or ends a program
+it judges hostile.
 
 It reports cases to a Sentinel service you run yourself, applies what that
 service learned from earlier attacks, and shares what one machine learns
@@ -52,6 +65,8 @@ install -Dm0644 NOTICES.md %{buildroot}/usr/share/doc/garrett/NOTICES.md
 /usr/share/man/man8/garrett.8
 /usr/share/licenses/garrett
 /usr/share/doc/garrett
+
+%files -n sentinels
 
 %post
 systemctl daemon-reload >/dev/null 2>&1 || :

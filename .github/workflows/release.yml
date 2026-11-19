@@ -26,7 +26,8 @@
 #                                                 Linux x86_64, Linux aarch64 and Windows; assemble-release.sh fills them
 #   garrett-windows.msi                           the Windows Installer package (packaging/windows/garrett.wxs) that
 #                                                 winget and Chocolatey install, tried on the Windows machine that built
-#                                                 it, which also packs the Chocolatey package
+#                                                 it, which also packs the Chocolatey packages: garrett, and
+#                                                 sentinels, the alias that installs it
 #
 # assemble packs the rest, and builds the pacman and rpm packages and the files for Homebrew, Scoop, winget and the
 # AUR (packaging/build-packages.sh). Each package is installed and removed again before the release is kept: apt,
@@ -199,13 +200,16 @@ jobs:
           $ErrorActionPreference = 'Stop'
           python -B packaging/package-managers.py chocolatey choco garrett-windows.msi
           choco pack choco/garrett.nuspec --outputdirectory chocolatey --limit-output
+          choco pack choco-sentinels/sentinels.nuspec --outputdirectory chocolatey --limit-output
           python -B packaging/package-managers.py chocolatey choco-try garrett-windows.msi --base-url ('file:///' + ($PWD.Path -replace '\\', '/'))
           choco pack choco-try/garrett.nuspec --outputdirectory choco-try-out --limit-output
-          choco install garrett --source "$PWD\choco-try-out" --yes --no-progress
-          if ($LASTEXITCODE -ne 0) { throw 'choco install failed.' }
+          choco pack choco-try-sentinels/sentinels.nuspec --outputdirectory choco-try-out --limit-output
+          # Installed by its alias: choco install sentinels brings in garrett.
+          choco install sentinels --source "$PWD\choco-try-out" --yes --no-progress
+          if ($LASTEXITCODE -ne 0) { throw 'choco install sentinels failed.' }
           & (Join-Path $env:ProgramFiles 'garrett\garrett.cmd') status
           if ($LASTEXITCODE -ne 0) { throw 'garrett status failed after choco install.' }
-          choco uninstall garrett --yes --no-progress
+          choco uninstall sentinels garrett --yes --no-progress
           if ($LASTEXITCODE -ne 0) { throw 'choco uninstall failed.' }
           if (Get-ScheduledTask -TaskName garrett -ErrorAction SilentlyContinue) { throw 'choco uninstall left the scheduled task.' }
           if (Test-Path (Join-Path $env:ProgramFiles 'garrett')) { throw 'choco uninstall left the program folder.' }
@@ -217,7 +221,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: garrett-chocolatey
-          path: chocolatey/garrett.*.nupkg
+          path: chocolatey/*.nupkg
       - uses: actions/upload-artifact@v4
         with:
           name: garrett-installer-windows.exe
@@ -244,9 +248,14 @@ jobs:
             dpkg-deb -I "$deb" | grep -E "Package|Version|Architecture|Depends"
             lintian "$deb" 2>&1 | grep -v "statically-linked-binary" | cut -c1-170 | head -12
           done
-          sudo apt-get install -y -q ./release/dist/garrett_*_amd64.deb
+          # Installed by its alias, from the repository just made: apt install sentinels brings in garrett.
+          echo "deb [trusted=yes] file://$PWD/release/site stable main" | sudo tee /etc/apt/sources.list.d/release-check.list >/dev/null
+          sudo apt-get update -q -o Dir::Etc::sourcelist=/etc/apt/sources.list.d/release-check.list -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0
+          sudo apt-get install -y -q sentinels
           test "$(garrett version)" = "garrett $(sed -n 's/^version = "\(.*\)"/\1/p' rust/Cargo.toml | head -1)"
           sudo apt-get purge -y -q garrett
+          if dpkg -s sentinels 2>/dev/null | grep -q "Status: install ok installed"; then echo "removing garrett left the alias installed"; exit 1; fi
+          sudo rm /etc/apt/sources.list.d/release-check.list
       # Each one installed from its repository, the way a machine that names the repository gets it, on the systems
       # it is for; then removed. Unsigned here: the keys sign the repositories later, off this machine.
       - name: pacman installs and removes garrett from its repository
@@ -254,13 +263,14 @@ jobs:
           V=$(sed -n 's/^version = "\(.*\)"/\1/p' rust/Cargo.toml | head -1)
           docker run --rm -v "$PWD/release:/r:ro" archlinux:base-devel-20261108.0.623074 sh -exc '
             printf "\n[sentinels]\nSigLevel = Never\nServer = file:///r/site/arch/\$arch\n" >> /etc/pacman.conf
-            pacman -Sy --noconfirm garrett
+            # By its alias: pacman -S sentinels brings in garrett.
+            pacman -Sy --noconfirm sentinels
             test "$(garrett version)" = "garrett '"$V"'"
             test -f /usr/lib/systemd/system/garrett.service
             # The image leaves manual pages out of what it extracts; the package lists it all the same (makepkg gzips it).
             pacman -Ql garrett | grep -Eq " /usr/share/man/man8/garrett\.8(\.gz)?$"
             mkdir -p /var/lib/garrett /etc/garrett && : > /var/lib/garrett/agent.json && : > /etc/garrett/garrett.conf
-            pacman -R --noconfirm garrett
+            pacman -R --noconfirm sentinels garrett
             for left in /usr/lib/garrett /usr/bin/garrett /usr/lib/systemd/system/garrett.service /var/lib/garrett /etc/garrett; do if [ -e "$left" ]; then echo "left behind: $left"; exit 1; fi; done'
       - name: dnf and zypper install and remove garrett from its repository
         run: |
@@ -269,19 +279,21 @@ jobs:
             echo "== $image"
             docker run --rm -v "$PWD/release:/r:ro" "$image" sh -exc '
               printf "[garrett]\nname=garrett\nbaseurl=file:///r/site/rpm\ngpgcheck=0\nrepo_gpgcheck=0\n" > /etc/yum.repos.d/garrett.repo
-              dnf install -y -q garrett
+              # By its alias: dnf install sentinels brings in garrett.
+              dnf install -y -q sentinels
               test "$(garrett version)" = "garrett '"$V"'"
               rpm -V garrett
               mkdir -p /var/lib/garrett /etc/garrett && : > /var/lib/garrett/agent.json && : > /etc/garrett/garrett.conf
               dnf remove -y -q garrett
+              if rpm -q sentinels; then echo "removing garrett left the alias installed"; exit 1; fi
               for left in /usr/lib/garrett /usr/bin/garrett /var/lib/garrett /etc/garrett; do if [ -e "$left" ]; then echo "left behind: $left"; exit 1; fi; done'
           done
           echo "== opensuse/tumbleweed"
           docker run --rm -v "$PWD/release:/r:ro" opensuse/tumbleweed sh -exc '
             zypper --non-interactive --quiet addrepo --no-gpgcheck file:///r/site/rpm garrett
-            zypper --non-interactive --quiet install garrett
+            zypper --non-interactive --quiet install sentinels
             test "$(garrett version)" = "garrett '"$V"'"
-            zypper --non-interactive --quiet remove garrett
+            zypper --non-interactive --quiet remove sentinels garrett
             test ! -e /usr/lib/garrett && test ! -e /var/lib/garrett'
       - name: Nothing in it says where it was built
         run: |
@@ -319,7 +331,9 @@ jobs:
           V=$(sed -n 's/^version = "\(.*\)"/\1/p' rust/Cargo.toml | head -1)
           python3 -B packaging/package-managers.py render release --base-url "file://$PWD/release/dist"
           brew tap-new --no-git local/sentinels >/dev/null
-          cp release/packages/homebrew/garrett.rb "$(brew --repository)/Library/Taps/local/homebrew-sentinels/Formula/garrett.rb"
+          TAP="$(brew --repository)/Library/Taps/local/homebrew-sentinels"
+          cp release/packages/homebrew/garrett.rb "$TAP/Formula/garrett.rb"
+          # By its full name, which is what trusts it: Homebrew loads a third-party tap's formula only when trusted.
           brew install local/sentinels/garrett
           brew test local/sentinels/garrett
           sudo sh "$(brew --prefix)/opt/garrett/libexec/install.sh"

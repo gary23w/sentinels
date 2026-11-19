@@ -141,6 +141,7 @@
           </section>
           <section id="packages">
             <h3>Packages</h3>
+            <p>The packages are named garrett, after the program they install. The name sentinels works as well: it installs garrett with apt, pacman, dnf and zypper.</p>
             <p>For Debian and Ubuntu, add the signed APT repository.</p>
             <pre><code>curl -fsSL https://gary23w.github.io/sentinels/garrett.gpg | sudo tee /usr/share/keyrings/garrett.gpg &gt;/dev/null
 echo "deb [signed-by=/usr/share/keyrings/garrett.gpg] https://gary23w.github.io/sentinels stable main" | sudo tee /etc/apt/sources.list.d/garrett.list

@@ -5,7 +5,8 @@
 #                               blocking; remove it and check nothing is left. These three run only when the
 #                               workflow is started by hand, which is done after every release
 #   packages-*                  the same, from the published packages: pacman, dnf and zypper from the signed
-#                               repositories, Homebrew from the tap, the Windows Installer package and Scoop
+#                               repositories (each by its alias sentinels, which brings in garrett), Homebrew from
+#                               the tap, the Windows Installer package and Scoop
 #   service-linux, -windows     the one-line service install from the one-file installer built here (service, model
 #                               runtime, agent); the agent it installed reports to it
 #   rust, rust-agent-*          the agent built from this commit: its recorded decisions, then the real thing
@@ -277,23 +278,23 @@ jobs:
             curl -fsSL '"$BASE"'/garrett.asc | pacman-key --add -
             pacman-key --lsign-key 6857EBCBBEF51040C3F20107362688BFC238AB45
             printf "\n[sentinels]\nServer = '"$BASE"'/arch/\$arch\n" >> /etc/pacman.conf
-            pacman -Syu --noconfirm garrett
+            pacman -Syu --noconfirm sentinels
             garrett version
-            pacman -R --noconfirm garrett'
+            pacman -R --noconfirm sentinels garrett'
       - name: dnf and zypper, from the signed repository
         run: |
           for image in fedora:45 almalinux:9; do
             docker run --rm "$image" sh -exc '
               curl -fsSL -o /etc/yum.repos.d/garrett.repo '"$BASE"'/garrett.repo
-              dnf install -y garrett
+              dnf install -y sentinels
               garrett version
               dnf remove -y garrett'
           done
           docker run --rm opensuse/tumbleweed sh -exc '
             zypper --non-interactive --gpg-auto-import-keys addrepo '"$BASE"'/garrett.repo
-            zypper --non-interactive --gpg-auto-import-keys install garrett
+            zypper --non-interactive --gpg-auto-import-keys install sentinels
             garrett version
-            zypper --non-interactive remove garrett'
+            zypper --non-interactive remove sentinels garrett'
 
   packages-macos:
     if: github.event_name == 'workflow_dispatch'

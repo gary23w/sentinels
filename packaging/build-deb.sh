@@ -1,7 +1,7 @@
 #!/bin/sh
 # Build the garrett Debian package for one kind of processor from this repository and an agent built beforehand.
 #   sh packaging/build-deb.sh <output directory> <amd64|arm64> <the garrett program file for that processor>
-#   ->  garrett_<version>_<amd64|arm64>.deb
+#   ->  garrett_<version>_<amd64|arm64>.deb, and sentinels_<version>_all.deb: the alias that installs garrett
 # Needs a Debian or Ubuntu machine with:  sudo apt install build-essential debhelper
 # The program file comes from the release workflow (.github/workflows/release.yml), which builds and tests
 # it on hosted machines. This script only packs it, from a clean copy, and leaves this checkout untouched.
@@ -24,5 +24,5 @@ chmod 0755 "$WORK/garrett/debian/rules" "$WORK/garrett/packaging/garrett" "$WORK
 # -d: the only build dependency is debhelper itself. -a: the package is for $ARCH whatever machine packs it.
 (cd "$WORK/garrett" && dpkg-buildpackage -us -uc -b -d -a"$ARCH" >"$WORK/build.log" 2>&1) || { tail -30 "$WORK/build.log" >&2; exit 1; }
 mkdir -p "$OUT"
-cp "$WORK"/garrett_*_"$ARCH".deb "$OUT/"
-ls "$OUT"/garrett_*_"$ARCH".deb
+cp "$WORK"/garrett_*_"$ARCH".deb "$WORK"/sentinels_*_all.deb "$OUT/"
+ls "$OUT"/garrett_*_"$ARCH".deb "$OUT"/sentinels_*_all.deb
