@@ -1,0 +1,4 @@
+#!/bin/sh
+# What apk runs once garrett is upgraded: the new version takes over from the running one, as the Debian package does.
+rc-service --ifstarted garrett restart >/dev/null 2>&1 || true
+exit 0

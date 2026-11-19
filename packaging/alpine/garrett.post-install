@@ -1,0 +1,5 @@
+#!/bin/sh
+# What apk runs once garrett is installed. Like the pacman and rpm packages, it does not start garrett by itself.
+echo "garrett is installed. Start it now and at every boot:  rc-update add garrett default && rc-service garrett start"
+echo "Then see what it finds:  garrett cases"
+exit 0
