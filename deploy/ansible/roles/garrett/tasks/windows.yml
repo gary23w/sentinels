@@ -1,0 +1,70 @@
+---
+- name: Look for garrett
+  ansible.windows.win_powershell:
+    script: |
+      $Ansible.Changed = $false
+      $programFiles = [Environment]::GetFolderPath([Environment+SpecialFolder]::ProgramFiles)
+      @{ installed = (Test-Path -LiteralPath (Join-Path $programFiles 'garrett\garrett.exe')) }
+  register: garrett_windows
+
+# The package runs deploy\install-windows.ps1, which starts garrett as SYSTEM at every startup. A machine that has
+# garrett is not installed over: garrett updates itself.
+- name: Install the Windows Installer package
+  when: not garrett_windows.output[0].installed
+  block:
+    - name: Make a folder for the download
+      ansible.windows.win_tempfile:
+        state: directory
+      register: garrett_download
+
+    - name: Download garrett-windows.msi
+      ansible.windows.win_get_url:
+        url: "{{ garrett_msi_url }}"
+        dest: '{{ garrett_download.path }}\garrett-windows.msi'
+
+    - name: Install garrett-windows.msi
+      ansible.windows.win_package:
+        path: '{{ garrett_download.path }}\garrett-windows.msi'
+        state: present
+  always:
+    - name: Remove the download
+      ansible.windows.win_file:
+        path: "{{ garrett_download.path }}"
+        state: absent
+      when: garrett_download.path is defined
+
+# As deploy\install-windows.ps1 enrols: the key reaches the agent through its environment, not its command line.
+- name: Enrol garrett with the service
+  ansible.windows.win_powershell:
+    script: |
+      [CmdletBinding()]
+      param (
+          [Parameter(Mandatory)][string]$Server,
+          [Parameter(Mandatory)][string]$EnrollKey,
+          [Parameter(Mandatory)][string]$Mode,
+          [string]$Label
+      )
+      $ErrorActionPreference = 'Stop'
+      $agent = Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::ProgramFiles)) 'garrett\garrett.exe'
+      $state = Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::CommonApplicationData)) 'garrett'
+      # Enrolled already: the machine keeps its credential.
+      if (Test-Path -LiteralPath (Join-Path $state 'agent.json')) {
+          $Ansible.Changed = $false
+          return
+      }
+      $env:SENTINEL_ENROLL_KEY = $EnrollKey
+      $arguments = @('--state-dir', $state, 'enroll', '--patient', '--server', $Server, '--mode', $Mode)
+      if ($Label) { $arguments += @('--label', $Label) }
+      try { & $agent @arguments } finally { Remove-Item Env:SENTINEL_ENROLL_KEY }
+      if ($LASTEXITCODE -ne 0) { throw 'Enrolment failed. Check the service address and the enrolment key.' }
+      # The running agent reports to the service once it starts again.
+      Stop-ScheduledTask -TaskName 'garrett'
+      Start-Sleep -Seconds 2
+      Start-ScheduledTask -TaskName 'garrett'
+    parameters:
+      Server: "{{ garrett_server }}"
+      EnrollKey: "{{ garrett_enroll_key }}"
+      Mode: "{{ garrett_mode if garrett_mode | length > 0 else 'kill' }}"
+      Label: "{{ garrett_label }}"
+  no_log: true
+  when: garrett_server | length > 0

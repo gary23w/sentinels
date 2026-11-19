@@ -1,0 +1,11 @@
+{{ ansible_managed | comment }}
+{% if garrett_server %}
+SERVER={{ garrett_server }}
+ENROLL_KEY={{ garrett_enroll_key }}
+{% endif %}
+{% if garrett_mode %}
+MODE={{ garrett_mode }}
+{% endif %}
+{% if garrett_label %}
+LABEL={{ garrett_label }}
+{% endif %}

@@ -1,0 +1,22 @@
+---
+# Your Sentinel service and its enrolment key: give both, or neither. With neither, garrett protects each machine by
+# itself. Keep the key in Ansible Vault; the role never prints it.
+garrett_server: ""
+garrett_enroll_key: ""
+# kill, decide, pause or report. Empty: garrett's default, kill.
+garrett_mode: ""
+# The name a machine enrols under. Empty: its host name.
+garrett_label: ""
+
+# Where the project's apt and rpm repositories are, and the key that signs them: the SHA-256 of garrett.gpg that
+# packaging/install.sh pins (APT_KEY_SHA), and the fingerprint the README gives.
+garrett_repository: https://gary23w.github.io/sentinels
+garrett_apt_key_sha256: 1f298d4106a58461a4a16d8976db87e8c5f581a20df180de1f69b73f1a69fa9d
+garrett_key_fingerprint: 6857EBCBBEF51040C3F20107362688BFC238AB45
+
+# Windows: the Windows Installer package, from the newest GitHub release.
+garrett_msi_url: https://github.com/gary23w/sentinels/releases/latest/download/garrett-windows.msi
+
+# Linux: start garrett now and at every boot, and restart it when its settings change. False leaves the service alone,
+# for instance in an image that starts it on its first boot; a machine enrols when garrett first starts.
+garrett_manage_service: true

@@ -1,0 +1,27 @@
+---
+# The Ansible collection gary23w.sentinels: its role garrett puts garrett on every machine of a fleet.
+# The version is this release's: deploy/stage-fleet.sh writes it from rust/Cargo.toml before the collection is
+# built, and the release workflow publishes it to Ansible Galaxy with each tag.
+namespace: gary23w
+name: sentinels
+version: "@VERSION@"
+readme: README.md
+authors:
+  - sentinels contributors
+description: >-
+  garrett, the agent of sentinels, on every machine of a fleet: from the project's signed apt and rpm repositories
+  on Debian, Ubuntu, Fedora, RHEL and openSUSE, and from its Windows Installer package on Windows, enrolled with your
+  own Sentinel service if you give it one.
+license:
+  - MIT
+tags:
+  - security
+  - linux
+  - windows
+  - sentinels
+dependencies:
+  ansible.windows: ">=1.5.0"
+repository: https://github.com/gary23w/sentinels
+documentation: https://gary23w.github.io/sentinels/
+homepage: https://garrettstimpson.ca/
+issues: https://github.com/gary23w/sentinels/issues
