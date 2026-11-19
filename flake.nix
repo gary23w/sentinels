@@ -62,7 +62,8 @@
           '';
           meta = {
             description = "garrett, the agent of sentinels";
-            homepage = "https://github.com/gary23w/sentinels";
+            homepage = "https://garrettstimpson.ca/";
+            downloadPage = "https://github.com/gary23w/sentinels";
             license = lib.licenses.mit;
             mainProgram = "garrett";
             platforms = lib.platforms.linux ++ lib.platforms.darwin;
