@@ -463,14 +463,22 @@ jobs:
           export GIT_SSH_COMMAND="ssh -i $KEYS/aur -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$PWD/packaging/arch/aur-known-hosts"
           sh packaging/submit-packages.sh release aur
 
-  # The container image for each processor, with the release's own program in it (packaging/container/Dockerfile):
-  # ghcr.io/<owner>/garrett:<version> and :latest, published with this repository's own token.
+  # The container image for each processor, with the release's own program in it (packaging/container/Dockerfile),
+  # as <registry>/garrett:<version> and :latest: GitHub's registry with this repository's own token, then each other
+  # registry whose secrets the environment "release" holds (one left out gets a warning):
+  #   Docker Hub        DOCKERHUB_USERNAME, DOCKERHUB_TOKEN (an access token that may also edit the description)
+  #   Quay.io           QUAY_USERNAME (a robot account, <namespace>+<robot>), QUAY_TOKEN
+  #   Amazon ECR Public AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, ECR_PUBLIC_ALIAS (the registry's public alias)
   container:
     needs: publish
     runs-on: ubuntu-24.04
+    environment: release
     permissions:
       contents: read
       packages: write
+    env:
+      WEBSITE: https://garrettstimpson.ca/
+      DOCS: https://gary23w.github.io/sentinels/
     steps:
       - uses: actions/checkout@v4
         with:
@@ -479,13 +487,32 @@ jobs:
         with:
           name: release
           path: release
-      - name: The image's folder
+      - name: The image's folder, and the registries it goes to
+        id: where
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
+          QUAY_TOKEN: ${{ secrets.QUAY_TOKEN }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          ECR_PUBLIC_ALIAS: ${{ secrets.ECR_PUBLIC_ALIAS }}
         run: |
           mkdir -p image/linux
           cp release/dist/garrett-linux-x86_64 release/dist/garrett-linux-aarch64 release/dist/garrett-linux-armv7 image/linux/
           cp packaging/container/Dockerfile deploy/entrypoint.sh image/
-          echo "IMAGE=ghcr.io/$(printf '%s' "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')/garrett" >> "$GITHUB_ENV"
-          echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          VERSION=${GITHUB_REF_NAME#v}
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          images="ghcr.io/$(printf '%s' "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')/garrett"
+          if [ -n "$DOCKERHUB_USERNAME" ] && [ -n "$DOCKERHUB_TOKEN" ]; then
+            images="$images docker.io/$DOCKERHUB_USERNAME/garrett"; echo "dockerhub=true" >> "$GITHUB_OUTPUT"
+          else echo "::warning::No Docker Hub secrets: Docker Hub left out."; fi
+          if [ -n "$QUAY_USERNAME" ] && [ -n "$QUAY_TOKEN" ]; then
+            images="$images quay.io/${QUAY_USERNAME%%+*}/garrett"; echo "quay=true" >> "$GITHUB_OUTPUT"
+          else echo "::warning::No Quay secrets: Quay.io left out."; fi
+          if [ -n "$AWS_ACCESS_KEY_ID" ] && [ -n "$ECR_PUBLIC_ALIAS" ]; then
+            images="$images public.ecr.aws/$ECR_PUBLIC_ALIAS/garrett"; echo "ecr=true" >> "$GITHUB_OUTPUT"
+          else echo "::warning::No Amazon ECR Public secrets: ECR Public left out."; fi
+          { echo 'tags<<TAGS'; for image in $images; do echo "$image:$VERSION"; echo "$image:latest"; done; echo TAGS; } >> "$GITHUB_OUTPUT"
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
@@ -493,17 +520,85 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - if: steps.where.outputs.dockerhub == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: docker.io
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - if: steps.where.outputs.quay == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: quay.io
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_TOKEN }}
+      # ECR Public lives in us-east-1. Its repository is made once; the text its gallery shows is written again each
+      # release, so a change to it here reaches the gallery.
+      - name: Amazon ECR Public's repository
+        if: steps.where.outputs.ecr == 'true'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: us-east-1
+        run: |
+          python3 - <<'PY'
+          import json, os
+          source = "https://github.com/" + os.environ["GITHUB_REPOSITORY"]
+          about = ("garrett, the agent of sentinels: a host security agent for container hosts.\n\n"
+                   "Source: " + source + "\n\nWebsite: " + os.environ["WEBSITE"] + "\n\nDocumentation: " + os.environ["DOCS"])
+          catalog = {"description": "garrett, the agent of sentinels", "architectures": ["x86-64", "ARM 64", "ARM"],
+                     "operatingSystems": ["Linux"], "aboutText": about, "usageText": "See " + os.environ["DOCS"]}
+          open("catalog.json", "w").write(json.dumps(catalog))
+          PY
+          aws ecr-public describe-repositories --repository-names garrett >/dev/null 2>&1 || aws ecr-public create-repository --repository-name garrett >/dev/null
+          aws ecr-public put-repository-catalog-data --repository-name garrett --catalog-data file://catalog.json >/dev/null
+      - if: steps.where.outputs.ecr == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: public.ecr.aws
+          username: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          password: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        env:
+          AWS_REGION: us-east-1
       - uses: docker/build-push-action@v6
         with:
           context: image
           platforms: linux/amd64,linux/arm64,linux/arm/v7
           push: true
-          tags: |
-            ${{ env.IMAGE }}:${{ env.VERSION }}
-            ${{ env.IMAGE }}:latest
+          tags: ${{ steps.where.outputs.tags }}
           labels: |
             org.opencontainers.image.title=garrett
             org.opencontainers.image.description=garrett, the agent of sentinels
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.url=${{ env.WEBSITE }}
+            org.opencontainers.image.documentation=${{ env.DOCS }}
             org.opencontainers.image.version=${{ env.VERSION }}
             org.opencontainers.image.licenses=MIT
+      # Docker Hub shows the description its repository holds, not the image's labels: written each release.
+      - name: Docker Hub's description
+        if: steps.where.outputs.dockerhub == 'true'
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import json, os, urllib.request
+          user, token = os.environ["DOCKERHUB_USERNAME"], os.environ["DOCKERHUB_TOKEN"]
+          source = "https://github.com/" + os.environ["GITHUB_REPOSITORY"]
+          def call(method, url, body, headers):
+              headers = dict(headers, **{"Content-Type": "application/json"})
+              request = urllib.request.Request(url, json.dumps(body).encode(), headers, method=method)
+              with urllib.request.urlopen(request) as response:
+                  return json.load(response)
+          try:
+              jwt = call("POST", "https://hub.docker.com/v2/users/login/", {"username": user, "password": token}, {})["token"]
+              full = ("# garrett, the agent of sentinels\n\nA host security agent for container hosts.\n\n"
+                      "- Source: " + source + "\n- Website: " + os.environ["WEBSITE"] + "\n- Documentation: " + os.environ["DOCS"] +
+                      "\n\n    docker pull " + user + "/garrett:" + os.environ["VERSION"] + "\n")
+              call("PATCH", "https://hub.docker.com/v2/repositories/%s/garrett/" % user,
+                   {"description": "garrett, the agent of sentinels: " + source, "full_description": full},
+                   {"Authorization": "Bearer " + jwt})
+              print("Docker Hub's description written.")
+          except Exception as error:
+              print("::warning::Docker Hub's description was not written: %s" % error)
+          PY

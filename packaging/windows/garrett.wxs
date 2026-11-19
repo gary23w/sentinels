@@ -18,7 +18,8 @@
            UpgradeCode="{2B1D45BD-2122-4287-9038-99946685113B}" Scope="perMachine" Compressed="yes">
     <MajorUpgrade Schedule="afterInstallInitialize" DowngradeErrorMessage="A newer garrett is already installed." />
     <MediaTemplate EmbedCab="yes" />
-    <Property Id="ARPURLINFOABOUT" Value="https://github.com/gary23w/sentinels" />
+    <Property Id="ARPURLINFOABOUT" Value="https://garrettstimpson.ca/" />
+    <Property Id="ARPURLUPDATEINFO" Value="https://github.com/gary23w/sentinels/releases" />
     <Property Id="ARPHELPLINK" Value="https://gary23w.github.io/sentinels/manual.html" />
     <Property Id="ARPNOMODIFY" Value="1" />
     <Property Id="ARPNOREPAIR" Value="1" />
