@@ -5,7 +5,7 @@
 #
 #   <output>/dist       for the GitHub release: Debian, pacman and rpm packages, the Windows Installer package,
 #                       bundles, program files, SHA256SUMS
-#   <output>/site       for the project's site: apt, pacman and rpm repositories, the Scoop manifest, installers,
+#   <output>/site       for the project's site: apt, pacman, rpm and apk repositories, the Scoop manifest, installers,
 #                       update list, manual, the same downloads
 #   <output>/packages   for the package managers that keep their own copy: the Homebrew formula, the winget
 #                       manifests, the AUR's PKGBUILD and the Chocolatey package (packaging/build-packages.sh)

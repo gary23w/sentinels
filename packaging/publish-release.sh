@@ -1,7 +1,7 @@
 #!/bin/sh
-# Publish a signed garrett release: the site first (the apt, pacman and rpm repositories, the Scoop manifest, the
-# installers, the update list), then the GitHub release, then the Homebrew tap and the Scoop bucket. Run it from a
-# checkout of this repository, with git and gh signed in; the release workflow runs it for every tag.
+# Publish a signed garrett release: the site first (the apt, pacman, rpm and apk repositories, the Scoop manifest,
+# the installers, the update list), then the GitHub release, then the Homebrew tap and the Scoop bucket. Run it from
+# a checkout of this repository, with git and gh signed in; the release workflow runs it for every tag.
 #
 #   sh packaging/publish-release.sh <release folder>
 #
@@ -15,6 +15,13 @@ VERSION=$(sed -n '1s/^garrett //p' "$REL/site/update.txt")
 for need in site/update.txt.sig site/dists/stable/InRelease site/garrett.gpg dist/SHA256SUMS.asc site/arch/x86_64/sentinels.db.sig site/rpm/repodata/repomd.xml.asc; do
   [ -s "$REL/$need" ] || { echo "$need is missing: sign the release first (packaging/sign-release.sh)." >&2; exit 1; }
 done
+# The apk repository's indexes and its key are written when it is signed (sign-alpine.sh, which needs docker):
+# without them its packages are unsigned, and they do not go out.
+if [ -d "$REL/site/alpine" ]; then
+  for need in site/garrett.rsa.pub site/alpine/x86_64/APKINDEX.tar.gz site/alpine/aarch64/APKINDEX.tar.gz site/alpine/armv7/APKINDEX.tar.gz; do
+    [ -s "$REL/$need" ] || { echo "$need is missing: sign the apk repository first (packaging/sign-alpine.sh), or leave site/alpine out of this release." >&2; exit 1; }
+  done
+fi
 ORIGIN=$(git -C "$HERE" remote get-url origin)
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT

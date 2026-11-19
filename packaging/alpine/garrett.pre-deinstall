@@ -1,0 +1,6 @@
+#!/bin/sh
+# What apk runs before it removes garrett (not before an upgrade): stopped while its files are still there, so
+# whatever addresses it refused are let through again, and taken out of every runlevel.
+rc-service --ifstarted garrett stop >/dev/null 2>&1 || true
+rc-update -a delete garrett >/dev/null 2>&1 || true
+exit 0

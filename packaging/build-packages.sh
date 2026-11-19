@@ -1,7 +1,7 @@
 #!/bin/sh
-# Build garrett's packages for pacman and rpm, and fill in the files for the other package managers, in a release
-# that assemble-release.sh packed. Unsigned: sign-release.sh signs the pacman packages and databases and the rpm
-# repository's list.
+# Build garrett's packages for pacman, rpm and apk, and fill in the files for the other package managers, in a
+# release that assemble-release.sh packed. Unsigned: sign-release.sh signs the pacman packages and databases and the
+# rpm repository's list, and sign-alpine.sh signs the apk packages and writes their indexes.
 #
 #   sh packaging/build-packages.sh <release folder>
 #
@@ -11,18 +11,21 @@
 #   dist/garrett-<version>-1.<x86_64|aarch64|armv7hl>.rpm          dnf, yum and zypper: Fedora, RHEL, openSUSE
 #   site/arch/<processor>/                                          the pacman repository "sentinels"
 #   site/rpm/, site/garrett.repo                                    the rpm repository and its definition
+#   site/alpine/<x86_64|aarch64|armv7>/                             the apk packages, garrett and the alias, for the
+#                                                                   apk repository: Alpine Linux
 #   site/garrett.json                                               the Scoop manifest
 #   packages/                                                       Homebrew, winget and the AUR (with .SRCINFO)
 #
 # The packages carry the program files of the release's Linux bundles, so it runs after build-release.py.
-# Needs a Linux machine with docker (Arch Linux's own tools run in its official image), rpmbuild (package rpm)
-# and createrepo_c (package createrepo-c).
+# Needs a Linux machine with docker (Arch Linux's and Alpine Linux's own tools run in their official images),
+# rpmbuild (package rpm) and createrepo_c (package createrepo-c).
 set -eu
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 [ $# -eq 1 ] || { echo "Usage: $0 <release folder>" >&2; exit 1; }
 REL=$(CDPATH= cd -- "$1" && pwd)
 VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' "$HERE/rust/Cargo.toml" | head -1)
 ARCH_IMAGE=archlinux:base-devel-20261108.0.623074
+ALPINE_IMAGE=alpine:3.24.4
 # Build times written into the packages: the same fixed time as the bundles.
 WHEN=1793491200
 for tool in docker rpmbuild createrepo_c; do command -v "$tool" >/dev/null || { echo "$tool is required." >&2; exit 1; }; done
@@ -82,5 +85,17 @@ mkdir -p "$REL/site/rpm"
 cp "$WORK"/rpm/RPMS/*/*.rpm "$REL/site/rpm/"
 cp "$WORK"/rpm/RPMS/*/*.rpm "$REL/dist/"
 createrepo_c --quiet --general-compress-type=gz "$REL/site/rpm"
-echo "garrett $VERSION for pacman and rpm:"
-(cd "$REL" && ls dist/*.pkg.tar.zst dist/*.rpm site/arch/*/sentinels.db site/rpm/repodata/repomd.xml)
+
+# apk: one package for each processor and the alias, made in Alpine's image (packaging/alpine/build.sh). apk reads
+# signatures from inside each package and each index, not from files beside them, so the packages are left unsigned
+# and without indexes here, and sign-alpine.sh finishes the repository.
+docker run --rm -e SOURCE_DATE_EPOCH="$WHEN" -e OWNER="$(id -u):$(id -g)" -e VERSION="$VERSION" -v "$REL/dist:/dist:ro" \
+  -v "$HERE/packaging/alpine:/alpine:ro" -v "$WORK:/work" "$ALPINE_IMAGE" sh -ec '
+  apk add --quiet abuild gzip tar
+  sh /alpine/build.sh /dist "$VERSION" /work/out/alpine
+  chown -R "$OWNER" /work/out/alpine
+'
+mkdir -p "$REL/site/alpine"
+cp -R "$WORK/out/alpine/." "$REL/site/alpine/"
+echo "garrett $VERSION for pacman, rpm and apk:"
+(cd "$REL" && ls dist/*.pkg.tar.zst dist/*.rpm site/arch/*/sentinels.db site/rpm/repodata/repomd.xml site/alpine/*/*.apk)

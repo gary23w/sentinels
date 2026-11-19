@@ -5,9 +5,9 @@
 #   site/   what goes on the project's site: the apt repository, the installers, the update list, the manual
 #
 # For a tag (v1.2.3), once every check has passed, "publish" signs it with the project's keys and publishes it: the
-# site (apt, pacman, rpm, Scoop's manifest, the installers, the update list agents follow), the GitHub release, the
-# Homebrew tap and the Scoop bucket, then winget, Chocolatey, the AUR and crates.io; "container" then publishes the
-# image.
+# site (apt, pacman, rpm, apk, Scoop's manifest, the installers, the update list agents follow), the GitHub release,
+# the Homebrew tap and the Scoop bucket, then winget, Chocolatey, the AUR and crates.io; "container" then publishes
+# the image.
 # The keys are secrets of the GitHub environment "release", which only tags v* may use. Whoever can push such a tag
 # or change those secrets can put a program on every machine that updates itself from the site.
 #
@@ -15,6 +15,7 @@
 # The same signing and publishing can still be done on a machine that holds the keys:
 #                                             powershell -File packaging\sign-windows.ps1 -Thumbprint <thumbprint> <folder>
 #                                             sh packaging/sign-release.sh <folder>
+#                                             sh packaging/sign-alpine.sh <folder>      (needs docker)
 #                                             sh packaging/publish-release.sh <folder>
 #                                             sh packaging/submit-packages.sh <folder> winget|aur|chocolatey
 # sign-windows.ps1 signs the Windows agent and the Windows one-file service installer (Authenticode) with the
@@ -32,10 +33,10 @@
 #                                                 it, which also packs the Chocolatey packages: garrett, and
 #                                                 sentinels, the alias that installs it
 #
-# assemble packs the rest, and builds the pacman and rpm packages and the files for Homebrew, Scoop, winget and the
-# AUR (packaging/build-packages.sh). Each package is installed and removed again before the release is kept: apt,
-# pacman, dnf and zypper in their systems' containers, Homebrew on a Mac, Scoop and the Windows Installer package
-# and Chocolatey on Windows.
+# assemble packs the rest, and builds the pacman, rpm and apk packages and the files for Homebrew, Scoop, winget and
+# the AUR (packaging/build-packages.sh). Each package is installed and removed again before the release is kept: apt,
+# pacman, dnf, zypper and apk in their systems' containers, Homebrew on a Mac, Scoop and the Windows Installer
+# package and Chocolatey on Windows.
 #
 # The folders of the build machines are not kept in the program files: they are written as `home` and `garrett`.
 name: release
@@ -250,7 +251,7 @@ jobs:
       - name: cargo publish --dry-run
         run: cd rust && cargo publish --dry-run --locked
 
-  # Pack what was built: Debian, pacman and rpm packages and their repositories, the Windows Installer package,
+  # Pack what was built: Debian, pacman, rpm and apk packages and their repositories, the Windows Installer package,
   # the bundles, the update list, the site, and the files for the other package managers.
   assemble:
     needs: [linux, linux-armv7, macos, windows]
@@ -318,6 +319,36 @@ jobs:
             test "$(garrett version)" = "garrett '"$V"'"
             zypper --non-interactive --quiet remove sentinels garrett
             test ! -e /usr/lib/garrett && test ! -e /var/lib/garrett'
+      # apk takes a repository only with a signature it trusts. Here a key made for this check signs a copy of the
+      # repository, with the script "publish" signs it with (packaging/sign-alpine.sh); the copy and the key stay on
+      # this machine. Alpine 3.24 has apk 3, Alpine 3.22 apk 2: both read this repository.
+      - name: apk installs and removes garrett from its repository
+        run: |
+          V=$(sed -n 's/^version = "\(.*\)"/\1/p' rust/Cargo.toml | head -1)
+          CHECK="$RUNNER_TEMP/alpine-check"
+          mkdir -p "$CHECK/site"
+          cp -R release/site/alpine release/site/update.txt "$CHECK/site/"
+          (umask 077 && openssl genrsa -out "$RUNNER_TEMP/alpine-check.rsa" 4096 2>/dev/null)
+          GARRETT_ALPINE_KEY="$RUNNER_TEMP/alpine-check.rsa" sh packaging/sign-alpine.sh "$CHECK"
+          rm "$RUNNER_TEMP/alpine-check.rsa"
+          for image in alpine:3.24.4 alpine:3.22.8; do
+            echo "== $image"
+            docker run --rm -v "$CHECK/site:/r:ro" "$image" sh -exc '
+              cp /r/garrett.rsa.pub /etc/apk/keys/garrett.rsa.pub
+              echo file:///r/alpine >> /etc/apk/repositories
+              apk update
+              # By its alias: apk add sentinels brings in garrett.
+              apk add sentinels
+              test "$(garrett version)" = "garrett '"$V"'"
+              test -x /etc/init.d/garrett
+              grep -q "^#!/sbin/openrc-run" /etc/init.d/garrett
+              test -f /usr/share/man/man8/garrett.8
+              mkdir -p /var/lib/garrett /etc/garrett && : > /var/lib/garrett/agent.json && : > /etc/garrett/garrett.conf
+              # Removing the alias removes garrett, which nothing else needs.
+              apk del sentinels
+              if apk info -e garrett; then echo "removing the alias left garrett installed"; exit 1; fi
+              for left in /usr/lib/garrett /usr/bin/garrett /etc/init.d/garrett /usr/share/man/man8/garrett.8 /var/lib/garrett /etc/garrett; do if [ -e "$left" ]; then echo "left behind: $left"; exit 1; fi; done'
+          done
       - name: Nothing in it says where it was built
         run: |
           if grep -rIl -e "/home/runner" -e "runneradmin" -e "/Users/runner" release; then echo "a build folder is named in a published file"; exit 1; fi
@@ -413,6 +444,7 @@ jobs:
   # Sign and publish, for a tag only and only after every check above passed. The secrets belong to the environment
   # "release", which only tags v* may use:
   #   PACKAGE_SIGNING_KEY   the OpenPGP package signing key, armored (apt, pacman, rpm, SHA256SUMS)
+  #   ALPINE_SIGNING_KEY    the RSA apk signing key, PEM (the apk repository, which takes no OpenPGP key)
   #   UPDATE_SIGNING_KEY    the Ed25519 update key, PEM (update.txt, which installed agents follow)
   #   RELEASE_TOKEN         a GitHub token of the project's account: the site, the release, the tap, the bucket, winget
   #   CHOCOLATEY_API_KEY    the community.chocolatey.org account's API key
@@ -445,15 +477,20 @@ jobs:
         env:
           PACKAGE_SIGNING_KEY: ${{ secrets.PACKAGE_SIGNING_KEY }}
           UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+          ALPINE_SIGNING_KEY: ${{ secrets.ALPINE_SIGNING_KEY }}
         run: |
           [ -n "$PACKAGE_SIGNING_KEY" ] && [ -n "$UPDATE_SIGNING_KEY" ] || { echo "::error::The release environment has no signing keys."; exit 1; }
+          [ -n "$ALPINE_SIGNING_KEY" ] || { echo "::error::The release environment has no ALPINE_SIGNING_KEY."; exit 1; }
           umask 077
           KEYS=$(mktemp -d)
           trap 'GNUPGHOME="$KEYS/gnupg" gpgconf --kill all 2>/dev/null || true; rm -rf "$KEYS"' EXIT
           mkdir "$KEYS/gnupg"
           printf '%s\n' "$PACKAGE_SIGNING_KEY" | GNUPGHOME="$KEYS/gnupg" gpg --batch --quiet --import
           printf '%s\n' "$UPDATE_SIGNING_KEY" > "$KEYS/update.pem"
+          printf '%s\n' "$ALPINE_SIGNING_KEY" > "$KEYS/alpine.rsa"
           GNUPGHOME="$KEYS/gnupg" GARRETT_UPDATE_KEY="$KEYS/update.pem" sh packaging/sign-release.sh release
+          # The apk repository, signed inside its packages and indexes, in Alpine's image.
+          GARRETT_ALPINE_KEY="$KEYS/alpine.rsa" sh packaging/sign-alpine.sh release
       - name: Publish the site, the GitHub release, the Homebrew tap and the Scoop bucket
         id: publish
         run: |

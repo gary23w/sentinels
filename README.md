@@ -38,7 +38,7 @@ Done. The machine is protected from that moment, garrett starts again at every b
 
 ### With a package manager
 
-The same garrett, from the project's signed repositories or your package manager. The packages are named garrett, after the program they install; the name sentinels works as well, and installs garrett with apt, pacman, dnf and zypper (`sudo apt install sentinels`).
+The same garrett, from the project's signed repositories or your package manager. The packages are named garrett, after the program they install; the name sentinels works as well, and installs garrett with apt, pacman, dnf, zypper and apk (`sudo apt install sentinels`).
 
 | System | Install |
 |---|---|
@@ -46,6 +46,7 @@ The same garrett, from the project's signed repositories or your package manager
 | Arch Linux | Add the pacman repository below, then `sudo pacman -Syu garrett && sudo systemctl enable --now garrett` |
 | Fedora, RHEL | `sudo curl -fsSL -o /etc/yum.repos.d/garrett.repo https://gary23w.github.io/sentinels/garrett.repo`, then `sudo dnf install garrett && sudo systemctl enable --now garrett` |
 | openSUSE | `sudo zypper addrepo https://gary23w.github.io/sentinels/garrett.repo`, then `sudo zypper install garrett && sudo systemctl enable --now garrett` |
+| Alpine Linux | As root, add the apk repository below, then `apk add garrett && rc-update add garrett default && rc-service garrett start` |
 | macOS, Linux with Homebrew | `brew install gary23w/sentinels/garrett`, then the `sudo sh …/install.sh` line it prints, which starts garrett as root from a root-owned folder |
 | Linux, macOS with Nix | `nix profile install github:gary23w/sentinels`, or `github:gary23w/sentinels/v<version>` for one release: Nix builds garrett from source and puts the program on your PATH, with no service set up |
 | Windows with Scoop | `scoop install https://gary23w.github.io/sentinels/garrett.json`, from PowerShell opened with "Run as administrator" |
@@ -68,7 +69,15 @@ sudo pacman-key --lsign-key 6857EBCBBEF51040C3F20107362688BFC238AB45
 printf '\n[sentinels]\nServer = https://gary23w.github.io/sentinels/arch/$arch\n' | sudo tee -a /etc/pacman.conf
 ```
 
-All three repositories are signed with the key whose fingerprint is `6857 EBCB BEF5 1040 C3F2 0107 3626 88BF C238 AB45`.
+The apk repository, as root (apk finds the key by its file name in `/etc/apk/keys`):
+
+```sh
+wget -qO /etc/apk/keys/garrett.rsa.pub https://gary23w.github.io/sentinels/garrett.rsa.pub
+echo https://gary23w.github.io/sentinels/alpine >> /etc/apk/repositories
+apk update
+```
+
+The apt, pacman and rpm repositories are signed with the key whose fingerprint is `6857 EBCB BEF5 1040 C3F2 0107 3626 88BF C238 AB45`. apk takes no OpenPGP key: the apk repository is signed with the RSA key `garrett.rsa.pub`.
 
 ### All your computers and servers
 
