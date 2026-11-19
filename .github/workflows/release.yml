@@ -519,10 +519,16 @@ jobs:
         with:
           name: release
           path: release
+      # ansible-core 2.22 is the first to manage machines whose Python is 3.15, as Fedora 45's is, and it runs on
+      # Python 3.13 or later, which this runner's own Python is not.
+      - uses: actions/setup-python@v5
+        id: python
+        with:
+          python-version: '3.14'
       - name: Tools
         run: |
-          python3 -m venv "$RUNNER_TEMP/ansible"
-          "$RUNNER_TEMP/ansible/bin/pip" install --quiet ansible-core==2.21.6 ansible-lint==26.11.0
+          "${{ steps.python.outputs.python-path }}" -m venv "$RUNNER_TEMP/ansible"
+          "$RUNNER_TEMP/ansible/bin/pip" install --quiet ansible-core==2.22.0 ansible-lint==26.11.0
           echo "$RUNNER_TEMP/ansible/bin" >> "$GITHUB_PATH"
           echo "V=$(sed -n 's/^version = "\(.*\)"/\1/p' rust/Cargo.toml | head -1)" >> "$GITHUB_ENV"
       - name: Build the collection and the module
