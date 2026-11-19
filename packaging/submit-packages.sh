@@ -12,8 +12,20 @@
 #       Pushes garrett and its alias sentinels (packages/chocolatey) to community.chocolatey.org, where they wait for
 #       moderation. It takes the account's API key from CHOCOLATEY_API_KEY (the release workflow's secret), or asks
 #       for it without showing it.
+#   sh packaging/submit-packages.sh <release folder> copr
+#       Builds garrett and its alias sentinels from the release's source package (packages/rpm) in the COPR project
+#       garrett of the account copr-cli works as, and waits for the builds: for every Fedora release COPR builds for
+#       and EPEL 9 and later, on x86_64 and aarch64. It creates the project the first time, and sets its
+#       description, its instructions and those chroots each time. It needs copr-cli, and takes the account's
+#       copr-cli configuration from COPR_CONFIG (the release workflow's secret: the file copr.fedorainfracloud.org/api
+#       gives), or uses copr-cli's own (~/.config/copr).
+#   sh packaging/submit-packages.sh <release folder> obs
+#       Commits the release's spec (packages/rpm) and Linux bundles to the package garrett in the home project of the
+#       openSUSE Build Service account OBS_USER, which builds it for the repositories that project has. It creates
+#       the package the first time. It takes the account's password from OBS_PASSWORD (the release workflow's
+#       secret), or asks for both without showing the password.
 set -eu
-[ $# -eq 2 ] || { echo "Usage: $0 <release folder> winget|aur|chocolatey" >&2; exit 1; }
+[ $# -eq 2 ] || { echo "Usage: $0 <release folder> winget|aur|chocolatey|copr|obs" >&2; exit 1; }
 REL=$(CDPATH= cd -- "$1" && pwd)
 VERSION=$(sed -n '1s/^garrett //p' "$REL/site/update.txt")
 NAME=sentinels; EMAIL=noreply@sentinels.invalid
@@ -88,5 +100,101 @@ BODY
     done
     KEY=
     ;;
-  *) echo "Usage: $0 <release folder> winget|aur|chocolatey" >&2; exit 1 ;;
+  copr)
+    SRPM=$REL/packages/rpm/garrett-$VERSION-1.src.rpm
+    [ -s "$SRPM" ] || { echo "No $SRPM (build-packages.sh builds it)." >&2; exit 1; }
+    command -v copr-cli >/dev/null || { echo "copr-cli is required (pipx install copr-cli)." >&2; exit 1; }
+    # The configuration holds the account's API token: from the environment into a file only this user can read.
+    if [ -n "${COPR_CONFIG:-}" ]; then
+      (umask 077 && printf '%s\n' "$COPR_CONFIG" > "$WORK/copr")
+      copr() { copr-cli --config "$WORK/copr" "$@"; }
+    else
+      copr() { copr-cli "$@"; }
+    fi
+    OWNER=$(copr whoami)
+    # The chroots: each Fedora release COPR builds for (not rawhide) and EPEL 9 and later, on the two processors
+    # COPR builds for that garrett has a program for. COPR drops a release's chroots once it no longer builds for it.
+    OFFERED=$(copr list-chroots)
+    set --
+    for chroot in $(printf '%s\n' "$OFFERED" | awk -F- '/^(fedora|epel)-[0-9]+-(x86_64|aarch64)$/ && ($1 == "fedora" || $2 >= 9)'); do
+      set -- "$@" --chroot "$chroot"
+    done
+    [ $# -gt 0 ] || { echo "COPR lists no Fedora or EPEL chroots for x86_64 or aarch64." >&2; exit 1; }
+    # Markdown, as COPR shows them on the project's page.
+    DESCRIPTION=$(printf '%s\n' \
+      "garrett, the agent of [sentinels](https://github.com/gary23w/sentinels), watches the machine's running programs and their connections, scores them on the machine, and pauses or ends a program it judges hostile." \
+      "" \
+      "These packages carry the program files of the project's GitHub releases. MIT license." \
+      "" \
+      "- Source, releases and documentation: https://github.com/gary23w/sentinels" \
+      "- https://garrettstimpson.ca/")
+    INSTRUCTIONS=$(printf '%s\n' \
+      "Fedora, and RHEL 9 and later and its relatives:" \
+      "" \
+      "    sudo dnf copr enable $OWNER/garrett" \
+      "    sudo dnf install garrett" \
+      "    sudo systemctl enable --now garrett" \
+      "" \
+      "The name sentinels installs garrett as well.")
+    if copr get "$OWNER/garrett" >/dev/null 2>&1; then
+      copr modify "$@" --description "$DESCRIPTION" --instructions "$INSTRUCTIONS" garrett
+    else
+      copr create "$@" --description "$DESCRIPTION" --instructions "$INSTRUCTIONS" garrett
+    fi
+    copr build garrett "$SRPM"
+    echo "COPR's $OWNER/garrett carries garrett $VERSION: https://copr.fedorainfracloud.org/coprs/$OWNER/garrett/"
+    ;;
+  obs)
+    SPEC=$REL/packages/rpm/garrett.spec
+    [ -s "$SPEC" ] || { echo "No $SPEC (build-packages.sh writes it)." >&2; exit 1; }
+    grep -qx "%global garrett_version $VERSION" "$SPEC" || { echo "$SPEC is not for garrett $VERSION." >&2; exit 1; }
+    for processor in x86_64 aarch64 armv7; do
+      [ -s "$REL/dist/garrett-linux-$processor.tar.gz" ] || { echo "No $REL/dist/garrett-linux-$processor.tar.gz." >&2; exit 1; }
+    done
+    ACCOUNT=${OBS_USER:-}
+    [ -n "$ACCOUNT" ] || { printf 'openSUSE Build Service account: ' >&2; read -r ACCOUNT; }
+    PASSWORD=${OBS_PASSWORD:-}
+    if [ -z "$PASSWORD" ]; then
+      printf 'Password of the openSUSE Build Service account %s (not shown): ' "$ACCOUNT" >&2
+      stty -echo 2>/dev/null || true; read -r PASSWORD; stty echo 2>/dev/null || true; echo >&2
+    fi
+    [ -n "$ACCOUNT" ] && [ -n "$PASSWORD" ] || { echo "No account given; nothing was sent." >&2; exit 1; }
+    # The API takes the account's name and password (HTTP basic authentication): they go to curl on standard input,
+    # never on a command line.
+    AUTH=$(printf '%s:%s' "$ACCOUNT" "$PASSWORD" | base64 | tr -d '\n')
+    PASSWORD=
+    obs() { printf 'Authorization: Basic %s\n' "$AUTH" | curl -fsS -H @- "$@"; }
+    PROJECT=home:$ACCOUNT
+    PACKAGE=https://api.opensuse.org/source/$PROJECT/garrett
+    # The package, the first time: its description and its link to the project.
+    CODE=$(printf 'Authorization: Basic %s\n' "$AUTH" | curl -sS -o /dev/null -w '%{http_code}' -H @- "$PACKAGE/_meta")
+    case $CODE in
+      200) ;;
+      404)
+        cat > "$WORK/meta.xml" <<META
+<package name="garrett" project="$PROJECT">
+  <title>garrett, the agent of sentinels</title>
+  <description>garrett, the agent of sentinels, watches the machine's running programs and their connections, scores them on the machine, and pauses or ends a program it judges hostile.
+
+These packages carry the program files of the project's GitHub releases. MIT license.
+
+Source, releases and documentation: https://github.com/gary23w/sentinels
+https://garrettstimpson.ca/</description>
+  <url>https://github.com/gary23w/sentinels</url>
+</package>
+META
+        obs -X PUT -H "Content-Type: application/xml" -T "$WORK/meta.xml" "$PACKAGE/_meta" >/dev/null
+        ;;
+      *) echo "The openSUSE Build Service answered $CODE for $PROJECT/garrett." >&2; exit 1 ;;
+    esac
+    # The spec and the three bundles, in one commit: each file uploaded (rev=upload), then the upload committed (a
+    # POST with cmd=commit).
+    for file in "$SPEC" "$REL/dist/garrett-linux-x86_64.tar.gz" "$REL/dist/garrett-linux-aarch64.tar.gz" "$REL/dist/garrett-linux-armv7.tar.gz"; do
+      obs -X PUT -T "$file" "$PACKAGE/$(basename "$file")?rev=upload" >/dev/null
+    done
+    obs -d '' "$PACKAGE?cmd=commit&comment=garrett%20$VERSION" >/dev/null
+    AUTH=
+    echo "$PROJECT/garrett on the openSUSE Build Service carries garrett $VERSION: https://build.opensuse.org/package/show/$PROJECT/garrett"
+    ;;
+  *) echo "Usage: $0 <release folder> winget|aur|chocolatey|copr|obs" >&2; exit 1 ;;
 esac

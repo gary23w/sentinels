@@ -13,6 +13,8 @@
 #   site/rpm/, site/garrett.repo                                    the rpm repository and its definition
 #   site/garrett.json                                               the Scoop manifest
 #   packages/                                                       Homebrew, winget and the AUR (with .SRCINFO)
+#   packages/rpm/garrett-<version>-1.src.rpm, garrett.spec          the source package COPR builds, and the spec the
+#                                                                   openSUSE Build Service builds with the bundles
 #
 # The packages carry the program files of the release's Linux bundles, so it runs after build-release.py.
 # Needs a Linux machine with docker (Arch Linux's own tools run in its official image), rpmbuild (package rpm)
@@ -69,12 +71,12 @@ cp "$WORK"/out/arch/*/garrett-*.pkg.tar.zst "$WORK"/out/arch/x86_64/sentinels-*-
 cp "$WORK/out/aur.SRCINFO" "$REL/packages/aur/.SRCINFO"
 cp "$WORK/out/aur.SRCINFO" "$REL/packages/aur/SRCINFO"
 
-# rpm: one package for each processor, and the repository's metadata. gzip, which every dnf, yum and zypper reads.
+# rpm: one package for each processor (the spec takes each one's bundle), and the repository's metadata. gzip, which
+# every dnf, yum and zypper reads.
 sed 's/\r$//' "$HERE/packaging/rpm/garrett.spec" > "$WORK/garrett.spec"
-for pair in x86_64:x86_64 aarch64:aarch64 armv7:armv7hl; do
-  processor=${pair%%:*}; target=${pair#*:}
+for target in x86_64 aarch64 armv7hl; do
   SOURCE_DATE_EPOCH=$WHEN rpmbuild -bb --quiet --target "$target" --define "_topdir $WORK/rpm" \
-    --define "garrett_version $VERSION" --define "garrett_bundle garrett-linux-$processor.tar.gz" \
+    --define "garrett_version $VERSION" \
     --define "_buildhost garrett" --define "use_source_date_epoch_as_buildtime 1" --define "clamp_mtime_to_source_date_epoch 1" \
     "$WORK/garrett.spec"
 done
@@ -82,5 +84,15 @@ mkdir -p "$REL/site/rpm"
 cp "$WORK"/rpm/RPMS/*/*.rpm "$REL/site/rpm/"
 cp "$WORK"/rpm/RPMS/*/*.rpm "$REL/dist/"
 createrepo_c --quiet --general-compress-type=gz "$REL/site/rpm"
+
+# The source package COPR builds garrett from (submit-packages.sh copr), and its spec, which the openSUSE Build
+# Service builds with the three bundles (submit-packages.sh obs). They build it with no --define, so the version is
+# written into the spec.
+mkdir -p "$REL/packages/rpm"
+{ echo "%global garrett_version $VERSION"; cat "$WORK/garrett.spec"; } > "$REL/packages/rpm/garrett.spec"
+SOURCE_DATE_EPOCH=$WHEN rpmbuild -bs --quiet --define "_topdir $WORK/rpm" \
+  --define "_buildhost garrett" --define "use_source_date_epoch_as_buildtime 1" --define "clamp_mtime_to_source_date_epoch 1" \
+  "$REL/packages/rpm/garrett.spec"
+cp "$WORK/rpm/SRPMS/garrett-$VERSION-1.src.rpm" "$REL/packages/rpm/"
 echo "garrett $VERSION for pacman and rpm:"
-(cd "$REL" && ls dist/*.pkg.tar.zst dist/*.rpm site/arch/*/sentinels.db site/rpm/repodata/repomd.xml)
+(cd "$REL" && ls dist/*.pkg.tar.zst dist/*.rpm site/arch/*/sentinels.db site/rpm/repodata/repomd.xml packages/rpm/*)

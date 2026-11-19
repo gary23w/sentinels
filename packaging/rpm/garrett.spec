@@ -2,7 +2,9 @@
 #
 # It packs the program files the release workflow built, from the release's Linux bundles: nothing is compiled
 # here. packaging/build-packages.sh builds one package for each processor, on any machine with rpmbuild:
-#   rpmbuild -bb --target x86_64 --define "garrett_version 1.9.2" --define "garrett_bundle garrett-linux-x86_64.tar.gz" garrett.spec
+#   rpmbuild -bb --target x86_64 --define "garrett_version 1.9.2" garrett.spec
+# and the source package COPR and the openSUSE Build Service build it from: this spec with the version written in,
+# and the three bundles. Each build unpacks the bundle of the processor it builds for.
 #
 # Like most packages with a service on these systems, it does not start garrett by itself:
 #   systemctl enable --now garrett
@@ -12,7 +14,10 @@ Release:        1
 Summary:        sentinels agent: host intrusion sentinel that stops what it catches
 License:        MIT
 URL:            https://github.com/gary23w/sentinels
-Source0:        %{garrett_bundle}
+Source0:        garrett-linux-x86_64.tar.gz
+Source1:        garrett-linux-aarch64.tar.gz
+Source2:        garrett-linux-armv7.tar.gz
+ExclusiveArch:  x86_64 aarch64 armv7hl
 # Without ss garrett still ends hostile programs as they start; it cannot see who a program talks to.
 Recommends:     (iproute or iproute2)
 # Fleet blocking refuses the addresses your service names at the firewall, with nftables.
@@ -45,7 +50,15 @@ service learned from earlier attacks, and shares what one machine learns
 with the rest of your machines.
 
 %prep
-%setup -q -n garrett
+%ifarch x86_64
+%setup -q -n garrett -T -b 0
+%endif
+%ifarch aarch64
+%setup -q -n garrett -T -b 1
+%endif
+%ifarch armv7hl
+%setup -q -n garrett -T -b 2
+%endif
 
 %build
 
