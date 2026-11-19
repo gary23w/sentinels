@@ -9,7 +9,8 @@
 #   the package signing key (OpenPGP)   the apt, pacman and rpm repositories, and SHA256SUMS
 #   the update key (Ed25519)            update.txt, the list an installed agent checks before it updates itself;
 #                                       its public half is compiled into the agent (rust/src/update.rs)
-# To sign the Windows agent too (Authenticode), run packaging/sign-windows.ps1 first: this signs SHA256SUMS as it is.
+# To sign the Windows agent and the Windows one-file installer too (Authenticode), run packaging/sign-windows.ps1 first:
+# this signs SHA256SUMS as it is.
 # Needs gpg and OpenSSL 3.
 set -eu
 [ $# -eq 1 ] || { echo "Usage: $0 <release folder>" >&2; exit 1; }

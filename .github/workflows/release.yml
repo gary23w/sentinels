@@ -10,9 +10,10 @@
 #                                             sh packaging/sign-release.sh <folder>
 #                                             sh packaging/publish-release.sh <folder>
 #
-# The first signs the Windows agent (Authenticode) with the project's code-signing certificate and puts the signed
-# file into the zip, the one-file installer, SHA256SUMS, the update list and the pins; it is skipped while there is
-# no certificate. The other two sign the release with the project's keys and publish it.
+# The first signs the Windows agent and the Windows one-file service installer (Authenticode) with the project's
+# code-signing certificate, and makes the zip, the one-file installer, SHA256SUMS, the update list and the pins
+# again from the signed files; it is skipped while there is no certificate. The other two sign the release with
+# the project's keys and publish it.
 #
 # It runs for every tag that starts with v, or by hand:   gh workflow run release.yml --ref <tag or branch>
 #

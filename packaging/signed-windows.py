@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
-"""Put the signed Windows agent into everything in a packed release that carries or names it.
+"""Put the signed Windows agent into everything in a packed release that carries or names it, and make the
+release's digests and pins from the signed files.
 
-    python3 packaging/signed-windows.py <release folder>
+    python3 packaging/signed-windows.py <release folder> repack
+    python3 packaging/signed-windows.py <release folder> sums
 
-sign-windows.ps1 runs it after signing dist/garrett-windows.exe. The signature is part of the program file, so
-the zip, the one-file installer, SHA256SUMS, the update list, the site's copies and the first-install scripts'
-pins are made again from the signed file, the way assemble-release.sh made them from the unsigned one. It refuses
-a program file that carries no signature, and a release that sign-release.sh has already signed.
+sign-windows.ps1 runs repack after signing dist/garrett-windows.exe: the signature is part of the program file,
+so the zip and the one-file installer are made again from the signed file, the way assemble-release.sh made them
+from the unsigned one. Then it signs the one-file installer too, and runs sums: SHA256SUMS, the update list, the
+site's copies and the first-install scripts' pins are made from the two signed files, so the pin service.ps1
+checks the installer against is the signed installer's digest. Each step refuses a file that carries no signature
+where it expects one, a one-file installer signed before it was made again, and a release that sign-release.sh
+has already signed.
 """
 import importlib.util
 import struct
@@ -18,32 +23,19 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 
 
-def signed(program):
+def signed(program, name):
     """Whether a Windows program file carries an Authenticode signature: its security directory is not empty."""
     header = struct.unpack_from("<I", program, 0x3C)[0]
-    if program[header:header + 4] != b"PE\0\0":
-        raise SystemExit("garrett-windows.exe is not a Windows program file.")
+    if bytes(program[header:header + 4]) != b"PE\0\0":
+        raise SystemExit(name + " is not a Windows program file.")
     optional = header + 24
     directories = optional + (112 if struct.unpack_from("<H", program, optional)[0] == 0x20B else 96)
     offset, size = struct.unpack_from("<II", program, directories + 4 * 8)
     return offset > 0 and size > 0
 
 
-def main(arguments):
-    if len(arguments) != 1:
-        raise SystemExit("Usage: signed-windows.py <release folder>")
-    release = Path(arguments[0]).resolve()
-    dist, site = release / "dist", release / "site"
-    for name in ("dist/SHA256SUMS.asc", "site/update.txt.sig"):
-        if (release / name).exists():
-            raise SystemExit("sign-release.sh has signed this release already: sign the Windows agent before it, from a fresh release.")
-    program = (dist / "garrett-windows.exe").read_bytes()
-    if not signed(program):
-        raise SystemExit("dist/garrett-windows.exe carries no signature: sign-windows.ps1 signs it first.")
-    spec = importlib.util.spec_from_file_location("build_release", HERE / "build-release.py")
-    build = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(build)
-
+def repack(dist, build, program):
+    """The zip and the one-file installer again, with the signed agent in them."""
     # The zip: the same members, with the signed program file.
     archive = dist / "garrett-windows.zip"
     with zipfile.ZipFile(archive) as old:
@@ -56,9 +48,12 @@ def main(arguments):
             info.compress_type, info.external_attr = entry.compress_type, entry.external_attr
             new.writestr(info, program if entry.filename == "garrett/garrett.exe" else data)
 
-    # The one-file installer: the same records behind the same stub, with the signed agent.
+    # The one-file installer: the same records behind the same stub, with the signed agent. One signed already
+    # carries its signature after the trailer, and its header would go on naming it: it is signed after this.
     onefile = dist / "garrett-sentinels-windows.exe"
     packed = memoryview(onefile.read_bytes())
+    if signed(packed, "garrett-sentinels-windows.exe"):
+        raise SystemExit("garrett-sentinels-windows.exe is signed already: sign-windows.ps1 signs it after making it again. Start from a fresh release.")
     if packed[-24:] != build.MAGIC:
         raise SystemExit("garrett-sentinels-windows.exe is not a one-file installer.")
     start = struct.unpack("<Q", packed[-32:-24])[0]
@@ -76,7 +71,12 @@ def main(arguments):
         raise SystemExit("garrett-sentinels-windows.exe does not carry the agent the way build-release.py packs it.")
     build.installer(onefile, packed[:start], [(path, program if path == "garrett-service/agent/garrett.exe" else data, mode) for path, data, mode in records])
 
-    # The digests, the update list, the site's copies and the pins, as assemble-release.sh makes them.
+
+def sums(dist, site, build):
+    """The digests, the update list, the site's copies and the pins, as assemble-release.sh makes them, from the
+    signed agent and the signed one-file installer."""
+    if not signed((dist / "garrett-sentinels-windows.exe").read_bytes(), "garrett-sentinels-windows.exe"):
+        raise SystemExit("dist/garrett-sentinels-windows.exe carries no signature: sign-windows.ps1 signs it before the digests are made.")
     build.sums(dist)
     digests = {line.split("  ", 1)[1]: line.split("  ", 1)[0] for line in (dist / "SHA256SUMS").read_bytes().decode().splitlines()}
     lines = (site / "update.txt").read_bytes().decode().split("\n")
@@ -88,7 +88,28 @@ def main(arguments):
     for name in ("garrett-windows.exe", "garrett-windows.zip", "SHA256SUMS"):
         (site / name).write_bytes((dist / name).read_bytes())
     subprocess.run([sys.executable, "-B", str(HERE / "pin-release-installers.py"), str(dist / "SHA256SUMS"), str(site)], check=True)
-    print("The signed garrett-windows.exe is in the release, in garrett-windows.zip and in garrett-sentinels-windows.exe.")
+
+
+def main(arguments):
+    if len(arguments) != 2 or arguments[1] not in ("repack", "sums"):
+        raise SystemExit("Usage: signed-windows.py <release folder> repack|sums")
+    release = Path(arguments[0]).resolve()
+    dist, site = release / "dist", release / "site"
+    for name in ("dist/SHA256SUMS.asc", "site/update.txt.sig"):
+        if (release / name).exists():
+            raise SystemExit("sign-release.sh has signed this release already: sign the Windows files before it, from a fresh release.")
+    program = (dist / "garrett-windows.exe").read_bytes()
+    if not signed(program, "garrett-windows.exe"):
+        raise SystemExit("dist/garrett-windows.exe carries no signature: sign-windows.ps1 signs it first.")
+    spec = importlib.util.spec_from_file_location("build_release", HERE / "build-release.py")
+    build = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(build)
+    if arguments[1] == "repack":
+        repack(dist, build, program)
+        print("The signed garrett-windows.exe is in garrett-windows.zip and in garrett-sentinels-windows.exe.")
+    else:
+        sums(dist, site, build)
+        print("SHA256SUMS, the update list, the site's copies and the pins are made from the signed garrett-windows.exe and garrett-sentinels-windows.exe.")
     return 0
 
 

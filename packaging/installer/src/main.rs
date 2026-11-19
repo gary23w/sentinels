@@ -12,7 +12,9 @@
 //!   ... --extract <folder>                only writes the payload's files there, for a look
 //!
 //! Payload: records of  u32 path length, path (UTF-8, "/" between folders), u32 mode, u64 size, bytes;
-//! then a trailer of  u64 offset of the first record, then the 24-byte magic.
+//! then a trailer of  u64 offset of the first record, then the 24-byte magic. The trailer ends the file, except
+//! in a Windows file signed after packing (packaging/sign-windows.ps1): Authenticode appends its certificate
+//! table after the trailer and names where it starts in the program's header, so the trailer ends there.
 use std::env;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
@@ -38,25 +40,78 @@ fn read_u64(bytes: &[u8], at: &mut usize) -> u64 {
     value
 }
 
+/// Where what was appended to this program ends. A Windows program signed after packing carries its certificate
+/// table after the trailer: signtool pads the file to 8 bytes, appends the table, and writes where it starts into
+/// the security directory of the program's header (the fifth data directory: a file offset and a size). Anywhere
+/// else, and in an unsigned file, the end of the file.
+fn appended_end<R: Read + Seek>(file: &mut R, length: u64) -> io::Result<u64> {
+    let mut dos = [0u8; 64];
+    if length < dos.len() as u64 {
+        return Ok(length);
+    }
+    file.seek(SeekFrom::Start(0))?;
+    file.read_exact(&mut dos)?;
+    if &dos[..2] != b"MZ" {
+        return Ok(length);
+    }
+    // "PE\0\0", the 20-byte file header, then the optional header: its magic says whether it is PE32 or PE32+,
+    // and so how far in the count of data directories and the directories themselves are.
+    let mut headers = [0u8; 24 + 112 + 5 * 8];
+    let pe = u32::from_le_bytes(dos[60..].try_into().unwrap()) as u64;
+    if pe + headers.len() as u64 > length {
+        return Ok(length);
+    }
+    file.seek(SeekFrom::Start(pe))?;
+    file.read_exact(&mut headers)?;
+    if &headers[..4] != b"PE\0\0" {
+        return Ok(length);
+    }
+    let directories = 24 + match u16::from_le_bytes(headers[24..26].try_into().unwrap()) {
+        0x10B => 96,
+        0x20B => 112,
+        _ => return Ok(length),
+    };
+    let mut at = directories - 4;
+    if read_u32(&headers, &mut at) < 5 {
+        return Ok(length);
+    }
+    at = directories + 4 * 8;
+    let (start, size) = (read_u32(&headers, &mut at) as u64, read_u32(&headers, &mut at) as u64);
+    if start < 8 || size == 0 || start.saturating_add(size) > length {
+        return Ok(length);
+    }
+    // The padding before the table is not part of what was appended: the trailer's last byte is never zero.
+    let mut before = [0u8; 8];
+    file.seek(SeekFrom::Start(start - 8))?;
+    file.read_exact(&mut before)?;
+    Ok(start - before.iter().rev().take(7).take_while(|byte| **byte == 0).count() as u64)
+}
+
 /// The payload appended to this program, or None when there is none.
 fn payload() -> io::Result<Option<Vec<u8>>> {
     let own = env::current_exe()?;
     let mut file = File::open(&own)?;
     let length = file.metadata()?.len();
-    if length < 32 {
+    payload_in(&mut file, length)
+}
+
+/// The payload in a file of `length` bytes, or None when it carries none.
+fn payload_in<R: Read + Seek>(file: &mut R, length: u64) -> io::Result<Option<Vec<u8>>> {
+    let end = appended_end(file, length)?;
+    if end < 32 {
         return Ok(None);
     }
     let mut trailer = [0u8; 32];
-    file.seek(SeekFrom::Start(length - 32))?;
+    file.seek(SeekFrom::Start(end - 32))?;
     file.read_exact(&mut trailer)?;
     if &trailer[8..] != MAGIC {
         return Ok(None);
     }
     let start = u64::from_le_bytes(trailer[..8].try_into().unwrap());
-    if start >= length - 32 {
+    if start >= end - 32 {
         fail("The installer's payload is damaged.");
     }
-    let mut bytes = vec![0u8; (length - 32 - start) as usize];
+    let mut bytes = vec![0u8; (end - 32 - start) as usize];
     file.seek(SeekFrom::Start(start))?;
     file.read_exact(&mut bytes)?;
     Ok(Some(bytes))
@@ -189,4 +244,87 @@ fn main() {
         let _ = io::stdin().read_line(&mut line);
     }
     process::exit(code);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+
+    /// A file shaped like the Windows stub: a DOS header pointing at a PE32+ header, whose fifth data directory
+    /// names the certificate table as a file offset and a size, in the 512 bytes a program's headers take.
+    fn windows_stub(certificate_table: Option<(u32, u32)>) -> Vec<u8> {
+        let mut bytes = vec![0u8; 512];
+        bytes[..2].copy_from_slice(b"MZ");
+        bytes[60..64].copy_from_slice(&64u32.to_le_bytes());
+        bytes[64..68].copy_from_slice(b"PE\0\0");
+        bytes[84..86].copy_from_slice(&240u16.to_le_bytes());
+        bytes[88..90].copy_from_slice(&0x20Bu16.to_le_bytes());
+        bytes[196..200].copy_from_slice(&16u32.to_le_bytes());
+        if let Some((start, size)) = certificate_table {
+            bytes[232..236].copy_from_slice(&start.to_le_bytes());
+            bytes[236..240].copy_from_slice(&size.to_le_bytes());
+        }
+        bytes
+    }
+
+    /// Records as packaging/build-release.py packs them.
+    fn records(files: &[(&str, &[u8])]) -> Vec<u8> {
+        let mut out = Vec::new();
+        for (path, data) in files {
+            out.extend_from_slice(&(path.len() as u32).to_le_bytes());
+            out.extend_from_slice(path.as_bytes());
+            out.extend_from_slice(&0o644u32.to_le_bytes());
+            out.extend_from_slice(&(data.len() as u64).to_le_bytes());
+            out.extend_from_slice(data);
+        }
+        out
+    }
+
+    /// The stub, the payload, then the trailer, as packaging/build-release.py writes them.
+    fn packed(stub: Vec<u8>, payload: &[u8]) -> Vec<u8> {
+        let mut file = stub;
+        let start = file.len() as u64;
+        file.extend_from_slice(payload);
+        file.extend_from_slice(&start.to_le_bytes());
+        file.extend_from_slice(MAGIC);
+        file
+    }
+
+    fn found_in(file: &[u8]) -> Option<Vec<u8>> {
+        payload_in(&mut Cursor::new(file), file.len() as u64).unwrap()
+    }
+
+    #[test]
+    fn the_payload_ends_an_unsigned_file() {
+        let payload = records(&[("garrett-service/LICENSE", b"MIT"), ("garrett-service/agent/garrett.exe", b"MZ agent")]);
+        assert_eq!(found_in(&packed(windows_stub(None), &payload)), Some(payload.clone()));
+        let mut linux_stub = b"\x7fELF".to_vec();
+        linux_stub.resize(512, 0);
+        assert_eq!(found_in(&packed(linux_stub, &payload)), Some(payload));
+        assert_eq!(found_in(&windows_stub(None)), None);
+    }
+
+    #[test]
+    fn the_payload_ends_where_the_certificate_table_starts() {
+        let table = b"a certificate table, as signtool appends it";
+        for (agent, padding) in [(&b"MZ agent"[..], 5), (b"MZ agent long", 0)] {
+            let payload = records(&[("garrett-service/LICENSE", b"MIT"), ("garrett-service/agent/garrett.exe", agent)]);
+            let unsigned = packed(windows_stub(None), &payload);
+            // signtool pads the file to 8 bytes, appends the table, and names it in the header, in place.
+            assert_eq!((8 - unsigned.len() % 8) % 8, padding);
+            let start = (unsigned.len() + padding) as u32;
+            let mut signed = packed(windows_stub(Some((start, table.len() as u32))), &payload);
+            signed.resize(start as usize, 0);
+            signed.extend_from_slice(table);
+            assert_eq!(found_in(&signed), Some(payload.clone()), "with {} bytes of padding", padding);
+            let into = env::temp_dir().join(format!("garrett-installer-test-{}-{}", process::id(), padding));
+            let _ = fs::remove_dir_all(&into);
+            fs::create_dir_all(&into).unwrap();
+            extract(&found_in(&signed).unwrap(), &into).unwrap();
+            assert_eq!(fs::read(into.join("garrett-service").join("LICENSE")).unwrap(), b"MIT");
+            assert_eq!(fs::read(into.join("garrett-service").join("agent").join("garrett.exe")).unwrap(), agent);
+            fs::remove_dir_all(&into).unwrap();
+        }
+    }
 }
