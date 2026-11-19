@@ -564,6 +564,9 @@ jobs:
       - name: Every recorded decision comes out the same
         run: cd rust && cargo test --locked
         shell: bash
+      - name: The stub of the one-file installer finds its payload, signed or not
+        run: cd packaging/installer && cargo test --locked
+        shell: bash
       # On a real Linux machine, as root: the kernel feed reports shells that live about a millisecond, with their
       # command lines.
       - name: The kernel feed, live
