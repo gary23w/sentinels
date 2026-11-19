@@ -22,12 +22,12 @@ export PATH
 BASE=${GARRETT_BASE:-https://gary23w.github.io/sentinels}
 # The release build updates these bundle hashes before publishing install.sh. The apt key is
 # pinned separately so a replacement signing key on the download site cannot authorize a package.
-LINUX_X86_SHA='0a5fe060bb6cfabb30d555f9af5fc503dd56c86d299961087f7b3bdfc4da9d2d'
-LINUX_ARM64_SHA='29c5a90c59ea4767d6a0c97ed111df0ca301f31afb8f115ef7d683a9db4e4de6'
-LINUX_ARMV7_SHA='d607a48bdf94ff94388dc9ea01becf0a840e0c8d7936e51d18f23bd07b53d678'
-MACOS_SHA='8e736fd8da8d6ef53546f8e747697d72c0ed9f014b3a09df59aafc3cb09687a3'
+LINUX_X86_SHA='a415eb41f6ba2556b4a2bafc03b44821aa7be436a38c6592652d7b3cdc6aa690'
+LINUX_ARM64_SHA='10e387a05964740a0bc838f2b08a4a466b47daec879f3f7df365bb1f381817d0'
+LINUX_ARMV7_SHA='c37a89d591c42120c9e826db02947646ed7fe280ad00902385400464c9822c14'
+MACOS_SHA='99f722154ee6a9ad1d44e1a09f7db9fff63852faf02d1ab294df1d18edc319c0'
 APT_KEY_SHA='1f298d4106a58461a4a16d8976db87e8c5f581a20df180de1f69b73f1a69fa9d'
-RELEASE_VERSION='1.9.2'
+RELEASE_VERSION='1.9.3'
 SERVER=""; KEY=""; MODE=""; LABEL=""
 while [ $# -gt 0 ]; do
   case "$1" in

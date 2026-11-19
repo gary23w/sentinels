@@ -1,24 +1,49 @@
 Package: garrett
 Architecture: arm64
-Version: 1.9.2
+Version: 1.9.3
 Priority: optional
 Section: admin
 Maintainer: sentinels <noreply@sentinels.invalid>
 Installed-Size: 4218
 Depends: iproute2
 Recommends: nftables
-Filename: pool/main/garrett_1.9.2_arm64.deb
-Size: 1599932
-MD5sum: 86d6c14ab0bef0628305cfdff7e37558
-SHA1: 9ac6c307bcd7069cf3f70eef4da4cae535251522
-SHA256: 1f467c5354318b6d396d91c78465e9859ab3f085db6f166ba6e56da0e81e693b
-SHA512: 27ab2f3c380ec64e6bd56542c1c2c0e00b7b8be209f01713f2c47cdc013313b0060aa8cfaf84432cc6708827e3b44cfb5a76c0b50bb1dfc48e32357a70daf9e5
+Filename: pool/main/garrett_1.9.3_arm64.deb
+Size: 1599996
+MD5sum: dc48652464fa3126d52716aea216159d
+SHA1: f878b5e84902aee1f6c4a8b7105bddcffc77fa7d
+SHA256: ba95eb2af73663ace0224042f4388a6c2057807055c1c0100afaca4d66d23101
+SHA512: 501c680fba4af263e2ca754fa79246e96836264d089907397a96fd1383386a4b1bb9fa51543b476862b360d7c48eaabcb10619676c3b5f6f9c4ca294ae071228
 Homepage: https://github.com/gary23w/sentinels
-Description: host intrusion sentinel that stops what it catches
- garrett watches this machine's running programs and their connections,
- scores them on the machine, and pauses or ends a program it judges hostile.
+Description: sentinels agent: host intrusion sentinel that stops what it catches
+ garrett, the agent of sentinels, watches this machine's running programs and
+ their connections, scores them on the machine, and pauses or ends a program
+ it judges hostile.
  .
  It reports cases to a Sentinel service you run yourself, applies what that
  service learned from earlier attacks, and shares what one machine learns
  with the rest of your machines.
+
+Package: sentinels
+Architecture: all
+Version: 1.9.3
+Priority: optional
+Section: metapackages
+Source: garrett
+Maintainer: sentinels <noreply@sentinels.invalid>
+Installed-Size: 15
+Depends: garrett (>= 1.9.3)
+Filename: pool/main/sentinels_1.9.3_all.deb
+Size: 9060
+MD5sum: 740cc73506b24f8514aab58f3eae84f0
+SHA1: 865a22357f59c9c5186060a42f62b22548e291ae
+SHA256: d6970f2ec05c50a0feded09d4470b3bd58a580621a30977eba8a643993919772
+SHA512: 394ccd55467d0c261194f1410ab7e9546c5f355853b574f23d686aaf841206e326160768f9a390dc8930f4a75be99320bf3efa70b3e7042d5fae725fbb0b8430
+Homepage: https://github.com/gary23w/sentinels
+Description: sentinels host intrusion detection and response (installs garrett)
+ sentinels is open-source host intrusion detection and response. Its agent,
+ garrett, watches this machine's running programs and their connections and
+ ends a program it judges hostile.
+ .
+ This package installs garrett, which does the work: remove garrett to remove
+ both.
 

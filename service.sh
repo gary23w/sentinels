@@ -17,10 +17,10 @@ set -eu
 PATH=/usr/sbin:/usr/bin:/sbin:/bin
 export PATH
 BASE=${GARRETT_BASE:-https://gary23w.github.io/sentinels}
-RELEASE_VERSION='1.9.2'
+RELEASE_VERSION='1.9.3'
 RELEASE=${GARRETT_RELEASE:-https://github.com/gary23w/sentinels/releases/download/v$RELEASE_VERSION}
-SENTINELS_SHA_x86_64='a6923f300b33b09ca745bddc2bc887f322801bad863a29b86c9f1c2d9e98f3b3'
-SENTINELS_SHA_aarch64='86712f43ce6815e87fc6e676d8838818c3200968e553b70e21fe863a4f53f750'
+SENTINELS_SHA_x86_64='727a18608cee0f3b762802cebb241a6dfd7ce41e636e88469a86802997152c6e'
+SENTINELS_SHA_aarch64='c68d3c5616c6912f350ef6107cafd47c9332910c041039b4b984ad41df70abe8'
 [ "$(id -u)" = 0 ] || { echo "Run this as root (put sudo before sh)." >&2; exit 1; }
 [ "$(uname -s)" = Linux ] || { echo "This installer covers Linux. On Windows use service.ps1; elsewhere see serve.mjs in the repository." >&2; exit 1; }
 case "$(uname -m)" in

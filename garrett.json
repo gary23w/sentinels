@@ -1,6 +1,6 @@
 {
-    "version": "1.9.2",
-    "description": "garrett, the Sentinel agent: a host intrusion sentinel that stops what it catches. It runs as SYSTEM, so install it from a PowerShell opened with Run as administrator.",
+    "version": "1.9.3",
+    "description": "garrett, the agent of sentinels: a host intrusion sentinel that stops what it catches. It runs as SYSTEM, so install it from a PowerShell opened with Run as administrator.",
     "homepage": "https://github.com/gary23w/sentinels",
     "license": "MIT",
     "notes": [
@@ -9,8 +9,8 @@
     ],
     "architecture": {
         "64bit": {
-            "url": "https://github.com/gary23w/sentinels/releases/download/v1.9.2/garrett-windows.zip",
-            "hash": "4f09c5873ae216be0a6c1ec176385276088fcf35e020244597268c21d8f12cd2"
+            "url": "https://github.com/gary23w/sentinels/releases/download/v1.9.3/garrett-windows.zip",
+            "hash": "73f0fd7b6f41034e345726bd41f7df3f78e63b077e6ff7e28099c14920eb522b"
         }
     },
     "extract_dir": "garrett",

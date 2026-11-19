@@ -1,0 +1,24 @@
+Package: sentinels
+Architecture: all
+Version: 1.9.3
+Priority: optional
+Section: metapackages
+Source: garrett
+Maintainer: sentinels <noreply@sentinels.invalid>
+Installed-Size: 15
+Depends: garrett (>= 1.9.3)
+Filename: pool/main/sentinels_1.9.3_all.deb
+Size: 9060
+MD5sum: 740cc73506b24f8514aab58f3eae84f0
+SHA1: 865a22357f59c9c5186060a42f62b22548e291ae
+SHA256: d6970f2ec05c50a0feded09d4470b3bd58a580621a30977eba8a643993919772
+SHA512: 394ccd55467d0c261194f1410ab7e9546c5f355853b574f23d686aaf841206e326160768f9a390dc8930f4a75be99320bf3efa70b3e7042d5fae725fbb0b8430
+Homepage: https://github.com/gary23w/sentinels
+Description: sentinels host intrusion detection and response (installs garrett)
+ sentinels is open-source host intrusion detection and response. Its agent,
+ garrett, watches this machine's running programs and their connections and
+ ends a program it judges hostile.
+ .
+ This package installs garrett, which does the work: remove garrett to remove
+ both.
+

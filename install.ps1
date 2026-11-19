@@ -5,7 +5,7 @@
 # The release build updates the pinned bundle hash below before publishing this script.
 $ErrorActionPreference = 'Stop'
 if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { throw 'Run this from an elevated PowerShell.' }
-$pinnedWindowsZip = '4f09c5873ae216be0a6c1ec176385276088fcf35e020244597268c21d8f12cd2'
+$pinnedWindowsZip = '73f0fd7b6f41034e345726bd41f7df3f78e63b077e6ff7e28099c14920eb522b'
 $base = if ($env:GARRETT_BASE) { $env:GARRETT_BASE } else { 'https://gary23w.github.io/sentinels' }
 $releaseUri = $null
 if (-not [Uri]::TryCreate($base, [UriKind]::Absolute, [ref]$releaseUri) -or $releaseUri.Scheme -cne 'https' -or -not $releaseUri.Host -or $releaseUri.UserInfo -or $releaseUri.Query -or $releaseUri.Fragment) { throw 'The release site must be an HTTPS address without credentials or a query.' }
