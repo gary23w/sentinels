@@ -103,6 +103,12 @@ Every machine now protects itself and reports to your hub, and what one machine 
 
 On Kubernetes, `deploy/kubernetes-daemonset.yaml` puts garrett on every node: build the image, fill in your hub's address and key, and `kubectl apply` it.
 
+Or with Helm, which puts the same DaemonSet on every node with the release's image, using the address and key from the line your hub printed (to keep the key in a Secret of your own instead, see `enrolment.existingSecret` in [deploy/helm/garrett/values.yaml](deploy/helm/garrett/values.yaml)):
+
+```sh
+helm install garrett oci://ghcr.io/gary23w/charts/garrett --namespace garrett --create-namespace --set enrolment.server=https://your-hub --set enrolment.key=<enrolment key>
+```
+
 ### Check that it worked
 
 | On | Run |

@@ -7,7 +7,7 @@
 # For a tag (v1.2.3), once every check has passed, "publish" signs it with the project's keys and publishes it: the
 # site (apt, pacman, rpm, apk, Scoop's manifest, the installers, the update list agents follow), the GitHub release,
 # the Homebrew tap and the Scoop bucket, then winget, Chocolatey, the AUR and crates.io; "container" then publishes
-# the image.
+# the image and the Helm chart that installs it.
 # The keys are secrets of the GitHub environment "release", which only tags v* may use. Whoever can push such a tag
 # or change those secrets can put a program on every machine that updates itself from the site.
 #
@@ -46,6 +46,11 @@ on:
     tags: ['v*']
 permissions:
   contents: read
+env:
+  # Helm, for the chart (deploy/helm/garrett): Helm's own release for Linux x86_64, from get.helm.sh, and its SHA-256
+  # (helm-v<version>-linux-amd64.tar.gz.sha256sum, beside it).
+  HELM_VERSION: 4.3.2
+  HELM_SHA256: d1c0278d46beab79582d7e50f5b3dc206944ba8e577cde618513fd07daa53983
 jobs:
   linux:
     strategy:
@@ -367,6 +372,38 @@ jobs:
             release/dist/garrett-macos.tar.gz
             release/dist/garrett-windows.zip
 
+  # The Helm chart (deploy/helm/garrett) puts on each node the DaemonSet of deploy/kubernetes-daemonset.yaml. It is
+  # packaged as "container" packages it, checked with helm lint, rendered, and its DaemonSet compared with the
+  # manifest's field for field (deploy/helm/check-chart.py): the same host namespaces, root user, capabilities,
+  # tolerations, resources, environment, Secret and state folder, with the release's own image.
+  chart:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tools
+        run: |
+          sudo apt-get update -q && sudo apt-get install -y -q python3-yaml
+          curl -fsSL -o "$RUNNER_TEMP/helm.tar.gz" "https://get.helm.sh/helm-v$HELM_VERSION-linux-amd64.tar.gz"
+          echo "$HELM_SHA256  $RUNNER_TEMP/helm.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/helm.tar.gz" -C "$RUNNER_TEMP" linux-amd64/helm
+          echo "$RUNNER_TEMP/linux-amd64" >> "$GITHUB_PATH"
+      - name: The chart puts the manifest's DaemonSet on each node
+        run: |
+          helm version
+          V=$(sed -n 's/^version = "\(.*\)"/\1/p' rust/Cargo.toml | head -1)
+          ENROLMENT="--set enrolment.server=https://sentinel.example --set enrolment.key=check-key"
+          mkdir -p chart
+          helm package deploy/helm/garrett --version "$V" --app-version "$V" --destination chart
+          CHART="chart/garrett-$V.tgz"
+          helm lint --strict "$CHART" $ENROLMENT
+          helm show chart "$CHART" > chart/Chart.yaml
+          helm template garrett "$CHART" --namespace garrett $ENROLMENT > chart/default.yaml
+          helm template garrett "$CHART" --namespace garrett --set enrolment.existingSecret=own-enrolment --set mode=report > chart/existing.yaml
+          python3 -B deploy/helm/check-chart.py deploy/kubernetes-daemonset.yaml "$V" chart/Chart.yaml chart/default.yaml chart/existing.yaml
+          # Refused: no enrolment at all, and a mode garrett does not have.
+          if helm template garrett "$CHART" --namespace garrett > /dev/null; then echo "the chart rendered with no enrolment"; exit 1; fi
+          if helm template garrett "$CHART" --namespace garrett $ENROLMENT --set mode=block > /dev/null; then echo "the chart rendered mode=block"; exit 1; fi
+
   # Homebrew installs garrett from the formula this release publishes to the tap, and the install line in its
   # caveats sets garrett up as a root LaunchDaemon in a root-owned folder.
   homebrew:
@@ -456,7 +493,7 @@ jobs:
   # once the crate is on crates.io: its first version has to be published with an API token.
   publish:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    needs: [assemble, homebrew, scoop, crate]
+    needs: [assemble, homebrew, scoop, crate, chart]
     runs-on: ubuntu-24.04
     environment: release
     concurrency:
@@ -539,6 +576,8 @@ jobs:
   #   Docker Hub        DOCKERHUB_USERNAME, DOCKERHUB_TOKEN (an access token that may also edit the description)
   #   Quay.io           QUAY_USERNAME (a robot account, <namespace>+<robot>), QUAY_TOKEN
   #   Amazon ECR Public AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, ECR_PUBLIC_ALIAS (the registry's public alias)
+  # Then the Helm chart that puts that image on every node of a cluster (deploy/helm/garrett), as
+  # oci://ghcr.io/<owner>/charts/garrett with the release's version, after the image it names is there.
   container:
     needs: publish
     runs-on: ubuntu-24.04
@@ -672,3 +711,20 @@ jobs:
           except Exception as error:
               print("::warning::Docker Hub's description was not written: %s" % error)
           PY
+      - name: Helm
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/helm.tar.gz" "https://get.helm.sh/helm-v$HELM_VERSION-linux-amd64.tar.gz"
+          echo "$HELM_SHA256  $RUNNER_TEMP/helm.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/helm.tar.gz" -C "$RUNNER_TEMP" linux-amd64/helm
+          echo "$RUNNER_TEMP/linux-amd64" >> "$GITHUB_PATH"
+      # helm push names it from the chart: <charts>/garrett:<version>, the version helm package gave it.
+      - name: The Helm chart
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          CHARTS="oci://ghcr.io/$(printf '%s' "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')/charts"
+          mkdir -p chart
+          helm package deploy/helm/garrett --version "$VERSION" --app-version "$VERSION" --destination chart
+          printf '%s' "$GITHUB_TOKEN" | helm registry login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          helm push "chart/garrett-$VERSION.tgz" "$CHARTS"
+          helm registry logout ghcr.io

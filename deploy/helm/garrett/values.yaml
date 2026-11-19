@@ -1,0 +1,39 @@
+# garrett on every node of a cluster, as deploy/kubernetes-daemonset.yaml puts it there. Its privileges (hostPID,
+# hostNetwork, root with NET_ADMIN, SYS_PTRACE, KILL and DAC_READ_SEARCH only) and its state folder on the node
+# (/var/lib/garrett-node) are those of the manifest and are not settings.
+
+image:
+  repository: ghcr.io/gary23w/garrett
+  # Empty: the chart's appVersion, the release this chart was published with.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+# Each node enrols itself with your Sentinel service the first time its pod starts, and keeps its own credential on
+# the node. These are read only then: a node that has enrolled keeps its credential when they change.
+enrolment:
+  # The service's address and its enrolment key: the --server and --key of the line your service prints.
+  server: ""
+  key: ""
+  # Or the name of a Secret you made in the release's namespace, with the keys "server" and "key". The chart then
+  # makes no Secret of its own, and server and key above are not used. Helm keeps the values it is given with the
+  # release (helm get values shows them), so this keeps the key out of Helm's record.
+  existingSecret: ""
+
+# kill (the default) | decide | pause | report. The service's RESPONSE_MODE can hold agents to less. Read when a node
+# enrols.
+mode: kill
+
+# Every node, those of the control plane too, unless you narrow it.
+nodeSelector: {}
+tolerations:
+  - operator: Exists
+
+resources:
+  requests: {cpu: 20m, memory: 48Mi}
+  limits: {cpu: 200m, memory: 128Mi}
+
+# The DaemonSet is named after the release ("<release>-garrett", or the release's name when it has "garrett" in it)
+# and its Secret "<that name>-enrolment". nameOverride stands in for "garrett" there, fullnameOverride for the whole
+# name.
+nameOverride: ""
+fullnameOverride: ""
