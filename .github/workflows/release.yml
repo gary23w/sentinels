@@ -357,6 +357,7 @@ jobs:
               apk del sentinels
               if apk info -e garrett; then echo "removing the alias left garrett installed"; exit 1; fi
               for left in /usr/lib/garrett /usr/bin/garrett /etc/init.d/garrett /usr/share/man/man8/garrett.8 /var/lib/garrett /etc/garrett; do if [ -e "$left" ]; then echo "left behind: $left"; exit 1; fi; done'
+          done
       # COPR and the openSUSE Build Service build garrett from the source package alone, with no --define, once for
       # each processor. Built that way here, on the systems they build for, each package must carry the version and
       # the release's own program for its processor. The source package is not signed: rpm checks its digests only.
