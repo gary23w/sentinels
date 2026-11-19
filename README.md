@@ -38,7 +38,7 @@ Done. The machine is protected from that moment, garrett starts again at every b
 
 ### With a package manager
 
-The same garrett, from the project's signed repositories or your package manager. The packages are named garrett, after the program they install; the name sentinels works as well, and installs garrett with apt, pacman, dnf, zypper and apk (`sudo apt install sentinels`).
+The same garrett, from the project's signed repositories or your package manager. The packages are named garrett, after the program they install; the name sentinels works as well, and installs garrett with apt, pacman, dnf and zypper (`sudo apt install sentinels`).
 
 | System | Install |
 |---|---|
@@ -46,15 +46,9 @@ The same garrett, from the project's signed repositories or your package manager
 | Arch Linux | Add the pacman repository below, then `sudo pacman -Syu garrett && sudo systemctl enable --now garrett` |
 | Fedora, RHEL | `sudo curl -fsSL -o /etc/yum.repos.d/garrett.repo https://gary23w.github.io/sentinels/garrett.repo`, then `sudo dnf install garrett && sudo systemctl enable --now garrett` |
 | openSUSE | `sudo zypper addrepo https://gary23w.github.io/sentinels/garrett.repo`, then `sudo zypper install garrett && sudo systemctl enable --now garrett` |
-| Alpine Linux | As root, add the apk repository below, then `apk add garrett && rc-update add garrett default && rc-service garrett start` |
-| Fedora, RHEL 9 and later, from COPR | `sudo dnf copr enable gary23w/garrett`, then `sudo dnf install garrett && sudo systemctl enable --now garrett` |
-| openSUSE, from the openSUSE Build Service | `sudo zypper addrepo https://download.opensuse.org/repositories/home:/gary23w/openSUSE_Tumbleweed/home:gary23w.repo` (on Leap 16.0, `openSUSE_Leap_16.0` in place of `openSUSE_Tumbleweed`), then `sudo zypper install garrett && sudo systemctl enable --now garrett` |
-| Fedora, from the openSUSE Build Service | `sudo curl -fsSL -o /etc/yum.repos.d/home_gary23w.repo https://download.opensuse.org/repositories/home:/gary23w/Fedora_$(rpm -E %fedora)/home:gary23w.repo`, then `sudo dnf install garrett && sudo systemctl enable --now garrett` |
 | macOS, Linux with Homebrew | `brew install gary23w/sentinels/garrett`, then the `sudo sh …/install.sh` line it prints, which starts garrett as root from a root-owned folder |
-| Linux, macOS with Nix | `nix profile install github:gary23w/sentinels`, or `github:gary23w/sentinels/v<version>` for one release: Nix builds garrett from source and puts the program on your PATH, with no service set up |
 | Windows with Scoop | `scoop install https://gary23w.github.io/sentinels/garrett.json`, from PowerShell opened with "Run as administrator" |
 | Windows Installer | [garrett-windows.msi](https://github.com/gary23w/sentinels/releases/latest/download/garrett-windows.msi): double-click it, or `msiexec /i garrett-windows.msi /qn` from Intune, Group Policy or your own tools |
-| Rust's cargo | `cargo binstall garrett` takes the program file from the GitHub release; `cargo install garrett --locked` builds it from source. Either one installs the program only, in `~/.cargo/bin`: to have garrett watch the machine as a service that starts at every boot, use the install line under One computer above |
 
 The apt repository:
 
@@ -72,15 +66,7 @@ sudo pacman-key --lsign-key 6857EBCBBEF51040C3F20107362688BFC238AB45
 printf '\n[sentinels]\nServer = https://gary23w.github.io/sentinels/arch/$arch\n' | sudo tee -a /etc/pacman.conf
 ```
 
-The apk repository, as root (apk finds the key by its file name in `/etc/apk/keys`):
-
-```sh
-wget -qO /etc/apk/keys/garrett.rsa.pub https://gary23w.github.io/sentinels/garrett.rsa.pub
-echo https://gary23w.github.io/sentinels/alpine >> /etc/apk/repositories
-apk update
-```
-
-The apt, pacman and rpm repositories are signed with the key whose fingerprint is `6857 EBCB BEF5 1040 C3F2 0107 3626 88BF C238 AB45`. apk takes no OpenPGP key: the apk repository is signed with the RSA key `garrett.rsa.pub`.
+All three repositories are signed with the key whose fingerprint is `6857 EBCB BEF5 1040 C3F2 0107 3626 88BF C238 AB45`.
 
 ### All your computers and servers
 
@@ -105,12 +91,6 @@ irm https://gary23w.github.io/sentinels/service.ps1 | iex
 Every machine now protects itself and reports to your hub, and what one machine learns from an attack protects the rest. Keep the line private: anyone who has it can add a machine. To print it again: `sudo garrett-service join` (on a Windows hub, `"C:\Program Files\garrett-service\garrett-service.cmd" join`).
 
 On Kubernetes, `deploy/kubernetes-daemonset.yaml` puts garrett on every node: build the image, fill in your hub's address and key, and `kubectl apply` it.
-
-Or with Helm, which puts the same DaemonSet on every node with the release's image, using the address and key from the line your hub printed (to keep the key in a Secret of your own instead, see `enrolment.existingSecret` in [deploy/helm/garrett/values.yaml](deploy/helm/garrett/values.yaml)):
-
-```sh
-helm install garrett oci://ghcr.io/gary23w/charts/garrett --namespace garrett --create-namespace --set enrolment.server=https://your-hub --set enrolment.key=<enrolment key>
-```
 
 ### Check that it worked
 
@@ -152,17 +132,6 @@ Its install line fetches one file from the release, checks it, and runs it. Insi
 The decision model is [crivo-sentinel-v1](https://huggingface.co/gary23w/crivo-sentinel-v1). When a machine freezes a hostile program, the model says whether to stop it, release it or hold it for you. It runs inside the service's own process, on the CPU; nothing leaves your machine. Add `--model off` (`$env:GARRETT_MODEL = 'off'` on Windows) to do without it.
 
 To plug in a model of your own, or your own reasoning, run `sudo garrett-service setup` (`garrett-service.cmd setup` on Windows): a few questions, then it writes the settings and restarts the service. Add `--wizard` (`$env:GARRETT_WIZARD = '1'`) to the install line to answer them during the install instead. Or edit `/etc/garrett-service/service.conf` by hand: the lines are `AI_PROVIDER` (`decision`, `chat`, `custom` or `none`), `AI_BASE_URL`, `AI_MODEL`, `AI_API_KEY`, `AI_HIGH_CONFIDENCE`, `DECISION_RELEASE` and `DECISION_FALLBACK`, and `MODEL_DIR` for the model that came with it, described in `server/serve.mjs` and `server/wrangler.example.jsonc`. Restart the service after a change.
-
-### Fleets with Ansible or Puppet
-
-If Ansible or Puppet already manages your machines, let it install garrett. The Ansible collection covers Debian, Ubuntu, Fedora, RHEL, openSUSE and Windows; the Puppet module covers the Linux systems. Both install the package from the project's signed repositories (on Windows, the Windows Installer package) and enrol each machine with your hub when you give them its address and key.
-
-```sh
-ansible-galaxy collection install gary23w.sentinels    # then use the role gary23w.sentinels.garrett
-puppet module install gary23w-garrett                  # then include the class garrett
-```
-
-Their settings are in [deploy/ansible](deploy/ansible/README.md) and [deploy/puppet](deploy/puppet/README.md).
 
 ### Windows domain rollout
 
