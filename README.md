@@ -50,6 +50,7 @@ The same garrett, from the project's signed repositories or your package manager
 | Linux, macOS with Nix | `nix profile install github:gary23w/sentinels`, or `github:gary23w/sentinels/v<version>` for one release: Nix builds garrett from source and puts the program on your PATH, with no service set up |
 | Windows with Scoop | `scoop install https://gary23w.github.io/sentinels/garrett.json`, from PowerShell opened with "Run as administrator" |
 | Windows Installer | [garrett-windows.msi](https://github.com/gary23w/sentinels/releases/latest/download/garrett-windows.msi): double-click it, or `msiexec /i garrett-windows.msi /qn` from Intune, Group Policy or your own tools |
+| Rust's cargo | `cargo binstall garrett` takes the program file from the GitHub release; `cargo install garrett --locked` builds it from source. Either one installs the program only, in `~/.cargo/bin`: to have garrett watch the machine as a service that starts at every boot, use the install line under One computer above |
 
 The apt repository:
 

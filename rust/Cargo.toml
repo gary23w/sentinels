@@ -3,9 +3,49 @@ name = "garrett"
 version = "1.9.3"
 edition = "2021"
 license = "MIT"
-description = "garrett: the Sentinel agent. A host intrusion sentinel that stops what it catches."
+description = "garrett, the agent of sentinels: a host intrusion sentinel that stops what it catches."
 repository = "https://github.com/gary23w/sentinels"
-publish = false
+homepage = "https://garrettstimpson.ca/"
+documentation = "https://gary23w.github.io/sentinels/"
+readme = "../README.md"
+keywords = ["sentinels", "security", "intrusion-detection", "agent"]
+categories = ["command-line-utilities", "security"]
+# The package on crates.io holds what the program is built from: the sources, this file, Cargo.lock and the README.
+# The tests and their recorded fixtures stay in the repository.
+include = ["/src"]
+
+# cargo binstall garrett installs the release's own program file for the machine instead of building it. Each one is
+# the program itself (pkg-fmt "bin"). The Linux ones are linked statically (musl), so one file serves glibc and musl
+# systems alike; garrett-macos is one file for Apple silicon and Intel.
+[package.metadata.binstall]
+pkg-fmt = "bin"
+
+[package.metadata.binstall.overrides.x86_64-unknown-linux-gnu]
+pkg-url = "{ repo }/releases/download/v{ version }/garrett-linux-x86_64"
+
+[package.metadata.binstall.overrides.x86_64-unknown-linux-musl]
+pkg-url = "{ repo }/releases/download/v{ version }/garrett-linux-x86_64"
+
+[package.metadata.binstall.overrides.aarch64-unknown-linux-gnu]
+pkg-url = "{ repo }/releases/download/v{ version }/garrett-linux-aarch64"
+
+[package.metadata.binstall.overrides.aarch64-unknown-linux-musl]
+pkg-url = "{ repo }/releases/download/v{ version }/garrett-linux-aarch64"
+
+[package.metadata.binstall.overrides.armv7-unknown-linux-gnueabihf]
+pkg-url = "{ repo }/releases/download/v{ version }/garrett-linux-armv7"
+
+[package.metadata.binstall.overrides.armv7-unknown-linux-musleabihf]
+pkg-url = "{ repo }/releases/download/v{ version }/garrett-linux-armv7"
+
+[package.metadata.binstall.overrides.aarch64-apple-darwin]
+pkg-url = "{ repo }/releases/download/v{ version }/garrett-macos"
+
+[package.metadata.binstall.overrides.x86_64-apple-darwin]
+pkg-url = "{ repo }/releases/download/v{ version }/garrett-macos"
+
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-url = "{ repo }/releases/download/v{ version }/garrett-windows.exe"
 
 # Every outside library is listed here and in NOTICES.md with its licence, and pinned by Cargo.lock.
 [dependencies]

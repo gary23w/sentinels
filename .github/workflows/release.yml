@@ -6,7 +6,8 @@
 #
 # For a tag (v1.2.3), once every check has passed, "publish" signs it with the project's keys and publishes it: the
 # site (apt, pacman, rpm, Scoop's manifest, the installers, the update list agents follow), the GitHub release, the
-# Homebrew tap and the Scoop bucket, then winget, Chocolatey and the AUR; "container" then publishes the image.
+# Homebrew tap and the Scoop bucket, then winget, Chocolatey, the AUR and crates.io; "container" then publishes the
+# image.
 # The keys are secrets of the GitHub environment "release", which only tags v* may use. Whoever can push such a tag
 # or change those secrets can put a program on every machine that updates itself from the site.
 #
@@ -229,6 +230,26 @@ jobs:
           name: garrett-installer-windows.exe
           path: garrett-installer-windows.exe
 
+  # The crate that "publish" puts on crates.io (rust/Cargo.toml: the sources, Cargo.lock and the README), packed and
+  # built from what it holds alone, the way cargo publish does it: a crate that does not build stops the release here.
+  # Its [package.metadata.binstall] points cargo binstall at this release's program files.
+  crate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: cargo package
+        run: |
+          cd rust
+          cargo package --locked --list
+          cargo package --locked
+          V=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          SIZE=$(stat -c %s "target/package/garrett-$V.crate")
+          echo "garrett-$V.crate: $SIZE bytes"
+          # crates.io takes a .crate of up to 10MB.
+          [ "$SIZE" -lt 10000000 ] || { echo "::error::The crate is $SIZE bytes: crates.io takes up to 10MB."; exit 1; }
+      - name: cargo publish --dry-run
+        run: cd rust && cargo publish --dry-run --locked
+
   # Pack what was built: Debian, pacman and rpm packages and their repositories, the Windows Installer package,
   # the bundles, the update list, the site, and the files for the other package managers.
   assemble:
@@ -396,10 +417,13 @@ jobs:
   #   RELEASE_TOKEN         a GitHub token of the project's account: the site, the release, the tap, the bucket, winget
   #   CHOCOLATEY_API_KEY    the community.chocolatey.org account's API key
   #   AUR_SSH_KEY           the private SSH key of the AUR account that keeps garrett-bin
+  #   CARGO_REGISTRY_TOKEN  a crates.io API token with the publish-update scope (publish-new for the first version)
   # A registry whose secret is not set is left out, with a warning; the release goes ahead without it.
+  # crates.io's trusted publishing (rust-lang/crates-io-auth-action, with id-token: write) can take the token's place
+  # once the crate is on crates.io: its first version has to be published with an API token.
   publish:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    needs: [assemble, homebrew, scoop]
+    needs: [assemble, homebrew, scoop, crate]
     runs-on: ubuntu-24.04
     environment: release
     concurrency:
@@ -462,6 +486,14 @@ jobs:
           # The AUR's own host key, kept in the repository: the push goes nowhere else.
           export GIT_SSH_COMMAND="ssh -i $KEYS/aur -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$PWD/packaging/arch/aur-known-hosts"
           sh packaging/submit-packages.sh release aur
+      # After the GitHub release, whose program files cargo binstall garrett downloads.
+      - name: crates.io (cargo publish)
+        if: ${{ !cancelled() && steps.publish.outcome == 'success' }}
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          [ -n "$CARGO_REGISTRY_TOKEN" ] || { echo "::warning::No CARGO_REGISTRY_TOKEN: crates.io left out."; exit 0; }
+          cd rust && cargo publish --locked
 
   # The container image for each processor, with the release's own program in it (packaging/container/Dockerfile),
   # as <registry>/garrett:<version> and :latest: GitHub's registry with this repository's own token, then each other
