@@ -1,7 +1,7 @@
 #!/bin/sh
 # Publish a signed garrett release: the site first (the apt, pacman and rpm repositories, the Scoop manifest, the
-# installers, the update list), then the GitHub release, then the Homebrew tap. Run it from a checkout of this
-# repository, with git and gh signed in.
+# installers, the update list), then the GitHub release, then the Homebrew tap and the Scoop bucket. Run it from a
+# checkout of this repository, with git and gh signed in; the release workflow runs it for every tag.
 #
 #   sh packaging/publish-release.sh <release folder>
 #
@@ -52,5 +52,20 @@ if [ -s "$REL/packages/homebrew/garrett.rb" ] && gh repo view "$TAP" >/dev/null 
   echo "The Homebrew tap $TAP carries garrett $VERSION."
 else
   echo "No Homebrew tap at $TAP: the formula is in $REL/packages/homebrew." >&2
+fi
+# The Scoop bucket, a repository of its own as well (scoop bucket add sentinels https://github.com/<owner>/scoop-sentinels,
+# then scoop install garrett), takes the manifest the site carries.
+BUCKET=$(printf '%s\n' "$ORIGIN" | sed -n 's#.*github\.com[:/]\([^/]*\)/.*#\1#p')/scoop-sentinels
+if [ -s "$REL/site/garrett.json" ] && gh repo view "$BUCKET" >/dev/null 2>&1; then
+  git clone --quiet "https://github.com/$BUCKET.git" "$WORK/bucket" 2>/dev/null
+  mkdir -p "$WORK/bucket/bucket"
+  cp "$REL/site/garrett.json" "$WORK/bucket/bucket/garrett.json"
+  git -C "$WORK/bucket" config user.name "$(git -C "$HERE" config user.name)"; git -C "$WORK/bucket" config user.email "$(git -C "$HERE" config user.email)"
+  git -C "$WORK/bucket" add bucket/garrett.json
+  git -C "$WORK/bucket" commit --quiet -m "garrett $VERSION"
+  git -C "$WORK/bucket" push --quiet origin HEAD:refs/heads/main
+  echo "The Scoop bucket $BUCKET carries garrett $VERSION."
+else
+  echo "No Scoop bucket at $BUCKET: the manifest is $REL/site/garrett.json." >&2
 fi
 echo "winget, the AUR and Chocolatey keep their own copies: sh packaging/submit-packages.sh $REL winget|aur|chocolatey"

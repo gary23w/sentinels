@@ -10,7 +10,8 @@
 #       AUR account holds: ssh aur@aur.archlinux.org must work (GIT_SSH_COMMAND="ssh -i <key>" picks the key).
 #   sh packaging/submit-packages.sh <release folder> chocolatey
 #       Pushes garrett and its alias sentinels (packages/chocolatey) to community.chocolatey.org, where they wait for
-#       moderation. It asks for the account's API key without showing it.
+#       moderation. It takes the account's API key from CHOCOLATEY_API_KEY (the release workflow's secret), or asks
+#       for it without showing it.
 set -eu
 [ $# -eq 2 ] || { echo "Usage: $0 <release folder> winget|aur|chocolatey" >&2; exit 1; }
 REL=$(CDPATH= cd -- "$1" && pwd)
@@ -71,9 +72,13 @@ BODY
     for name in garrett sentinels; do
       [ -s "$REL/packages/chocolatey/$name.$VERSION.nupkg" ] || { echo "No $REL/packages/chocolatey/$name.$VERSION.nupkg." >&2; exit 1; }
     done
-    # The key is asked for and not shown, and goes to curl on standard input, never on a command line.
-    printf 'API key of the community.chocolatey.org account (not shown): ' >&2
-    stty -echo 2>/dev/null || true; read -r KEY; stty echo 2>/dev/null || true; echo >&2
+    # The key comes from the environment or is asked for and not shown, and goes to curl on standard input, never on
+    # a command line.
+    KEY=${CHOCOLATEY_API_KEY:-}
+    if [ -z "$KEY" ]; then
+      printf 'API key of the community.chocolatey.org account (not shown): ' >&2
+      stty -echo 2>/dev/null || true; read -r KEY; stty echo 2>/dev/null || true; echo >&2
+    fi
     [ -n "$KEY" ] || { echo "No key given; nothing was pushed." >&2; exit 1; }
     for name in garrett sentinels; do
       # The same request choco push makes, so this runs where Chocolatey is not installed.

@@ -1,21 +1,23 @@
-# Build a garrett release from the commit this runs on. Nothing here is signed and nothing is published: the
-# signing keys are kept off GitHub on purpose, so that nobody who gets into this repository can put a program on
-# the machines that update themselves from it. What this leaves is one download, "release", with everything
-# ready to sign:
+# Build a garrett release from the commit this runs on, test every package, and, for a tag, sign it and publish
+# it everywhere. What the build leaves is one download, "release", with everything ready to sign:
 #
 #   dist/   what goes on the GitHub release: the Debian packages, the bundles, the program files, SHA256SUMS
 #   site/   what goes on the project's site: the apt repository, the installers, the update list, the manual
 #
-# Then, on the machine that holds the keys:   powershell -File packaging\sign-windows.ps1 -Thumbprint <thumbprint> <folder>
+# For a tag (v1.2.3), once every check has passed, "publish" signs it with the project's keys and publishes it: the
+# site (apt, pacman, rpm, Scoop's manifest, the installers, the update list agents follow), the GitHub release, the
+# Homebrew tap and the Scoop bucket, then winget, Chocolatey and the AUR; "container" then publishes the image.
+# The keys are secrets of the GitHub environment "release", which only tags v* may use. Whoever can push such a tag
+# or change those secrets can put a program on every machine that updates itself from the site.
+#
+# Run by hand (gh workflow run release.yml --ref <branch>) it builds and tests everything and publishes nothing.
+# The same signing and publishing can still be done on a machine that holds the keys:
+#                                             powershell -File packaging\sign-windows.ps1 -Thumbprint <thumbprint> <folder>
 #                                             sh packaging/sign-release.sh <folder>
 #                                             sh packaging/publish-release.sh <folder>
-#
-# The first signs the Windows agent and the Windows one-file service installer (Authenticode) with the project's
-# code-signing certificate, and makes the zip, the one-file installer, SHA256SUMS, the update list and the pins
-# again from the signed files; it is skipped while there is no certificate. The other two sign the release with
-# the project's keys and publish it.
-#
-# It runs for every tag that starts with v, or by hand:   gh workflow run release.yml --ref <tag or branch>
+#                                             sh packaging/submit-packages.sh <folder> winget|aur|chocolatey
+# sign-windows.ps1 signs the Windows agent and the Windows one-file service installer (Authenticode) with the
+# project's code-signing certificate; it is skipped while there is no certificate, here and in "publish".
 #
 #   garrett-linux-x86_64, garrett-linux-aarch64   statically linked (musl): they run on any Linux of that processor
 #   garrett-linux-armv7                           the same for 32-bit ARM boards and devices, built and tested by
@@ -386,3 +388,122 @@ jobs:
           if (Get-ScheduledTask -TaskName garrett -ErrorAction SilentlyContinue) { throw 'scoop uninstall left the scheduled task.' }
           foreach ($left in (Join-Path $env:ProgramFiles 'garrett'), $state) { if (Test-Path -LiteralPath $left) { throw "Left behind: $left" } }
           'Scoop installed garrett, kept it through an update, and removed it.'
+
+  # Sign and publish, for a tag only and only after every check above passed. The secrets belong to the environment
+  # "release", which only tags v* may use:
+  #   PACKAGE_SIGNING_KEY   the OpenPGP package signing key, armored (apt, pacman, rpm, SHA256SUMS)
+  #   UPDATE_SIGNING_KEY    the Ed25519 update key, PEM (update.txt, which installed agents follow)
+  #   RELEASE_TOKEN         a GitHub token of the project's account: the site, the release, the tap, the bucket, winget
+  #   CHOCOLATEY_API_KEY    the community.chocolatey.org account's API key
+  #   AUR_SSH_KEY           the private SSH key of the AUR account that keeps garrett-bin
+  # A registry whose secret is not set is left out, with a warning; the release goes ahead without it.
+  publish:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [assemble, homebrew, scoop]
+    runs-on: ubuntu-24.04
+    environment: release
+    concurrency:
+      group: publish
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: release
+          path: release
+      - name: The tag names the version that was built
+        run: test "$GITHUB_REF_NAME" = "v$(sed -n '1s/^garrett //p' release/site/update.txt)"
+      - name: Sign
+        env:
+          PACKAGE_SIGNING_KEY: ${{ secrets.PACKAGE_SIGNING_KEY }}
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+        run: |
+          [ -n "$PACKAGE_SIGNING_KEY" ] && [ -n "$UPDATE_SIGNING_KEY" ] || { echo "::error::The release environment has no signing keys."; exit 1; }
+          umask 077
+          KEYS=$(mktemp -d)
+          trap 'GNUPGHOME="$KEYS/gnupg" gpgconf --kill all 2>/dev/null || true; rm -rf "$KEYS"' EXIT
+          mkdir "$KEYS/gnupg"
+          printf '%s\n' "$PACKAGE_SIGNING_KEY" | GNUPGHOME="$KEYS/gnupg" gpg --batch --quiet --import
+          printf '%s\n' "$UPDATE_SIGNING_KEY" > "$KEYS/update.pem"
+          GNUPGHOME="$KEYS/gnupg" GARRETT_UPDATE_KEY="$KEYS/update.pem" sh packaging/sign-release.sh release
+      - name: Publish the site, the GitHub release, the Homebrew tap and the Scoop bucket
+        id: publish
+        run: |
+          [ -n "$GH_TOKEN" ] || { echo "::error::The release environment has no RELEASE_TOKEN."; exit 1; }
+          git config --global user.name sentinels
+          git config --global user.email noreply@sentinels.invalid
+          git config --global credential.https://github.com.helper '!gh auth git-credential'
+          sh packaging/publish-release.sh release
+      # Each registry is tried even when another one failed; the job fails if any did.
+      - name: winget (a pull request to microsoft/winget-pkgs)
+        if: ${{ !cancelled() && steps.publish.outcome == 'success' }}
+        run: sh packaging/submit-packages.sh release winget
+      - name: Chocolatey
+        if: ${{ !cancelled() && steps.publish.outcome == 'success' }}
+        env:
+          CHOCOLATEY_API_KEY: ${{ secrets.CHOCOLATEY_API_KEY }}
+        run: |
+          [ -n "$CHOCOLATEY_API_KEY" ] || { echo "::warning::No CHOCOLATEY_API_KEY: Chocolatey left out."; exit 0; }
+          sh packaging/submit-packages.sh release chocolatey
+      - name: AUR (garrett-bin)
+        if: ${{ !cancelled() && steps.publish.outcome == 'success' }}
+        env:
+          AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
+        run: |
+          [ -n "$AUR_SSH_KEY" ] || { echo "::warning::No AUR_SSH_KEY: the AUR left out."; exit 0; }
+          umask 077
+          KEYS=$(mktemp -d)
+          trap 'rm -rf "$KEYS"' EXIT
+          printf '%s\n' "$AUR_SSH_KEY" > "$KEYS/aur"
+          # The AUR's own host key, kept in the repository: the push goes nowhere else.
+          export GIT_SSH_COMMAND="ssh -i $KEYS/aur -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$PWD/packaging/arch/aur-known-hosts"
+          sh packaging/submit-packages.sh release aur
+
+  # The container image for each processor, with the release's own program in it (packaging/container/Dockerfile):
+  # ghcr.io/<owner>/garrett:<version> and :latest, published with this repository's own token.
+  container:
+    needs: publish
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: release
+          path: release
+      - name: The image's folder
+        run: |
+          mkdir -p image/linux
+          cp release/dist/garrett-linux-x86_64 release/dist/garrett-linux-aarch64 release/dist/garrett-linux-armv7 image/linux/
+          cp packaging/container/Dockerfile deploy/entrypoint.sh image/
+          echo "IMAGE=ghcr.io/$(printf '%s' "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')/garrett" >> "$GITHUB_ENV"
+          echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: image
+          platforms: linux/amd64,linux/arm64,linux/arm/v7
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ env.VERSION }}
+            ${{ env.IMAGE }}:latest
+          labels: |
+            org.opencontainers.image.title=garrett
+            org.opencontainers.image.description=garrett, the agent of sentinels
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ env.VERSION }}
+            org.opencontainers.image.licenses=MIT
