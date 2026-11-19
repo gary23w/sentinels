@@ -1,0 +1,76 @@
+{{- if not (has (toString .Values.mode) (list "kill" "decide" "pause" "report")) }}
+{{- fail (printf "mode is kill, decide, pause or report, not %q" (toString .Values.mode)) }}
+{{- end -}}
+# garrett on every node. Each node enrols itself with the service the first time its pod starts and keeps its own
+# credential on the node.
+#
+# hostPID and hostNetwork let it see the node's own processes and connections, not just its container's.
+# SYS_PTRACE and DAC_READ_SEARCH are for reading other processes' program paths, NET_ADMIN for the kernel's
+# process-start feed and for refusing shared attacker addresses when the service has fleet blocking on, and KILL
+# for pausing or stopping a hostile program.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "garrett.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "garrett.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "garrett.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "garrett.selectorLabels" . | nindent 8 }}
+    spec:
+      hostPID: true
+      hostNetwork: true
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: agent
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: SENTINEL_SERVER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "garrett.secretName" . }}
+                  key: server
+            - name: SENTINEL_ENROLL_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "garrett.secretName" . }}
+                  key: key
+            - name: SENTINEL_LABEL
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            # kill (default) | decide | pause | report. The service's RESPONSE_MODE can hold agents to less.
+            - name: SENTINEL_MODE
+              value: {{ .Values.mode | toString | quote }}
+          securityContext:
+            runAsUser: 0
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+              add: ["NET_ADMIN", "SYS_PTRACE", "KILL", "DAC_READ_SEARCH"]
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: state
+              mountPath: /var/lib/sentinel
+      volumes:
+        - name: state
+          hostPath:
+            path: /var/lib/garrett-node
+            type: DirectoryOrCreate

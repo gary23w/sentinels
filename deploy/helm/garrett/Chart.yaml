@@ -1,0 +1,18 @@
+# garrett, the Sentinel agent, on every node of a cluster: the DaemonSet of deploy/kubernetes-daemonset.yaml.
+#
+# version and appVersion are the release's own. The release workflow packages the chart with
+#   helm package deploy/helm/garrett --version <version> --app-version <version>
+# set to the version it releases (rust/Cargo.toml's), so the chart, the image tag it pulls and the program in that
+# image are one release. The 0.0.0 below only stands in until then; it is never published.
+apiVersion: v2
+name: garrett
+description: garrett, the agent of sentinels
+type: application
+version: 0.0.0
+appVersion: "0.0.0"
+home: https://garrettstimpson.ca/
+sources:
+  - https://github.com/gary23w/sentinels
+annotations:
+  # Helm copies a chart's annotations into the annotations of the OCI manifest it pushes.
+  org.opencontainers.image.documentation: https://gary23w.github.io/sentinels/

@@ -1,0 +1,9 @@
+garrett is starting on every node{{ if .Values.nodeSelector }} that matches the node selector{{ end }}, one pod each, in the namespace {{ .Release.Namespace }}.
+
+Each node enrols itself with your service the first time its pod starts (mode {{ .Values.mode }}), and its log says so:
+
+  kubectl -n {{ .Release.Namespace }} get pods -l app.kubernetes.io/instance={{ .Release.Name }} -o wide
+  kubectl -n {{ .Release.Namespace }} logs -l app.kubernetes.io/instance={{ .Release.Name }} --prefix
+
+A node keeps its credential in /var/lib/garrett-node, through upgrades and after helm uninstall, and does not enrol
+again while it has one.
