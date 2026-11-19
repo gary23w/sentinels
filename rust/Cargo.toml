@@ -10,9 +10,10 @@ documentation = "https://gary23w.github.io/sentinels/"
 readme = "../README.md"
 keywords = ["sentinels", "security", "intrusion-detection", "agent"]
 categories = ["command-line-utilities", "security"]
-# The package on crates.io holds what the program is built from: the sources, this file, Cargo.lock and the README.
+# The package on crates.io holds what the program is built from: the sources, this file, Cargo.lock, the README and
+# the licence (rust/LICENSE, a copy of the repository's, which the release workflow checks is the same).
 # The tests and their recorded fixtures stay in the repository.
-include = ["/src"]
+include = ["/src", "/LICENSE"]
 
 # cargo binstall garrett installs the release's own program file for the machine instead of building it. Each one is
 # the program itself (pkg-fmt "bin"). The Linux ones are linked statically (musl), so one file serves glibc and musl

@@ -1,4 +1,4 @@
-![Agent Garrett shields computers from the AI apocalypse](assets/agent-garrett-ai-apocalypse.png)
+![Agent Garrett shields computers from the AI apocalypse](https://raw.githubusercontent.com/gary23w/sentinels/main/assets/agent-garrett-ai-apocalypse.png)
 
 # sentinels
 
@@ -6,7 +6,7 @@ A guard for your servers and workstations that ends a break-in while it is still
 
 [![verify](https://github.com/gary23w/sentinels/actions/workflows/verify.yml/badge.svg)](https://github.com/gary23w/sentinels/actions/workflows/verify.yml)
 [![release](https://img.shields.io/github/v/release/gary23w/sentinels)](https://github.com/gary23w/sentinels/releases)
-[![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![license](https://img.shields.io/badge/license-MIT-blue)](https://github.com/gary23w/sentinels/blob/main/LICENSE)
 
 Most security tools watch an attack happen and then send you an alert about it. By the time you read the alert, the attacker has settled in.
 
@@ -154,7 +154,7 @@ From the unpacked Windows bundle, run the rollout script in an elevated Windows 
 
 Group Policy installs the agent as SYSTEM at the next computer startup. The rollout options apply to new installations, and the startup script records installation and task repair in `%WINDIR%\Temp\garrett-rollout.log`. The service coverage view reports whether the agent successfully queried the Security log. Windows audit policy controls which events reach that log. Directory Service Access events also require a matching audit rule on the directory object. [Microsoft’s Windows event auditing guide](https://learn.microsoft.com/en-us/defender-for-identity/deploy/configure-windows-event-collection)
 
-See the [Active Directory lab runbook](deploy/active-directory-lab.md) for the two-tenant service setup, DNS repair and rollout checks.
+See the [Active Directory lab runbook](https://github.com/gary23w/sentinels/blob/main/deploy/active-directory-lab.md) for the two-tenant service setup, DNS repair and rollout checks.
 
 ### Development logs
 
@@ -195,7 +195,7 @@ To remove it: `sudo apt purge garrett` on Debian and Ubuntu, `sudo pacman -R gar
 
 ## License
 
-MIT. Found a hole in it? Open an issue, or [report it privately](SECURITY.md) if it could hurt people before a fix is out. That is exactly the kind of thing I want to know about.
+MIT. Found a hole in it? Open an issue, or [report it privately](https://github.com/gary23w/sentinels/blob/main/SECURITY.md) if it could hurt people before a fix is out. That is exactly the kind of thing I want to know about.
 
 ## Want to power your Sentinels with AI?
 
