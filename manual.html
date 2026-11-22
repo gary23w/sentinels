@@ -17,17 +17,19 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="Sentinels. Stop intrusions at the host. Linux, macOS and Windows.">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#ffffff">
+<link rel="stylesheet" href="garrett-mode.css?v=1">
+<script src="garrett-mode.js?v=1"></script>
 <style>
-:root { color-scheme: light; }
-html { background: #f6f5f0; }
-body { color: #1c1c1b; font: 16px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; max-width: 80ch; margin: 0 auto; padding: 1rem 1.25rem 3rem; }
-a { color: #165278; text-underline-offset: 2px; }
+html { background: var(--ag-bg); }
+body { color: var(--ag-text); font: 16px/1.5 var(--ag-mono); max-width: 80ch; margin: 0 auto; padding: 1rem 1.25rem 3rem; }
+a { color: var(--ag-link); text-underline-offset: 2px; }
 a.permalink { color: inherit; text-decoration: none; }
 a.permalink:hover, a.permalink:focus-visible { text-decoration: underline; }
 nav { margin-bottom: 1rem; font-size: .88rem; }
 table.head, table.foot { width: 100%; border-collapse: collapse; font-size: .92rem; }
-table.head { border-bottom: 1px solid #8a8a83; }
-table.foot { margin-top: 2rem; border-top: 1px solid #8a8a83; }
+table.head { border-bottom: 1px solid var(--ag-muted); }
+table.foot { margin-top: 2rem; border-top: 1px solid var(--ag-muted); }
 table.head td:nth-child(2), table.foot td:nth-child(2) { text-align: center; }
 table.head td:last-child { text-align: right; }
 h1, h2 { font-size: 1rem; line-height: inherit; letter-spacing: .02em; }
@@ -36,10 +38,23 @@ pre, code { font: inherit; }
 pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 hr { display: none; }
 @media (max-width: 38rem) { table.head td:nth-child(2) { display: none; } body { font-size: 15px; } }
+h1, h2, h3, b, strong { color: var(--ag-heading); }
+.garrett-family { margin: -1rem 0 1rem; }
+.garrett-family ul { padding: 0; }
 </style>
 <link rel="stylesheet" href="./christmas-snow.css">
 </head>
 <body>
+<nav class="garrett-family" aria-label="Garrett projects">
+  <ul>
+    <li><a href="https://agent.garrettstimpson.ca/">Agent Garrett</a></li>
+    <li><a href="https://veil.garrettstimpson.ca/">nl-veil</a></li>
+    <li><a href="https://gary23w.github.io/neuron-db/">neuron-db</a></li>
+    <li><a href="https://gary23w.github.io/sentinels/" aria-current="true">Sentinels</a></li>
+    <li><a href="https://garrettstimpson.ca/">Blog</a></li>
+    <li class="garrett-family-mode"><button type="button" class="color-mode-toggle" data-color-mode-toggle></button></li>
+  </ul>
+</nav>
 <nav><a href="./">sentinels(8)</a> / manual</nav>
 <table class="head">
   <tr>

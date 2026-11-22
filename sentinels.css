@@ -1,14 +1,15 @@
+/* Colours and type come from Agent Garrett's theme (garrett-mode.css). */
 :root {
-  color-scheme: light;
-  --paper: #fdfdfc;
-  --ink: #191d24;
-  --muted: #505968;
-  --line: #dce0e6;
-  --field: #f3f5f7;
-  --accent: #204fa4;
-  --mono: "Cascadia Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --paper: var(--ag-bg);
+  --ink: var(--ag-text);
+  --heading: var(--ag-heading);
+  --muted: var(--ag-muted);
+  --line: var(--ag-border);
+  --field: var(--ag-code);
+  --accent: var(--ag-accent);
+  --mono: var(--ag-mono);
   --gutter: clamp(1.2rem, 5vw, 3.75rem);
-  font-family: "Segoe UI", system-ui, sans-serif;
+  font-family: var(--ag-mono);
   background: var(--paper);
   color: var(--ink);
 }
@@ -22,7 +23,7 @@ a:hover { text-decoration-thickness: .13em; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
 [id] { scroll-margin-top: 1.5rem; }
 h1, h2, h3, p, dl, dd, pre { margin: 0; }
-h1, h2, h3 { line-height: 1.15; }
+h1, h2, h3 { line-height: 1.15; color: var(--heading); }
 code, pre { font-family: var(--mono); }
 code { font-size: .9em; }
 pre { font-size: .84rem; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -81,10 +82,10 @@ pre code { font-size: inherit; }
 }
 .hero h1 {
   max-width: 13ch;
-  font-size: clamp(3rem, 6.1vw, 5.4rem);
+  font-size: clamp(2.4rem, 4.6vw, 4rem);
   line-height: 1.02;
   font-weight: 710;
-  letter-spacing: -.065em;
+  letter-spacing: -.045em;
 }
 .hero-intro {
   max-width: 41ch;
@@ -99,14 +100,15 @@ pre code { font-size: inherit; }
   min-height: 2.9rem;
   margin-top: 1.6rem;
   padding: .55rem 1rem;
-  border-radius: .28rem;
+  border: 1px solid var(--accent);
+  border-radius: 0;
   background: var(--accent);
-  color: white;
+  color: var(--ag-on-accent);
   font-size: .94rem;
   font-weight: 650;
   text-decoration: none;
 }
-.primary:hover { background: #183d80; }
+.primary:hover { border-color: var(--ag-accent-hover); background: var(--ag-accent-hover); }
 
 .quickstart {
   min-width: 0;
@@ -136,13 +138,13 @@ pre code { font-size: inherit; }
   gap: .65rem;
   padding: .55rem .55rem .55rem .85rem;
   border: 1px solid var(--line);
-  border-radius: .3rem;
+  border-radius: 0;
   background: var(--field);
 }
 .copy {
   padding: .28rem .65rem;
   border: 1px solid var(--line);
-  border-radius: .25rem;
+  border-radius: 0;
   background: var(--paper);
   color: var(--accent);
 }
@@ -182,7 +184,7 @@ pre code { font-size: inherit; }
 .notes-grid h3 { font-size: 1.12rem; margin-bottom: .6rem; letter-spacing: -.016em; }
 .notes-grid p, .notes-grid dd { color: var(--muted); font-size: .94rem; }
 .notes-grid p + p, .notes-grid pre + p { margin-top: .6rem; }
-.notes-grid pre { margin-top: .35rem; padding: .65rem .75rem; border: 1px solid var(--line); border-radius: .3rem; background: var(--field); }
+.notes-grid pre { margin-top: .35rem; padding: .65rem .75rem; border: 1px solid var(--line); border-radius: 0; background: var(--field); }
 .mode-list > div { display: grid; grid-template-columns: 4.5rem minmax(0, 1fr); gap: .6rem; margin-bottom: .35rem; }
 .mode-list + p { margin-top: .8rem; }
 
@@ -196,7 +198,7 @@ pre code { font-size: inherit; }
 
 @media (max-width: 50rem) {
   .hero { grid-template-columns: minmax(0, 1fr); gap: 2.5rem; }
-  .hero h1 { font-size: clamp(2.75rem, 9vw, 4.4rem); }
+  .hero h1 { font-size: clamp(2.1rem, 8vw, 3.2rem); }
   .quickstart { max-width: 38rem; }
 }
 

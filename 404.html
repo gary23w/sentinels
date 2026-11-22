@@ -5,24 +5,39 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Not found - sentinels</title>
 <meta name="robots" content="noindex">
+<meta name="theme-color" content="#ffffff">
+<link rel="stylesheet" href="/sentinels/garrett-mode.css?v=1">
+<script src="/sentinels/garrett-mode.js?v=1"></script>
 <style>
-:root { color-scheme: light; }
 * { box-sizing: border-box; }
-html { background: #f6f5f0; }
-body { max-width: 80ch; margin: 0 auto; padding: 1rem 1.25rem 3rem; color: #1c1c1b; font: 16px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-a { color: #165278; text-decoration: underline; text-underline-offset: 2px; }
-a:hover, a:focus-visible { color: #0b334c; }
+html { background: var(--ag-bg); }
+body { max-width: 80ch; margin: 0 auto; padding: 1rem 1.25rem 3rem; color: var(--ag-text); font: 16px/1.5 var(--ag-mono); }
+a { color: var(--ag-link); text-decoration: underline; text-underline-offset: 2px; }
+a:hover, a:focus-visible { color: var(--ag-heading); }
 .masthead, .foot { display: flex; justify-content: space-between; gap: 1rem; font-size: .92rem; }
-.masthead { padding-bottom: .45rem; border-bottom: 1px solid #8a8a83; }
+.masthead { padding-bottom: .45rem; border-bottom: 1px solid var(--ag-muted); }
 h1 { font: inherit; font-weight: 700; margin: 1.65rem 0 .45rem; letter-spacing: .02em; }
 p, pre { margin: .5rem 0 .7rem 2ch; }
-pre { padding: .55rem 0; border-top: 1px solid #c4c4bd; border-bottom: 1px solid #c4c4bd; white-space: pre-wrap; overflow-wrap: anywhere; }
+pre { padding: .55rem 0; border-top: 1px solid var(--ag-border); border-bottom: 1px solid var(--ag-border); white-space: pre-wrap; overflow-wrap: anywhere; }
 code { font: inherit; }
-.foot { margin-top: 2.4rem; padding-top: .4rem; border-top: 1px solid #8a8a83; }
+.foot { margin-top: 2.4rem; padding-top: .4rem; border-top: 1px solid var(--ag-muted); }
 @media (max-width: 38rem) { .masthead .middle { display: none; } body { font-size: 15px; } }
+h1, h2, h3, b, strong { color: var(--ag-heading); }
+.garrett-family { margin: -1rem 0 1rem; }
+.garrett-family ul { padding: 0; }
 </style>
 </head>
 <body>
+<nav class="garrett-family" aria-label="Garrett projects">
+  <ul>
+    <li><a href="https://agent.garrettstimpson.ca/">Agent Garrett</a></li>
+    <li><a href="https://veil.garrettstimpson.ca/">nl-veil</a></li>
+    <li><a href="https://gary23w.github.io/neuron-db/">neuron-db</a></li>
+    <li><a href="https://gary23w.github.io/sentinels/" aria-current="true">Sentinels</a></li>
+    <li><a href="https://garrettstimpson.ca/">Blog</a></li>
+    <li class="garrett-family-mode"><button type="button" class="color-mode-toggle" data-color-mode-toggle></button></li>
+  </ul>
+</nav>
 <header class="masthead">
   <strong>SENTINELS(8)</strong><span class="middle">System Administration</span><span>SENTINELS(8)</span>
 </header>
