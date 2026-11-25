@@ -139,6 +139,35 @@ test('the Workers forwarder sends marks only, and the guard refuses only whom th
   assert.equal(await refused(visit('45.33.32.156'), {}, {}, fetcher), null, 'with no service configured nobody is refused');
 });
 
+test('a service on a watched Worker is not sent records about its own records', async () => {
+  const event = (url, status, method = 'GET') => ({ scriptName: 'app', eventTimestamp: 1794780000123, outcome: 'ok', logs: [], exceptions: [],
+    event: { request: { url, method, headers: { 'cf-connecting-ip': VISITOR } }, response: { status } } });
+  const own = [event('https://app.example/v1/edge-events', 200, 'POST'), event('https://app.example/v1/edge-events', 202, 'POST'), event('https://app.example/v1/edge/refused', 200)];
+  // Without knowing where the service is, each of those calls is marked like any request with a number in it.
+  assert.equal(recordsOf(own).length, 3);
+  assert.deepEqual(recordsOf(own, 'https://app.example'), []);
+  assert.deepEqual(recordsOf(own, 'https://app.example/'), []);
+  // Only those two addresses are left out: the rest of the same Worker is watched as before.
+  const rest = [event('https://app.example/v1/report', 200, 'POST'), event('https://app.example/files?name=../../etc/passwd', 500), event('https://other.example/v1/edge-events', 200, 'POST')];
+  assert.equal(recordsOf(rest, 'https://app.example').length, 3);
+  // A service kept under a path of its own.
+  assert.deepEqual(recordsOf([event('https://app.example/sentinel/v1/edge-events', 200, 'POST')], 'https://app.example/sentinel/'), []);
+  assert.equal(recordsOf([event('https://app.example/v1/edge-events', 200, 'POST')], 'https://app.example/sentinel/').length, 1);
+  assert.equal(recordsOf(own, 'not an address').length, 3, 'an unreadable address leaves nothing out');
+  // The loop itself: the forwarder's own call, handed back to it as an event, sends nothing.
+  const sent = [], before = globalThis.fetch;
+  globalThis.fetch = async (url, init) => { sent.push({ url, init }); return new Response('{}'); };
+  try {
+    const waiting = [], env = { SENTINEL_URL: 'https://app.example', SENTINEL_TOKEN: INGEST };
+    await tail.tail([event('https://app.example/files?name=../../etc/passwd', 500)], env, { waitUntil: promise => waiting.push(promise) });
+    await Promise.all(waiting);
+    assert.equal(sent.length, 1);
+    await tail.tail([event(sent[0].url, 200, 'POST')], env, { waitUntil: promise => waiting.push(promise) });
+    await Promise.all(waiting);
+  } finally { globalThis.fetch = before; }
+  assert.equal(sent.length, 1, 'its own call is not forwarded again');
+});
+
 test('a script served from an uploads folder, a smuggled object and an overflow probe are marked', () => {
   assert.deepEqual(markOf('GET', '/wp-content/uploads/a.php', 200), { uploaded: true });
   assert.equal(markOf('GET', '/wp-content/uploads/photo.jpg', 200), null);
