@@ -87,12 +87,12 @@ jobs:
         run: |
           sudo apt-get install -y nftables >/dev/null
           (cd rust && cargo test --release --locked --test live --no-run)
-          live=$(ls rust/target/release/deps/live-* | grep -v '\.d$' | head -1)
+          live=$(find rust/target/release -type f -name 'live-*' ! -name '*.*' | head -1)
           sudo env GARRETT_LIVE_ADDRESS=1.0.0.1 "$live" --ignored --nocapture live_block
       - name: Root that no program granted is noticed
         run: |
           sudo apt-get install -y libcap2-bin gcc >/dev/null
-          live=$(ls rust/target/release/deps/live-* | grep -v '\.d$' | head -1)
+          live=$(find rust/target/release -type f -name 'live-*' ! -name '*.*' | head -1)
           sudo "$live" --ignored --nocapture live_jump
       - name: The machine below the system can be read
         run: |
@@ -135,12 +135,12 @@ jobs:
       - name: Fleet blocking refuses an address and lets it through again
         run: |
           (cd rust && cargo test --release --locked --test live --no-run)
-          live=$(ls rust/target/release/deps/live-* | grep -v '\.d$' | head -1)
+          live=$(find rust/target/release -type f -name 'live-*' ! -name '*.*' | head -1)
           sudo env GARRETT_LIVE_ADDRESS=1.0.0.1 "$live" --ignored --nocapture live_block
       - name: The network card can be read for arriving connection attempts
         timeout-minutes: 2
         run: |
-          live=$(ls rust/target/release/deps/live-* | grep -v '\.d$' | head -1)
+          live=$(find rust/target/release -type f -name 'live-*' ! -name '*.*' | head -1)
           sudo "$live" --ignored --nocapture live_card
           # Use a private virtual Ethernet pair so the filter must receive a real opening packet.
           tx=$(sudo ifconfig feth create)
@@ -799,7 +799,7 @@ jobs:
           printf '<?xml version="1.0" encoding="UTF-8"?>\n<plist version="1.0"><dict><key>Label</key><string>gl.test</string><key>ProgramArguments</key><array><string>/private/tmp/gl/updater</string><string>600</string></array></dict></plist>\n' | sudo tee /Library/LaunchDaemons/gl.test.plist > /dev/null
           printf '(/private/tmp/gl/updater 5 &)\n' >> "$HOME/.zshrc"
           sudo shasum -a 256 /private/tmp/gl/updater /Library/LaunchDaemons/gl.test.plist "$HOME/.zshrc" > before.txt
-          live=$(ls rust/target/release/deps/live-* | grep -v '\.d$' | head -1)
+          live=$(find rust/target/release -type f -name 'live-*' ! -name '*.*' | head -1)
           sudo env GARRETT_LIVE_STATE=/private/tmp/gl-state GARRETT_LIVE_FILES=/private/tmp/gl/updater "$live" --ignored --nocapture live_clean
           for p in /private/tmp/gl/updater /Library/LaunchDaemons/gl.test.plist; do if [ -e "$p" ]; then echo "still there: $p"; exit 1; fi; done
           grep -q '^# garrett-disabled .*updater 5' "$HOME/.zshrc"
